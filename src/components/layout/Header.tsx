@@ -5,6 +5,11 @@ import {
   RotateCcw,
   Sparkles,
   ArrowLeft,
+  CheckCircle2,
+  AlertTriangle,
+  AlignHorizontalDistributeCenter,
+  AlignVerticalDistributeCenter,
+  GitBranch,
 } from 'lucide-react';
 import type { GroupMeta } from '../../utils/schemaCompiler';
 
@@ -18,6 +23,13 @@ interface HeaderProps {
   onBackToList?: () => void;
   nodeCount: number;
   edgeCount: number;
+  diagnosticsCount: number;
+  diagnosticsErrors: number;
+  onOpenDiagnostics: () => void;
+  edgeRouting: 'smoothstep' | 'bezier' | 'straight';
+  onChangeEdgeRouting: (routing: 'smoothstep' | 'bezier' | 'straight') => void;
+  onAlignHorizontal: () => void;
+  onAlignVertical: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -30,6 +42,13 @@ export const Header: React.FC<HeaderProps> = ({
   onBackToList,
   nodeCount,
   edgeCount,
+  diagnosticsCount,
+  diagnosticsErrors,
+  onOpenDiagnostics,
+  edgeRouting,
+  onChangeEdgeRouting,
+  onAlignHorizontal,
+  onAlignVertical,
 }) => {
   return (
     <header className="app-header">
@@ -65,19 +84,85 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="meta-pill stats-pill">
           <span>{nodeCount} Nodes</span>
           <span className="pill-divider">•</span>
-          <span>{edgeCount} Connections</span>
+          <span>{edgeCount} Links</span>
         </div>
+
+        {/* Real-time Flow Diagnostics Pill */}
+        <button
+          className={`meta-pill diagnostics-pill ${
+            diagnosticsErrors > 0
+              ? 'has-error'
+              : diagnosticsCount > 0
+              ? 'has-warning'
+              : 'is-healthy'
+          }`}
+          onClick={onOpenDiagnostics}
+          title="Click to view flowchart diagnostics"
+        >
+          {diagnosticsErrors > 0 ? (
+            <>
+              <AlertTriangle size={13} className="text-red-400" />
+              <span>{diagnosticsErrors} Flow Errors</span>
+            </>
+          ) : diagnosticsCount > 0 ? (
+            <>
+              <AlertTriangle size={13} className="text-amber-400" />
+              <span>{diagnosticsCount} Warnings</span>
+            </>
+          ) : (
+            <>
+              <CheckCircle2 size={13} className="text-emerald-400" />
+              <span>Flow Valid</span>
+            </>
+          )}
+        </button>
       </div>
 
-      {/* Action buttons */}
+      {/* Action buttons & tools */}
       <div className="header-actions">
+        {/* Edge Routing Selector */}
+        <div className="header-routing-selector" title="Flowchart Line Style">
+          <GitBranch size={13} className="routing-icon" />
+          <select
+            value={edgeRouting}
+            onChange={(e) =>
+              onChangeEdgeRouting(
+                e.target.value as 'smoothstep' | 'bezier' | 'straight'
+              )
+            }
+            className="header-select-routing"
+          >
+            <option value="smoothstep">Orthogonal (Flowchart)</option>
+            <option value="bezier">Smooth Curved</option>
+            <option value="straight">Straight Line</option>
+          </select>
+        </div>
+
+        {/* Alignment Tools */}
+        <div className="header-align-group">
+          <button
+            className="btn btn-icon"
+            onClick={onAlignHorizontal}
+            title="Align Nodes Horizontally (Center Y)"
+          >
+            <AlignHorizontalDistributeCenter size={14} />
+          </button>
+          <button
+            className="btn btn-icon"
+            onClick={onAlignVertical}
+            title="Align Nodes Vertically (Center X)"
+          >
+            <AlignVerticalDistributeCenter size={14} />
+          </button>
+        </div>
+
         <button
           className="btn btn-secondary"
           onClick={onAutoLayout}
-          title="Auto arrange nodes top-to-bottom"
+          title="Hierarchical Tree Auto Layout (No branch overlap)"
         >
           <Sparkles size={14} />
-          <span>Auto Layout</span>
+          <span>Tree Layout</span>
         </button>
 
         <button
@@ -86,7 +171,7 @@ export const Header: React.FC<HeaderProps> = ({
           title="Reset to default sample"
         >
           <RotateCcw size={14} />
-          <span>Reset Sample</span>
+          <span>Reset</span>
         </button>
 
         <button

@@ -179,17 +179,24 @@ export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
   onAddNestedQuestion,
   onAddQuestion,
 }) => {
-  // If user selected something, default to inspector tab, otherwise input types
-  const [activeTab, setActiveTab] = useState<'widgets' | 'inspector'>(
+  // Store active tab and track selection transitions during render
+  const [tab, setTab] = useState<'widgets' | 'inspector'>(
     selectedNode || selectedEdge ? 'inspector' : 'widgets'
   );
+  const [prevSelectedId, setPrevSelectedId] = useState<string | null>(
+    selectedNode?.id || selectedEdge?.id || null
+  );
 
-  // Auto-switch to inspector when an element is clicked
-  React.useEffect(() => {
-    if (selectedNode || selectedEdge) {
-      setActiveTab('inspector');
+  const currentSelectedId = selectedNode?.id || selectedEdge?.id || null;
+  if (currentSelectedId !== prevSelectedId) {
+    setPrevSelectedId(currentSelectedId);
+    if (currentSelectedId) {
+      setTab('inspector');
     }
-  }, [selectedNode, selectedEdge]);
+  }
+
+  const activeTab = tab;
+  const setActiveTab = setTab;
 
   const onDragStart = (event: React.DragEvent, item: InputTypeItem) => {
     const payload = JSON.stringify({

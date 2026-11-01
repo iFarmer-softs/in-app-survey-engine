@@ -1,3 +1,4 @@
+import { MarkerType } from '@xyflow/react';
 import type { Node, Edge } from '@xyflow/react';
 import type {
   DynamicKycGroupResponse,
@@ -63,18 +64,38 @@ export function compileFlowToSchema(
         }
 
         if (optFromHandle) {
-          const matches: Record<string, boolean> = {};
+          const parentKey = String(parentId);
+          const existing = validationMap[parentKey];
+          let matches: Record<string, boolean> = {};
+          if (
+            existing &&
+            existing.validation_type === 'match' &&
+            typeof existing.validation === 'object' &&
+            !Array.isArray(existing.validation)
+          ) {
+            matches = { ...(existing.validation as Record<string, boolean>) };
+          }
           matches[optFromHandle] = true;
-          validationMap[String(parentId)] = {
+          validationMap[parentKey] = {
             validation_type: 'match',
             validation: matches,
           };
         } else if (edgeData?.validationType && edgeData.triggerValue !== undefined) {
           const vType = edgeData.validationType as 'match' | 'greater' | 'less';
+          const parentKey = String(parentId);
           if (vType === 'match') {
-            const matches: Record<string, boolean> = {};
+            const existing = validationMap[parentKey];
+            let matches: Record<string, boolean> = {};
+            if (
+              existing &&
+              existing.validation_type === 'match' &&
+              typeof existing.validation === 'object' &&
+              !Array.isArray(existing.validation)
+            ) {
+              matches = { ...(existing.validation as Record<string, boolean>) };
+            }
             matches[String(edgeData.triggerValue)] = true;
-            validationMap[String(parentId)] = {
+            validationMap[parentKey] = {
               validation_type: 'match',
               validation: matches,
             };
@@ -399,8 +420,15 @@ export function parseSchemaToFlow(schema: DynamicKycGroupResponse | any[] | any)
       id: 'e-start-first',
       source: 'start-node',
       target: firstNode,
+      type: 'surveyEdge',
       animated: true,
       style: { stroke: '#10b981', strokeWidth: 2 },
+      markerEnd: {
+        type: MarkerType.ArrowClosed,
+        width: 16,
+        height: 16,
+        color: '#10b981',
+      },
     });
   }
 
@@ -411,7 +439,14 @@ export function parseSchemaToFlow(schema: DynamicKycGroupResponse | any[] | any)
       source: rootQuestionIds[i],
       sourceHandle: 'default-next',
       target: rootQuestionIds[i + 1],
+      type: 'surveyEdge',
       style: { stroke: '#475569', strokeWidth: 1.5 },
+      markerEnd: {
+        type: MarkerType.ArrowClosed,
+        width: 16,
+        height: 16,
+        color: '#475569',
+      },
     });
   }
 
@@ -467,9 +502,16 @@ export function parseSchemaToFlow(schema: DynamicKycGroupResponse | any[] | any)
           source: sourceId,
           sourceHandle,
           target: targetId,
+          type: 'surveyEdge',
           label: ruleLabel,
           animated: true,
           style: { stroke: '#f59e0b', strokeWidth: 2, strokeDasharray: '4 4' },
+          markerEnd: {
+            type: MarkerType.ArrowClosed,
+            width: 16,
+            height: 16,
+            color: '#f59e0b',
+          },
           data: {
             validationType: valType,
             triggerValue: triggerVal,
@@ -510,7 +552,14 @@ export function parseSchemaToFlow(schema: DynamicKycGroupResponse | any[] | any)
       source: lastRootId,
       sourceHandle: 'default-next',
       target: 'end-node',
+      type: 'surveyEdge',
       style: { stroke: '#6366f1', strokeWidth: 2 },
+      markerEnd: {
+        type: MarkerType.ArrowClosed,
+        width: 16,
+        height: 16,
+        color: '#6366f1',
+      },
     });
   } else if (questionNodes.length > 0) {
     const lastNode = questionNodes[questionNodes.length - 1];
@@ -518,7 +567,14 @@ export function parseSchemaToFlow(schema: DynamicKycGroupResponse | any[] | any)
       id: 'e-last-end',
       source: lastNode.id,
       target: 'end-node',
+      type: 'surveyEdge',
       style: { stroke: '#6366f1', strokeWidth: 2 },
+      markerEnd: {
+        type: MarkerType.ArrowClosed,
+        width: 16,
+        height: 16,
+        color: '#6366f1',
+      },
     });
   }
 

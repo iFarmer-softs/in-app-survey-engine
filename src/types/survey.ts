@@ -57,7 +57,8 @@ export type FlowNodeType =
   | 'decision'
   | 'groupJump'
   | 'process'
-  | 'document';
+  | 'document'
+  | 'groupContainer';
 
 export interface QuestionNodeData {
   question_id: number;

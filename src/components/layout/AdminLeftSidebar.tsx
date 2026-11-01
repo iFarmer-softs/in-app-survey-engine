@@ -8,14 +8,16 @@ import {
   PinOff,
   Sparkles,
   Info,
+  Layers,
 } from 'lucide-react';
 
 interface AdminLeftSidebarProps {
-  activeView: 'editor' | 'list';
-  onSelectView: (view: 'editor' | 'list') => void;
+  activeView: 'editor' | 'list' | 'groups';
+  onSelectView: (view: 'editor' | 'list' | 'groups') => void;
   onOpenCreateModal: () => void;
   activeProjectTitle: string;
   totalProjectsCount: number;
+  totalGroupsCount?: number;
 }
 
 export const AdminLeftSidebar: React.FC<AdminLeftSidebarProps> = ({
@@ -24,6 +26,7 @@ export const AdminLeftSidebar: React.FC<AdminLeftSidebarProps> = ({
   onOpenCreateModal,
   activeProjectTitle,
   totalProjectsCount,
+  totalGroupsCount = 5,
 }) => {
   const [isHovered, setIsHovered] = useState(false);
   const [isPinned, setIsPinned] = useState(false);
@@ -109,6 +112,29 @@ export const AdminLeftSidebar: React.FC<AdminLeftSidebarProps> = ({
             </div>
           )}
           <span className="nav-count-badge">{totalProjectsCount}</span>
+        </button>
+
+        {/* Option 3: Question Groups Library */}
+        <button
+          className={`admin-nav-item ${
+            activeView === 'groups' ? 'is-active' : ''
+          }`}
+          onClick={() => onSelectView('groups')}
+          title="Reusable Question Groups"
+        >
+          <div className="nav-icon-wrap">
+            <Layers size={19} />
+          </div>
+          {isExpanded && (
+            <div className="nav-label-group">
+              <span className="nav-title">Question Groups</span>
+              <span className="nav-sub">Reusable Sets</span>
+            </div>
+          )}
+          {isExpanded && activeView === 'groups' && (
+            <ChevronRight size={14} className="active-arrow" />
+          )}
+          <span className="nav-count-badge">{totalGroupsCount}</span>
         </button>
       </nav>
 

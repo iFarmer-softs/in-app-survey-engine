@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   X,
   Smartphone,
@@ -23,12 +23,11 @@ export const MobilePreviewModal: React.FC<MobilePreviewModalProps> = ({
   schema,
 }) => {
   const [answers, setAnswers] = useState<Record<string, string>>({});
-  const [visibleQuestions, setVisibleQuestions] = useState<number[]>([]);
   const [submittedMessage, setSubmittedMessage] = useState<string | null>(null);
 
   // Evaluate dependencies whenever answers change
-  useEffect(() => {
-    if (!schema.data) return;
+  const visibleQuestions = useMemo(() => {
+    if (!schema.data) return [];
 
     const visibleIds: number[] = [];
 
@@ -80,7 +79,7 @@ export const MobilePreviewModal: React.FC<MobilePreviewModalProps> = ({
       }
     });
 
-    setVisibleQuestions(visibleIds);
+    return visibleIds;
   }, [answers, schema]);
 
   if (!isOpen) return null;
