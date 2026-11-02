@@ -142,7 +142,7 @@ export function createBlankProject(
   description?: string,
   totalGroups: number = 1
 ): FlowchartProject {
-  const newId = `proj-${Date.now()}`;
+  const newId = `proj-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
   const now = new Date().toISOString();
 
   const project: FlowchartProject = {
@@ -181,7 +181,7 @@ export function createBlankProject(
 }
 
 export function duplicateProject(source: FlowchartProject): FlowchartProject {
-  const newId = `proj-${Date.now()}`;
+  const newId = `proj-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
   const now = new Date().toISOString();
 
   return {

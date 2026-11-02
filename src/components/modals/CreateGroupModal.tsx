@@ -1,11 +1,20 @@
 import React, { useState } from 'react';
-import { X, Layers, ArrowRight, HelpCircle } from 'lucide-react';
+import { Layers, ArrowRight, HelpCircle, Hash } from 'lucide-react';
 import type { GroupCategory } from '../../types/group';
+import { Modal } from '../ui/Modal';
+import { loadAllGroups } from '../../utils/groupStorage';
+
+function getNextGroupId(): number {
+  const groups = loadAllGroups();
+  const maxId = groups.reduce((m, g) => (g.groupId && g.groupId > m ? g.groupId : m), 0);
+  return maxId + 1;
+}
 
 interface CreateGroupModalProps {
   isOpen: boolean;
   onClose: () => void;
   onCreate: (meta: {
+    groupId: number;
     name: string;
     nameBn: string;
     description: string;
@@ -39,6 +48,7 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
   onClose,
   onCreate,
 }) => {
+  const [groupId, setGroupId] = useState<number>(getNextGroupId);
   const [name, setName] = useState('');
   const [nameBn, setNameBn] = useState('');
   const [description, setDescription] = useState('');
@@ -46,13 +56,12 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
   const [color, setColor] = useState('#0284c7');
   const [initialQuestionCount, setInitialQuestionCount] = useState(1);
 
-  if (!isOpen) return null;
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
 
     onCreate({
+      groupId: groupId && groupId > 0 ? groupId : 1,
       name: name.trim(),
       nameBn: nameBn.trim() || name.trim(),
       description: description.trim() || 'Reusable group designed visually in Flowchart Studio.',
@@ -61,170 +70,170 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
       initialQuestionCount,
     });
 
-    // Reset form state
+    // Reset form state with next ID
     setName('');
     setNameBn('');
     setDescription('');
     setCategory('kyc');
     setColor('#0284c7');
     setInitialQuestionCount(1);
+    setGroupId(getNextGroupId() + 1);
     onClose();
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div
-        className="modal-content create-flow-modal-content"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Modal Header */}
-        <div className="modal-header">
-          <div className="modal-title-group">
-            <div
-              className="modal-badge-icon"
-              style={{ backgroundColor: `${color}25`, color }}
-            >
-              <Layers size={18} />
-            </div>
-            <div>
-              <h2 className="modal-title">Create Question Group</h2>
-              <p className="modal-subtitle">
-                Set up group details before visually designing the questions in Flowchart Studio
-              </p>
-            </div>
-          </div>
-          <button className="modal-close-btn" onClick={onClose}>
-            <X size={18} />
-          </button>
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      className="create-flow-modal-content"
+      icon={
+        <div
+          className="modal-badge-icon"
+          style={{ backgroundColor: `${color}25`, color }}
+        >
+          <Layers size={18} />
+        </div>
+      }
+      title="Create Question Group"
+      subtitle="Set up group details before visually designing the questions in Flowchart Studio"
+    >
+      <form onSubmit={handleSubmit} className="modal-body-form">
+        <div className="form-group">
+          <label className="form-label required-label">
+            Group Title (English) *
+          </label>
+          <input
+            type="text"
+            required
+            className="form-input"
+            placeholder="e.g. Farmer Income & Production Cost"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            autoFocus
+          />
         </div>
 
-        {/* Modal Body */}
-        <form onSubmit={handleSubmit} className="modal-body-form">
+        <div className="form-group">
+          <label className="form-label">
+            Bengali Title (বাংলা শিরোনাম)
+          </label>
+          <input
+            type="text"
+            className="form-input bn-font"
+            placeholder="e.g. কৃষকের আয় ও ফসল উৎপাদন ব্যয়"
+            value={nameBn}
+            onChange={(e) => setNameBn(e.target.value)}
+          />
+        </div>
+
+        <div className="form-row-2">
           <div className="form-group">
-            <label className="form-label required-label">
-              Group Title (English) *
-            </label>
-            <input
-              type="text"
-              required
-              className="form-input"
-              placeholder="e.g. Farmer Income & Production Cost"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              autoFocus
-            />
-          </div>
-
-          <div className="form-group">
-            <label className="form-label">
-              Bengali Title (বাংলা শিরোনাম)
-            </label>
-            <input
-              type="text"
-              className="form-input bn-font"
-              placeholder="e.g. কৃষকের আয় ও ফসল উৎপাদন ব্যয়"
-              value={nameBn}
-              onChange={(e) => setNameBn(e.target.value)}
-            />
-          </div>
-
-          <div className="form-row-2">
-            <div className="form-group">
-              <label className="form-label">Category</label>
-              <select
-                className="form-select"
-                value={category}
-                onChange={(e) => {
-                  const cat = e.target.value as GroupCategory;
-                  setCategory(cat);
-                  const opt = CATEGORY_OPTIONS.find((c) => c.value === cat);
-                  if (opt) setColor(opt.color);
-                }}
-              >
-                {CATEGORY_OPTIONS.map((c) => (
-                  <option key={c.value} value={c.value}>
-                    {c.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Accent Theme Color</label>
-              <div className="color-picker-row">
-                {PRESET_COLORS.map((c) => (
-                  <button
-                    key={c}
-                    type="button"
-                    className={`color-swatch-btn ${color === c ? 'is-selected' : ''}`}
-                    style={{ backgroundColor: c }}
-                    onClick={() => setColor(c)}
-                  />
-                ))}
-              </div>
-            </div>
+            <label className="form-label">Category</label>
+            <select
+              className="form-select"
+              value={category}
+              onChange={(e) => {
+                const cat = e.target.value as GroupCategory;
+                setCategory(cat);
+                const opt = CATEGORY_OPTIONS.find((c) => c.value === cat);
+                if (opt) setColor(opt.color);
+              }}
+            >
+              {CATEGORY_OPTIONS.map((c) => (
+                <option key={c.value} value={c.value}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="form-group">
-            <label className="form-label">Description / Purpose</label>
-            <textarea
-              className="form-textarea"
-              rows={2}
-              placeholder="Describe the survey topic or facilitator checklist..."
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-            />
-          </div>
-
-          <div className="form-row">
-            <div className="form-group flex-1">
-              <label className="form-label">
-                Initial Number of Questions
-              </label>
-              <div className="input-with-icon">
-                <HelpCircle size={14} className="input-icon" />
-                <input
-                  type="number"
-                  min={1}
-                  max={10}
-                  className="form-input has-icon"
-                  value={initialQuestionCount}
-                  onChange={(e) =>
-                    setInitialQuestionCount(Math.max(1, parseInt(e.target.value) || 1))
-                  }
+            <label className="form-label">Accent Theme Color</label>
+            <div className="color-picker-row">
+              {PRESET_COLORS.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  className={`color-swatch-btn ${color === c ? 'is-selected' : ''}`}
+                  style={{ backgroundColor: c }}
+                  onClick={() => setColor(c)}
                 />
-              </div>
+              ))}
             </div>
+          </div>
+        </div>
 
-            <div className="form-group flex-1 template-info-box">
-              <label className="form-label">Starting Canvas</label>
-              <div className="blank-canvas-badge">
-                <Layers size={14} />
-                <span>Visual Studio ({initialQuestionCount} Question Node{initialQuestionCount > 1 ? 's' : ''})</span>
-              </div>
+        <div className="form-group">
+          <label className="form-label">Description / Purpose</label>
+          <textarea
+            className="form-textarea"
+            rows={2}
+            placeholder="Describe the survey topic or facilitator checklist..."
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+          />
+        </div>
+
+        <div className="form-row-2">
+          <div className="form-group flex-1">
+            <label className="form-label required-label">
+              Group ID (Numeric) *
+            </label>
+            <div className="input-with-icon">
+              <Hash size={14} className="input-icon" />
+              <input
+                type="number"
+                min={1}
+                required
+                className="form-input has-icon"
+                placeholder="e.g. 25"
+                value={groupId}
+                onChange={(e) =>
+                  setGroupId(Math.max(1, parseInt(e.target.value) || 1))
+                }
+              />
             </div>
           </div>
 
-          {/* Modal Actions */}
-          <div className="modal-footer-row">
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={onClose}
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={!name.trim()}
-              className="btn btn-primary create-submit-btn"
-            >
-              <span>Design in Studio</span>
-              <ArrowRight size={16} />
-            </button>
+          <div className="form-group flex-1">
+            <label className="form-label">
+              Initial Questions
+            </label>
+            <div className="input-with-icon">
+              <HelpCircle size={14} className="input-icon" />
+              <input
+                type="number"
+                min={1}
+                max={10}
+                className="form-input has-icon"
+                value={initialQuestionCount}
+                onChange={(e) =>
+                  setInitialQuestionCount(Math.max(1, parseInt(e.target.value) || 1))
+                }
+              />
+            </div>
           </div>
-        </form>
-      </div>
-    </div>
+        </div>
+
+        {/* Modal Actions */}
+        <div className="modal-footer-row">
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={onClose}
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={!name.trim()}
+            className="btn btn-primary create-submit-btn"
+          >
+            <span>Design in Studio</span>
+            <ArrowRight size={16} />
+          </button>
+        </div>
+      </form>
+    </Modal>
   );
 };

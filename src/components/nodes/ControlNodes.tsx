@@ -17,9 +17,11 @@ export const GroupJumpNode = memo(({ data, selected }: NodeProps) => {
       <div className="jump-inner">
         <FastForward size={16} className="jump-icon" />
         <div className="jump-text">
-          <span className="jump-title">Connector / Group Jump</span>
+          <span className="jump-title">
+            {nodeData.targetGroupId ? `Jump to Group #${nodeData.targetGroupId}` : 'Connector / Group Jump'}
+          </span>
           <span className="jump-name">
-            {nodeData.targetGroupTitle || `Group ${nodeData.targetGroupId}`}
+            {nodeData.targetGroupTitle || (nodeData.targetGroupId ? `Group ${nodeData.targetGroupId}` : 'Select Target Group')}
           </span>
         </div>
       </div>

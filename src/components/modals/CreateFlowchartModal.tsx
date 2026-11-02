@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { X, Sparkles, Layers, FileText, ArrowRight } from 'lucide-react';
+import { Sparkles, Layers, FileText, ArrowRight } from 'lucide-react';
+import { Modal } from '../ui/Modal';
 
 interface CreateFlowchartModalProps {
   isOpen: boolean;
@@ -22,8 +23,6 @@ export const CreateFlowchartModal: React.FC<CreateFlowchartModalProps> = ({
   const [description, setDescription] = useState('');
   const [totalGroups, setTotalGroups] = useState(1);
 
-  if (!isOpen) return null;
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
@@ -44,119 +43,106 @@ export const CreateFlowchartModal: React.FC<CreateFlowchartModalProps> = ({
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div
-        className="modal-content create-flow-modal-content"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Modal Header */}
-        <div className="modal-header">
-          <div className="modal-title-group">
-            <div className="modal-badge-icon">
-              <Sparkles size={18} className="text-emerald" />
-            </div>
-            <div>
-              <h2 className="modal-title">Create New Flowchart</h2>
-              <p className="modal-subtitle">
-                Initialize a blank survey canvas ready for drag-and-drop flowchart symbols
-              </p>
-            </div>
-          </div>
-          <button className="modal-close-btn" onClick={onClose}>
-            <X size={18} />
-          </button>
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      className="create-flow-modal-content"
+      icon={
+        <div className="modal-badge-icon">
+          <Sparkles size={18} className="text-emerald" />
+        </div>
+      }
+      title="Create New Flowchart"
+      subtitle="Initialize a blank survey canvas ready for drag-and-drop flowchart symbols"
+    >
+      <form onSubmit={handleSubmit} className="modal-body-form">
+        <div className="form-group">
+          <label className="form-label required-label">
+            Flowchart Title (English) *
+          </label>
+          <input
+            type="text"
+            required
+            className="form-input"
+            placeholder="e.g. Potato Farmer Season KYC 2026"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            autoFocus
+          />
         </div>
 
-        {/* Modal Body */}
-        <form onSubmit={handleSubmit} className="modal-body-form">
-          <div className="form-group">
-            <label className="form-label required-label">
-              Flowchart Title (English) *
-            </label>
-            <input
-              type="text"
-              required
-              className="form-input"
-              placeholder="e.g. Potato Farmer Season KYC 2026"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              autoFocus
-            />
-          </div>
+        <div className="form-group">
+          <label className="form-label">
+            Bengali Title (বাংলা শিরোনাম)
+          </label>
+          <input
+            type="text"
+            className="form-input"
+            placeholder="e.g. আলু চাষী সিজন কেওয়াইসি সমীক্ষা"
+            value={titleBn}
+            onChange={(e) => setTitleBn(e.target.value)}
+          />
+        </div>
 
-          <div className="form-group">
+        <div className="form-group">
+          <label className="form-label">Description / Purpose</label>
+          <textarea
+            className="form-textarea"
+            rows={2}
+            placeholder="Describe the workflow, facilitator target, or loan product..."
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+          />
+        </div>
+
+        <div className="form-row">
+          <div className="form-group flex-1">
             <label className="form-label">
-              Bengali Title (বাংলা শিরোনাম)
+              Initial Number of Survey Groups
             </label>
-            <input
-              type="text"
-              className="form-input"
-              placeholder="e.g. আলু চাষী সিজন কেওয়াইসি সমীক্ষা"
-              value={titleBn}
-              onChange={(e) => setTitleBn(e.target.value)}
-            />
-          </div>
-
-          <div className="form-group">
-            <label className="form-label">Description / Purpose</label>
-            <textarea
-              className="form-textarea"
-              rows={2}
-              placeholder="Describe the workflow, facilitator target, or loan product..."
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-            />
-          </div>
-
-          <div className="form-row">
-            <div className="form-group flex-1">
-              <label className="form-label">
-                Initial Number of Survey Groups
-              </label>
-              <div className="input-with-icon">
-                <Layers size={14} className="input-icon" />
-                <input
-                  type="number"
-                  min={1}
-                  max={10}
-                  className="form-input has-icon"
-                  value={totalGroups}
-                  onChange={(e) =>
-                    setTotalGroups(Math.max(1, parseInt(e.target.value) || 1))
-                  }
-                />
-              </div>
-            </div>
-
-            <div className="form-group flex-1 template-info-box">
-              <label className="form-label">Starting Canvas</label>
-              <div className="blank-canvas-badge">
-                <FileText size={14} />
-                <span>Blank Canvas (Start & End Terminators)</span>
-              </div>
+            <div className="input-with-icon">
+              <Layers size={14} className="input-icon" />
+              <input
+                type="number"
+                min={1}
+                max={10}
+                className="form-input has-icon"
+                value={totalGroups}
+                onChange={(e) =>
+                  setTotalGroups(Math.max(1, parseInt(e.target.value) || 1))
+                }
+              />
             </div>
           </div>
 
-          {/* Modal Actions */}
-          <div className="modal-footer-row">
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={onClose}
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={!title.trim()}
-              className="btn btn-primary create-submit-btn"
-            >
-              <span>Create Flowchart</span>
-              <ArrowRight size={16} />
-            </button>
+          <div className="form-group flex-1 template-info-box">
+            <label className="form-label">Starting Canvas</label>
+            <div className="blank-canvas-badge">
+              <FileText size={14} />
+              <span>Blank Canvas (Start & End Terminators)</span>
+            </div>
           </div>
-        </form>
-      </div>
-    </div>
+        </div>
+
+        {/* Modal Actions */}
+        <div className="modal-footer-row">
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={onClose}
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={!title.trim()}
+            className="btn btn-primary create-submit-btn"
+          >
+            <span>Create Flowchart</span>
+            <ArrowRight size={16} />
+          </button>
+        </div>
+      </form>
+    </Modal>
   );
 };

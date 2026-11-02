@@ -7,9 +7,10 @@ import {
   Tag,
   Plus,
   ExternalLink,
-  Trash2,
+  Trash,
   AlertTriangle,
   X,
+  PanelLeftClose,
 } from 'lucide-react';
 import type { FlowNodeType } from '../../types/survey';
 import type { ReusableQuestionGroup } from '../../types/group';
@@ -136,6 +137,10 @@ const FLOWCHART_SYMBOLS: FlowchartSymbol[] = [
 ];
 
 interface FlowchartSymbolsPanelProps {
+  isOpen?: boolean;
+  width?: number;
+  isResizing?: boolean;
+  onToggleCollapse?: () => void;
   onAddSymbol?: (nodeType: FlowNodeType, name: string, nameBn: string) => void;
   groups?: ReusableQuestionGroup[];
   onInsertGroup?: (group: ReusableQuestionGroup) => void;
@@ -144,6 +149,10 @@ interface FlowchartSymbolsPanelProps {
 }
 
 export const FlowchartSymbolsPanel: React.FC<FlowchartSymbolsPanelProps> = ({
+  isOpen = true,
+  width,
+  isResizing,
+  onToggleCollapse,
   onAddSymbol,
   groups = [],
   onInsertGroup,
@@ -215,23 +224,41 @@ export const FlowchartSymbolsPanel: React.FC<FlowchartSymbolsPanelProps> = ({
   }, [groups, search]);
 
   return (
-    <aside className="sidebar left-sidebar flowchart-symbols-sidebar">
+    <aside
+      className={`sidebar left-sidebar flowchart-symbols-sidebar ${!isOpen ? 'is-collapsed' : ''} ${
+        isResizing ? 'is-resizing' : ''
+      }`}
+      style={isOpen && width ? { width: `${width}px`, minWidth: `${width}px` } : undefined}
+    >
       {/* Top Tab Switcher */}
-      <div className="left-panel-tab-switcher">
-        <button
-          className={`left-tab-btn ${activeTab === 'symbols' ? 'is-active' : ''}`}
-          onClick={() => setActiveTab('symbols')}
-        >
-          <Network size={14} />
-          <span>Symbols</span>
-        </button>
-        <button
-          className={`left-tab-btn ${activeTab === 'groups' ? 'is-active' : ''}`}
-          onClick={() => setActiveTab('groups')}
-        >
-          <Layers size={14} />
-          <span>Question Groups ({groups.length})</span>
-        </button>
+      <div className="left-panel-tab-switcher" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+        <div style={{ display: 'flex', flex: 1, gap: 4 }}>
+          <button
+            className={`left-tab-btn ${activeTab === 'symbols' ? 'is-active' : ''}`}
+            onClick={() => setActiveTab('symbols')}
+          >
+            <Network size={14} />
+            <span>Symbols</span>
+          </button>
+          <button
+            className={`left-tab-btn ${activeTab === 'groups' ? 'is-active' : ''}`}
+            onClick={() => setActiveTab('groups')}
+          >
+            <Layers size={14} />
+            <span>Groups ({groups.length})</span>
+          </button>
+        </div>
+
+        {onToggleCollapse && (
+          <button
+            type="button"
+            className="sidebar-collapse-btn"
+            onClick={onToggleCollapse}
+            title="Collapse Sidebar (Ctrl+B)"
+          >
+            <PanelLeftClose size={15} />
+          </button>
+        )}
       </div>
 
       {/* Scoped Sidebar Search Input */}
@@ -354,13 +381,29 @@ export const FlowchartSymbolsPanel: React.FC<FlowchartSymbolsPanelProps> = ({
                 >
                   <div className="sidebar-group-card-top">
                     <div className="sidebar-group-info">
-                      <span
-                        className="group-cat-mini"
-                        style={{ color: group.color }}
-                      >
-                        <Tag size={9} />
-                        <span>{group.category.toUpperCase()}</span>
-                      </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 2 }}>
+                        {group.groupId && (
+                          <span
+                            className="group-cat-mini"
+                            style={{
+                              color: group.color,
+                              fontWeight: 700,
+                              backgroundColor: `${group.color}18`,
+                              padding: '1px 4px',
+                              borderRadius: 3,
+                            }}
+                          >
+                            #{group.groupId}
+                          </span>
+                        )}
+                        <span
+                          className="group-cat-mini"
+                          style={{ color: group.color }}
+                        >
+                          <Tag size={9} />
+                          <span>{group.category.toUpperCase()}</span>
+                        </span>
+                      </div>
                       <span className="sidebar-group-title">{group.name}</span>
                       <span className="sidebar-group-bn bn-font">{group.nameBn}</span>
                     </div>
@@ -385,7 +428,7 @@ export const FlowchartSymbolsPanel: React.FC<FlowchartSymbolsPanelProps> = ({
                           }}
                           title="Delete Group from Library"
                         >
-                          <Trash2 size={12} />
+                          <Trash size={12} />
                         </button>
                       )}
                     </div>
@@ -568,7 +611,7 @@ export const FlowchartSymbolsPanel: React.FC<FlowchartSymbolsPanelProps> = ({
                     setGroupToDelete(null);
                   }}
                 >
-                  <Trash2 size={14} />
+                  <Trash size={14} />
                   <span>Delete Group</span>
                 </button>
               </div>

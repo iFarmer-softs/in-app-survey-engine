@@ -9,7 +9,11 @@ import {
   Sparkles,
   Info,
   Layers,
+  Moon,
+  Sun,
+  Monitor,
 } from 'lucide-react';
+import type { ThemeMode, ResolvedTheme } from '../../hooks/useTheme';
 
 interface AdminLeftSidebarProps {
   activeView: 'editor' | 'list' | 'groups';
@@ -18,6 +22,10 @@ interface AdminLeftSidebarProps {
   activeProjectTitle: string;
   totalProjectsCount: number;
   totalGroupsCount?: number;
+  theme?: ThemeMode;
+  resolvedTheme?: ResolvedTheme;
+  onSelectTheme?: (theme: ThemeMode) => void;
+  onCycleTheme?: () => void;
 }
 
 export const AdminLeftSidebar: React.FC<AdminLeftSidebarProps> = ({
@@ -27,6 +35,10 @@ export const AdminLeftSidebar: React.FC<AdminLeftSidebarProps> = ({
   activeProjectTitle,
   totalProjectsCount,
   totalGroupsCount = 5,
+  theme,
+  resolvedTheme = 'dark',
+  onSelectTheme,
+  onCycleTheme,
 }) => {
   const [isHovered, setIsHovered] = useState(false);
   const [isPinned, setIsPinned] = useState(false);
@@ -159,6 +171,50 @@ export const AdminLeftSidebar: React.FC<AdminLeftSidebarProps> = ({
 
       {/* Sidebar Footer */}
       <div className="admin-sidebar-footer">
+        {/* Theme Selector (Dark / Light / System) */}
+        {onSelectTheme && (
+          isExpanded ? (
+            <div className="admin-theme-switch" role="group" aria-label="Theme mode selector">
+              <button
+                type="button"
+                className={`theme-segment-btn ${theme === 'dark' ? 'is-active' : ''}`}
+                onClick={() => onSelectTheme('dark')}
+                title="Dark Theme"
+              >
+                <Moon size={12} />
+                <span>Dark</span>
+              </button>
+              <button
+                type="button"
+                className={`theme-segment-btn ${theme === 'light' ? 'is-active' : ''}`}
+                onClick={() => onSelectTheme('light')}
+                title="Light Theme"
+              >
+                <Sun size={12} />
+                <span>Light</span>
+              </button>
+              <button
+                type="button"
+                className={`theme-segment-btn ${theme === 'system' ? 'is-active' : ''}`}
+                onClick={() => onSelectTheme('system')}
+                title={`System Auto (${resolvedTheme === 'light' ? 'Light' : 'Dark'})`}
+              >
+                <Monitor size={12} />
+                <span>Auto</span>
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="admin-pin-toggle-btn admin-theme-rail-btn"
+              onClick={onCycleTheme}
+              title={`Theme: ${(theme || 'system').toUpperCase()} (${resolvedTheme === 'light' ? 'Light' : 'Dark'}) — Click to toggle`}
+            >
+              {resolvedTheme === 'light' ? <Sun size={16} /> : <Moon size={16} />}
+            </button>
+          )
+        )}
+
         <button
           className="admin-pin-toggle-btn"
           onClick={() => setIsPinned(!isPinned)}

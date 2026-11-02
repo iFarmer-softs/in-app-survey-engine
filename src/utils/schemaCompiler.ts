@@ -28,6 +28,22 @@ export function compileFlowToSchema(
   const questionNodes = nodes.filter((n) => n.type === 'question');
   const jumpNodes = nodes.filter((n) => n.type === 'groupJump');
 
+  const containerMap = new Map<string, any>();
+  for (const n of nodes) {
+    if (n.type === 'groupContainer') {
+      containerMap.set(n.id, n.data);
+    }
+  }
+
+  const getNodeGroup = (nodeData: any): number => {
+    if (nodeData?.group) return Number(nodeData.group);
+    if (nodeData?.containerId && containerMap.has(nodeData.containerId)) {
+      const cData = containerMap.get(nodeData.containerId);
+      if (cData?.numericGroupId) return Number(cData.numericGroupId);
+    }
+    return meta.groupNumber;
+  };
+
   const questions: DynamicKycQuestion[] = [];
 
   // Sort nodes by vertical position (Y) to keep a logical top-to-bottom order
@@ -52,9 +68,6 @@ export function compileFlowToSchema(
       if (sourceNode.type === 'question') {
         const parentData = sourceNode.data as unknown as QuestionNodeData;
         const parentId = parentData.question_id;
-        if (!dependsOn.includes(parentId)) {
-          dependsOn.push(parentId);
-        }
 
         // Check if edge carries condition metadata or was connected to a specific option port
         const edgeData = inEdge.data as { validationType?: string; triggerValue?: any } | undefined;
@@ -63,27 +76,23 @@ export function compileFlowToSchema(
           optFromHandle = decodeURIComponent(inEdge.sourceHandle.replace('opt-', ''));
         }
 
-        if (optFromHandle) {
-          const parentKey = String(parentId);
-          const existing = validationMap[parentKey];
-          let matches: Record<string, boolean> = {};
-          if (
-            existing &&
-            existing.validation_type === 'match' &&
-            typeof existing.validation === 'object' &&
-            !Array.isArray(existing.validation)
-          ) {
-            matches = { ...(existing.validation as Record<string, boolean>) };
+        const isConditional =
+          Boolean(optFromHandle) ||
+          Boolean(edgeData?.validationType && edgeData.triggerValue !== undefined);
+
+        // Only add depends_on and validation if this edge represents an actual conditional branch!
+        // Unconditional progression (e.g. 'default-next') must NOT create a dependency.
+        if (isConditional) {
+          if (!dependsOn.includes(parentId)) {
+            dependsOn.push(parentId);
           }
-          matches[optFromHandle] = true;
-          validationMap[parentKey] = {
-            validation_type: 'match',
-            validation: matches,
-          };
-        } else if (edgeData?.validationType && edgeData.triggerValue !== undefined) {
-          const vType = edgeData.validationType as 'match' | 'greater' | 'less';
+
           const parentKey = String(parentId);
-          if (vType === 'match') {
+          const parentGroup = getNodeGroup(parentData);
+          const currentGroup = getNodeGroup(data);
+          const isSameGroup = parentGroup === currentGroup;
+
+          if (optFromHandle) {
             const existing = validationMap[parentKey];
             let matches: Record<string, boolean> = {};
             if (
@@ -94,21 +103,73 @@ export function compileFlowToSchema(
             ) {
               matches = { ...(existing.validation as Record<string, boolean>) };
             }
-            matches[String(edgeData.triggerValue)] = true;
+            matches[optFromHandle] = true;
+
+            // For binary questions (e.g. হ্যাঁ / না), set the opposing option to false
+            const parentOpts = (parentData.options || '')
+              .split(',')
+              .map((s) => s.trim())
+              .filter(Boolean);
+            if (parentOpts.length === 2 && parentOpts.includes(optFromHandle)) {
+              parentOpts.forEach((opt) => {
+                if (opt !== optFromHandle) {
+                  matches[opt] = false;
+                }
+              });
+            }
+
             validationMap[parentKey] = {
+              group: parentGroup,
+              is_same_group: isSameGroup,
               validation_type: 'match',
               validation: matches,
             };
-          } else {
-            validationMap[String(parentId)] = {
-              validation_type: vType,
-              validation: Number(edgeData.triggerValue) || 0,
-            };
+          } else if (edgeData?.validationType && edgeData.triggerValue !== undefined) {
+            const vType = edgeData.validationType as 'match' | 'greater' | 'less';
+            if (vType === 'match') {
+              const existing = validationMap[parentKey];
+              let matches: Record<string, boolean> = {};
+              if (
+                existing &&
+                existing.validation_type === 'match' &&
+                typeof existing.validation === 'object' &&
+                !Array.isArray(existing.validation)
+              ) {
+                matches = { ...(existing.validation as Record<string, boolean>) };
+              }
+              const trigStr = String(edgeData.triggerValue);
+              matches[trigStr] = true;
+
+              const parentOpts = (parentData.options || '')
+                .split(',')
+                .map((s) => s.trim())
+                .filter(Boolean);
+              if (parentOpts.length === 2 && parentOpts.includes(trigStr)) {
+                parentOpts.forEach((opt) => {
+                  if (opt !== trigStr) {
+                    matches[opt] = false;
+                  }
+                });
+              }
+
+              validationMap[parentKey] = {
+                group: parentGroup,
+                is_same_group: isSameGroup,
+                validation_type: 'match',
+                validation: matches,
+              };
+            } else {
+              validationMap[parentKey] = {
+                group: parentGroup,
+                is_same_group: isSameGroup,
+                validation_type: vType,
+                validation: Number(edgeData.triggerValue) || 0,
+              };
+            }
           }
         }
       } else if (sourceNode.type === 'decision') {
         const decData = sourceNode.data as unknown as DecisionNodeData;
-        // Trace back who points to this decision node
         const decisionIncoming = edges.filter((e) => e.target === sourceNode.id);
         for (const decInEdge of decisionIncoming) {
           const parentQuestionNode = nodes.find((n) => n.id === decInEdge.source && n.type === 'question');
@@ -119,15 +180,21 @@ export function compileFlowToSchema(
               dependsOn.push(parentId);
             }
 
+            const parentGroup = getNodeGroup(parentData);
+            const currentGroup = getNodeGroup(data);
             if (decData.conditionType === 'match') {
               const matches: Record<string, boolean> = {};
               matches[String(decData.comparisonValue)] = true;
               validationMap[String(parentId)] = {
+                group: parentGroup,
+                is_same_group: parentGroup === currentGroup,
                 validation_type: 'match',
                 validation: matches,
               };
             } else {
               validationMap[String(parentId)] = {
+                group: parentGroup,
+                is_same_group: parentGroup === currentGroup,
                 validation_type: decData.conditionType,
                 validation: Number(decData.comparisonValue) || 0,
               };
@@ -137,25 +204,29 @@ export function compileFlowToSchema(
       }
     }
 
+    const rawAny = data as any;
     const qItem: DynamicKycQuestion = {
       question_id: qId,
       question: data.question || 'Untitled Question',
       question_bn: data.question_bn || data.question || 'প্রশ্ন',
       answer_type: data.answer_type || 'string',
+      placeholder: data.placeholder ?? null,
+      options: data.options || undefined,
+      group: getNodeGroup(rawAny),
+      group_display_order:
+        rawAny.group_display_order ??
+        (sortedQuestionNodes.indexOf(qNode) + 1) * 2 - 1,
       mandatory: data.mandatory ?? true,
+      active: rawAny.active ?? true,
+      hint: data.hint ?? null,
+      auto_filled: rawAny.auto_filled ?? false,
+      value: data.value ?? null,
       editable: data.editable ?? true,
-      placeholder: data.placeholder || '',
-      hint: data.hint || '',
-      options: data.options || '',
-      value: data.value || '',
+      depends_on: dependsOn.length > 0 ? dependsOn : null,
+      cross_group_dependency: rawAny.cross_group_dependency ?? [],
+      validation: Object.keys(validationMap).length > 0 ? validationMap : null,
+      hidden: rawAny.hidden ?? (dependsOn.length > 0),
     };
-
-    if (dependsOn.length > 0) {
-      qItem.depends_on = dependsOn;
-    }
-    if (Object.keys(validationMap).length > 0) {
-      qItem.validation = validationMap;
-    }
 
     questions.push(qItem);
   }
@@ -176,12 +247,12 @@ export function compileFlowToSchema(
   }
 
   return {
-    current_group: meta.groupNumber,
-    total_groups: meta.totalGroups,
-    next: meta.hasNextGroup,
-    instruction: meta.instruction,
     data: questions,
-    groups: groupJumps.length > 0 ? groupJumps : undefined,
+    instruction: meta.instruction || '',
+    groups_to_jump: groupJumps,
+    next: meta.hasNextGroup,
+    total_groups: meta.totalGroups,
+    current_group: meta.groupNumber,
   };
 }
 
@@ -193,7 +264,7 @@ export const SAMPLE_INITIAL_SCHEMA: DynamicKycGroupResponse = {
   total_groups: 3,
   next: true,
   instruction: 'কৃষকের আবাদি জমি ও আয়ের প্রাথমিক তথ্য যাচাই করুন।',
-  groups: [
+  groups_to_jump: [
     { group_id: '2', group_title: '2: কৃষি প্রকল্প ও সম্পদ তথ্য' },
     { group_id: '3', group_title: '3: ঋণ পরিশোধ ও জামানত বিবরণ' },
   ],
@@ -305,7 +376,11 @@ export function parseSchemaToFlow(schema: DynamicKycGroupResponse | any[] | any)
     totalGroups: Number(metaRaw.total_groups) || 1,
     hasNextGroup: metaRaw.next ?? metaRaw.hasNextGroup ?? false,
     instruction: metaRaw.instruction || '',
-    groupJumps: Array.isArray(metaRaw.groups) ? metaRaw.groups : [],
+    groupJumps: Array.isArray(metaRaw.groups_to_jump)
+      ? metaRaw.groups_to_jump
+      : Array.isArray(metaRaw.groups)
+      ? metaRaw.groups
+      : [],
   };
 
   // 1. Add Start Node
@@ -404,6 +479,12 @@ export function parseSchemaToFlow(schema: DynamicKycGroupResponse | any[] | any)
         hint: item.hint || '',
         options: normalizedOptions,
         value: item.value || '',
+        group: item.group,
+        group_display_order: item.group_display_order,
+        active: item.active,
+        auto_filled: item.auto_filled,
+        cross_group_dependency: item.cross_group_dependency,
+        hidden: item.hidden,
       },
     };
 
@@ -465,24 +546,29 @@ export function parseSchemaToFlow(schema: DynamicKycGroupResponse | any[] | any)
         const sourceId = questionIdToNodeId[parentKey];
         if (!sourceId) return;
 
-        let ruleLabel = 'Depends On';
         let valType: 'match' | 'greater' | 'less' = 'match';
-        let triggerVal = '';
+        let triggerVals: string[] = [''];
 
         if (item.validation && item.validation[parentKey]) {
           const rule: any = item.validation[parentKey];
           if (typeof rule === 'object' && rule !== null) {
             valType = rule.validation_type || 'match';
             if (rule.validation && typeof rule.validation === 'object' && !Array.isArray(rule.validation)) {
-              triggerVal = Object.keys(rule.validation).join(', ');
+              const truthyKeys = Object.keys(rule.validation).filter(
+                (k) => rule.validation[k] !== false && rule.validation[k] !== null
+              );
+              triggerVals = truthyKeys.length > 0 ? truthyKeys : Object.keys(rule.validation);
             } else if (rule.validation !== undefined) {
-              triggerVal = String(rule.validation);
+              triggerVals = [String(rule.validation)];
             }
           } else {
             valType = 'match';
-            triggerVal = String(rule);
+            triggerVals = [String(rule)];
           }
+        }
 
+        triggerVals.forEach((triggerVal) => {
+          let ruleLabel = 'Depends On';
           if (valType === 'match') {
             ruleLabel = triggerVal ? `IF "${triggerVal}"` : 'IF Match';
           } else if (valType === 'greater') {
@@ -490,40 +576,46 @@ export function parseSchemaToFlow(schema: DynamicKycGroupResponse | any[] | any)
           } else if (valType === 'less') {
             ruleLabel = `IF < ${triggerVal}`;
           }
-        }
 
-        let sourceHandle: string | undefined = undefined;
-        if (valType === 'match' && triggerVal) {
-          sourceHandle = `opt-${encodeURIComponent(triggerVal.trim())}`;
-        }
+          let sourceHandle: string | undefined = undefined;
+          if (valType === 'match' && triggerVal) {
+            sourceHandle = `opt-${encodeURIComponent(triggerVal.trim())}`;
+          }
 
-        edges.push({
-          id: `e-dep-${parentKey}-${qId}-${index}-${Math.random().toString(36).slice(2, 7)}`,
-          source: sourceId,
-          sourceHandle,
-          target: targetId,
-          type: 'surveyEdge',
-          label: ruleLabel,
-          animated: true,
-          style: { stroke: '#f59e0b', strokeWidth: 2, strokeDasharray: '4 4' },
-          markerEnd: {
-            type: MarkerType.ArrowClosed,
-            width: 16,
-            height: 16,
-            color: '#f59e0b',
-          },
-          data: {
-            validationType: valType,
-            triggerValue: triggerVal,
-          },
+          edges.push({
+            id: `e-dep-${parentKey}-${qId}-${index}-${Math.random().toString(36).slice(2, 7)}`,
+            source: sourceId,
+            sourceHandle,
+            target: targetId,
+            type: 'surveyEdge',
+            label: ruleLabel,
+            animated: true,
+            style: { stroke: '#f59e0b', strokeWidth: 2, strokeDasharray: '4 4' },
+            markerEnd: {
+              type: MarkerType.ArrowClosed,
+              width: 16,
+              height: 16,
+              color: '#f59e0b',
+            },
+            data: {
+              validationType: valType,
+              triggerValue: triggerVal,
+            },
+          });
         });
       });
     }
   });
 
   // 6. Add Group Jump Nodes if present
-  if (Array.isArray(schema.groups) && schema.groups.length > 0) {
-    schema.groups.forEach((jump: any, jIdx: number) => {
+  const rawGroupJumps = Array.isArray(schema.groups_to_jump)
+    ? schema.groups_to_jump
+    : Array.isArray(schema.groups)
+    ? schema.groups
+    : [];
+
+  if (rawGroupJumps.length > 0) {
+    rawGroupJumps.forEach((jump: any, jIdx: number) => {
       const jumpNodeId = `jump-${jump.group_id}`;
       nodes.push({
         id: jumpNodeId,

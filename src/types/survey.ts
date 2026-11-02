@@ -19,6 +19,8 @@ export type ValidationType = 'match' | 'greater' | 'less';
 export interface ValidationConfig {
   validation_type: ValidationType;
   validation: string | number | boolean | Record<string, boolean>;
+  group?: number;
+  is_same_group?: boolean;
 }
 
 export interface DynamicKycQuestion {
@@ -28,12 +30,18 @@ export interface DynamicKycQuestion {
   answer_type: AnswerType;
   mandatory: boolean;
   editable?: boolean;
-  placeholder?: string;
-  hint?: string;
+  placeholder?: string | null;
+  hint?: string | null;
   options?: string; // Comma-separated list of options
-  value?: string;
-  depends_on?: number[];
-  validation?: Record<string, ValidationConfig>; // Keyed by parent question_id as string
+  value?: string | null;
+  depends_on?: number[] | null;
+  validation?: Record<string, ValidationConfig> | null; // Keyed by parent question_id as string
+  group?: number;
+  group_display_order?: number;
+  active?: boolean;
+  auto_filled?: boolean;
+  cross_group_dependency?: any[];
+  hidden?: boolean;
 }
 
 export interface GroupJumpOption {
@@ -48,6 +56,7 @@ export interface DynamicKycGroupResponse {
   instruction?: string;
   data: DynamicKycQuestion[];
   groups?: GroupJumpOption[];
+  groups_to_jump?: GroupJumpOption[];
 }
 
 export type FlowNodeType =
@@ -67,11 +76,18 @@ export interface QuestionNodeData {
   answer_type: AnswerType;
   mandatory: boolean;
   editable?: boolean;
+  active?: boolean;
+  auto_filled?: boolean;
+  hidden?: boolean;
+  group_display_order?: number;
   placeholder?: string;
   hint?: string;
   options?: string;
   value?: string;
   customColor?: string;
+  group?: number;
+  group_name?: string;
+  containerId?: string;
 }
 
 export interface DecisionNodeData {

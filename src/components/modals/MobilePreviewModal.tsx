@@ -1,6 +1,5 @@
 import React, { useState, useMemo } from 'react';
 import {
-  X,
   Smartphone,
   ChevronLeft,
   Camera,
@@ -10,6 +9,7 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import type { DynamicKycGroupResponse } from '../../types/survey';
+import { Modal } from '../ui/Modal';
 
 interface MobilePreviewModalProps {
   isOpen: boolean;
@@ -121,33 +121,21 @@ export const MobilePreviewModal: React.FC<MobilePreviewModalProps> = ({
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div
-        className="modal-container mobile-modal"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="modal-header">
-          <div className="modal-title-row">
-            <Smartphone size={20} className="text-emerald" />
-            <div>
-              <h3 className="modal-title">Live Android Simulator</h3>
-              <p className="modal-subtitle">
-                Interactive preview testing real-time dependency logic and layout
-              </p>
-            </div>
-          </div>
-          <div className="flex-center gap-2">
-            <button className="btn btn-secondary btn-sm" onClick={handleReset}>
-              <RotateCcw size={12} />
-              <span>Reset State</span>
-            </button>
-            <button className="modal-close-btn" onClick={onClose}>
-              <X size={18} />
-            </button>
-          </div>
-        </div>
-
-        <div className="modal-body flex-center mobile-simulator-body">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      className="mobile-modal"
+      icon={<Smartphone size={20} className="text-emerald" />}
+      title="Live Android Simulator"
+      subtitle="Interactive preview testing real-time dependency logic and layout"
+      headerActions={
+        <button className="btn btn-secondary btn-sm" onClick={handleReset}>
+          <RotateCcw size={12} />
+          <span>Reset State</span>
+        </button>
+      }
+    >
+      <div className="modal-body flex-center mobile-simulator-body">
           {/* Smartphone Frame */}
           <div className="phone-device-frame">
             {/* Status bar */}
@@ -426,7 +414,6 @@ export const MobilePreviewModal: React.FC<MobilePreviewModalProps> = ({
             </div>
           </div>
         </div>
-      </div>
-    </div>
-  );
+      </Modal>
+    );
 };

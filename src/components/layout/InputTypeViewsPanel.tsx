@@ -23,12 +23,23 @@ import {
   Plus,
   Edit3,
   Lock,
+  FastForward,
+  CheckCircle2,
+  Ban,
+  Sparkles,
+  EyeOff,
+  PanelRightClose,
+  Tag,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import type {
   AnswerType,
   QuestionNodeData,
   ValidationType,
+  GroupJumpNodeData,
 } from '../../types/survey';
+import type { ReusableQuestionGroup } from '../../types/group';
 import type { GroupMeta } from '../../utils/schemaCompiler';
 
 interface InputTypeItem {
@@ -148,9 +159,15 @@ const INPUT_TYPE_VIEWS: InputTypeItem[] = [
 ];
 
 interface InputTypeViewsPanelProps {
+  isOpen?: boolean;
+  width?: number;
+  isResizing?: boolean;
+  onToggleCollapse?: () => void;
   selectedNode: Node | null;
   selectedEdge: Edge | null;
+  nodes?: Node[];
   edges: Edge[];
+  groups?: ReusableQuestionGroup[];
   groupMeta: GroupMeta;
   onUpdateNodeData: (nodeId: string, newData: any) => void;
   onUpdateEdgeData: (edgeId: string, newData: any) => void;
@@ -167,9 +184,15 @@ interface InputTypeViewsPanelProps {
 }
 
 export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
+  isOpen = true,
+  width,
+  isResizing,
+  onToggleCollapse,
   selectedNode,
   selectedEdge,
+  nodes = [],
   edges,
+  groups = [],
   groupMeta,
   onUpdateNodeData,
   onUpdateEdgeData,
@@ -225,10 +248,15 @@ export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
   };
 
   return (
-    <aside className="sidebar right-sidebar input-types-sidebar">
+    <aside
+      className={`sidebar right-sidebar input-types-sidebar ${!isOpen ? 'is-collapsed' : ''} ${
+        isResizing ? 'is-resizing' : ''
+      }`}
+      style={isOpen && width ? { width: `${width}px`, minWidth: `${width}px` } : undefined}
+    >
       {/* Sidebar Header with Switcher Tabs */}
       <div className="sidebar-header">
-        <div className="input-panel-tabs">
+        <div className="input-panel-tabs" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <button
             className={`panel-tab-btn ${activeTab === 'widgets' ? 'is-active' : ''}`}
             onClick={() => setActiveTab('widgets')}
@@ -243,12 +271,32 @@ export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
             <Sliders size={14} />
             <span>
               {selectedNode
-                ? 'Question Inspector'
+                ? selectedNode.type === 'question'
+                  ? 'Question Inspector'
+                  : selectedNode.type === 'groupContainer'
+                  ? 'Question Group Inspector'
+                  : selectedNode.type === 'decision'
+                  ? 'Decision Inspector'
+                  : selectedNode.type === 'groupJump'
+                  ? 'Jump Inspector'
+                  : 'Node Inspector'
                 : selectedEdge
                 ? 'Rule Inspector'
                 : 'Group Settings'}
             </span>
           </button>
+
+          {onToggleCollapse && (
+            <button
+              type="button"
+              className="sidebar-collapse-btn"
+              onClick={onToggleCollapse}
+              title="Collapse Inspector (Ctrl+J)"
+              style={{ marginLeft: 'auto' }}
+            >
+              <PanelRightClose size={15} />
+            </button>
+          )}
         </div>
       </div>
 
@@ -405,7 +453,8 @@ export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
                 </div>
               </div>
 
-              <div className="form-row">
+              {/* Question ID & Group Display Order */}
+              <div className="form-row-2">
                 <div className="form-group flex-1">
                   <label className="form-label">Question ID</label>
                   <input
@@ -421,6 +470,32 @@ export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
                   />
                 </div>
 
+                <div className="form-group flex-1">
+                  <label className="form-label">Display Order</label>
+                  <input
+                    type="number"
+                    className="form-input"
+                    placeholder="e.g. 1"
+                    value={(selectedNode.data as any).group_display_order ?? ''}
+                    onChange={(e) =>
+                      onUpdateNodeData(selectedNode.id, {
+                        ...selectedNode.data,
+                        group_display_order:
+                          e.target.value === '' ? undefined : parseInt(e.target.value),
+                      })
+                    }
+                  />
+                </div>
+              </div>
+
+              {/* Question Level Flags: Mandatory, Editable, Active, Auto-filled, Hidden */}
+              <div style={{ marginTop: 10, marginBottom: 6 }}>
+                <span className="text-secondary font-mono text-xs font-semibold" style={{ letterSpacing: '0.5px' }}>
+                  QUESTION VALIDATION & FLAGS
+                </span>
+              </div>
+
+              <div className="form-row-2" style={{ marginBottom: 6 }}>
                 <div className="form-group flex-1">
                   <label className="form-label">Mandatory?</label>
                   <div
@@ -465,6 +540,87 @@ export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
                       <>
                         <Lock size={14} />
                         <span>Locked</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="form-row-2" style={{ marginBottom: 6 }}>
+                <div className="form-group flex-1">
+                  <label className="form-label">Active Status?</label>
+                  <div
+                    className={`toggle-pill ${
+                      ((selectedNode.data as any).active ?? true) ? 'is-checked' : 'is-locked'
+                    }`}
+                    onClick={() =>
+                      onUpdateNodeData(selectedNode.id, {
+                        ...selectedNode.data,
+                        active: !((selectedNode.data as any).active ?? true),
+                      })
+                    }
+                    title="Toggle whether question is actively evaluated in this survey"
+                  >
+                    {((selectedNode.data as any).active ?? true) ? (
+                      <>
+                        <CheckCircle2 size={14} />
+                        <span>Active</span>
+                      </>
+                    ) : (
+                      <>
+                        <Ban size={14} />
+                        <span>Inactive</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                <div className="form-group flex-1">
+                  <label className="form-label">Auto-filled?</label>
+                  <div
+                    className={`toggle-pill ${
+                      (selectedNode.data as any).auto_filled ? 'is-purple' : ''
+                    }`}
+                    onClick={() =>
+                      onUpdateNodeData(selectedNode.id, {
+                        ...selectedNode.data,
+                        auto_filled: !(selectedNode.data as any).auto_filled,
+                      })
+                    }
+                    title="Indicates whether this field is pre-filled from farmer records"
+                  >
+                    <Sparkles size={14} />
+                    <span>
+                      {(selectedNode.data as any).auto_filled ? 'Auto-filled' : 'Manual Input'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="form-row" style={{ marginBottom: 10 }}>
+                <div className="form-group flex-1">
+                  <label className="form-label">Initial Visibility</label>
+                  <div
+                    className={`toggle-pill ${
+                      (selectedNode.data as any).hidden ? 'is-amber' : ''
+                    }`}
+                    onClick={() =>
+                      onUpdateNodeData(selectedNode.id, {
+                        ...selectedNode.data,
+                        hidden: !(selectedNode.data as any).hidden,
+                      })
+                    }
+                    title="When true, starts hidden until triggered by conditional logic"
+                  >
+                    {(selectedNode.data as any).hidden ? (
+                      <>
+                        <EyeOff size={14} />
+                        <span>Hidden on Start</span>
+                      </>
+                    ) : (
+                      <>
+                        <Eye size={14} />
+                        <span>Visible on Start</span>
                       </>
                     )}
                   </div>
@@ -724,51 +880,579 @@ export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
           )}
 
           {/* If Group Jump Selected */}
-          {selectedNode && selectedNode.type === 'groupJump' && (
-            <div className="node-inspector-block">
-              <div className="flex-between">
-                <span className="text-secondary font-mono text-xs">
-                  Group Connector
-                </span>
-                <button
-                  className="icon-action-btn text-danger"
-                  onClick={() => onDeleteNode(selectedNode.id)}
-                >
-                  <Trash2 size={14} />
-                </button>
-              </div>
+          {selectedNode && selectedNode.type === 'groupJump' && (() => {
+            const jumpData = selectedNode.data as unknown as GroupJumpNodeData;
 
-              <div className="form-group">
-                <label className="form-label">Target Group ID</label>
-                <input
-                  type="number"
-                  className="form-input"
-                  value={(selectedNode.data as any).targetGroupId}
-                  onChange={(e) =>
-                    onUpdateNodeData(selectedNode.id, {
-                      ...selectedNode.data,
-                      targetGroupId: parseInt(e.target.value) || 1,
-                    })
-                  }
-                />
-              </div>
+            // Available Canvas Group Containers
+            const canvasGroups = nodes
+              .filter((n) => n.type === 'groupContainer')
+              .map((n) => {
+                const d = n.data as any;
+                const gId = Number(d.numericGroupId || 1);
+                return {
+                  id: `canvas-${n.id}`,
+                  groupId: gId,
+                  title: d.title || `Group ${gId}`,
+                  titleBn: d.titleBn || '',
+                  color: d.color || '#0284c7',
+                  category: d.category || 'custom',
+                  source: 'Canvas Container',
+                };
+              });
 
-              <div className="form-group">
-                <label className="form-label">Target Group Title</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={(selectedNode.data as any).targetGroupTitle || ''}
-                  onChange={(e) =>
-                    onUpdateNodeData(selectedNode.id, {
-                      ...selectedNode.data,
-                      targetGroupTitle: e.target.value,
-                    })
-                  }
-                />
+            // Available Library Groups
+            const libGroups = (groups || []).map((g) => {
+              const gId = Number(g.groupId || 1);
+              return {
+                id: `lib-${g.id}`,
+                groupId: gId,
+                title: g.name,
+                titleBn: g.nameBn || '',
+                color: g.color || '#10b981',
+                category: g.category || 'custom',
+                source: 'Group Library',
+              };
+            });
+
+            // Check if current targetGroupId matches any existing group
+            const matchedGroup =
+              canvasGroups.find((g) => g.groupId === jumpData.targetGroupId) ||
+              libGroups.find((g) => g.groupId === jumpData.targetGroupId);
+
+            const selectedValue = matchedGroup
+              ? matchedGroup.id
+              : jumpData.targetGroupId
+              ? 'custom'
+              : '';
+
+            return (
+              <div className="node-inspector-block">
+                <div className="flex-between">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <div
+                      style={{
+                        backgroundColor: '#8b5cf625',
+                        color: '#8b5cf6',
+                        padding: 4,
+                        borderRadius: 4,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <FastForward size={14} />
+                    </div>
+                    <span className="badge-type" style={{ color: '#a78bfa' }}>
+                      Group Connector
+                    </span>
+                  </div>
+                  <button
+                    className="icon-action-btn text-danger"
+                    onClick={() => onDeleteNode(selectedNode.id)}
+                    title="Delete Connector"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+
+                <div className="form-group" style={{ marginTop: 12 }}>
+                  <label className="form-label required-label">
+                    Target Question Group (Jump Destination)
+                  </label>
+                  <select
+                    className="form-select"
+                    value={selectedValue}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (!val || val === 'custom') {
+                        return;
+                      }
+                      const target =
+                        canvasGroups.find((g) => g.id === val) ||
+                        libGroups.find((g) => g.id === val);
+                      if (target) {
+                        onUpdateNodeData(selectedNode.id, {
+                          ...jumpData,
+                          targetGroupId: target.groupId,
+                          targetGroupTitle: target.titleBn
+                            ? `${target.title} (${target.titleBn})`
+                            : target.title,
+                        });
+                      }
+                    }}
+                  >
+                    <option value="">-- Choose Target Group --</option>
+                    {canvasGroups.length > 0 && (
+                      <optgroup label="Groups on Canvas">
+                        {canvasGroups.map((cg) => (
+                          <option key={cg.id} value={cg.id}>
+                            [Group #{cg.groupId}] {cg.title} {cg.titleBn ? `(${cg.titleBn})` : ''}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                    {libGroups.length > 0 && (
+                      <optgroup label="Reusable Group Library">
+                        {libGroups.map((lg) => (
+                          <option key={lg.id} value={lg.id}>
+                            [Group #{lg.groupId}] {lg.title} {lg.titleBn ? `(${lg.titleBn})` : ''}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                    <option value="custom">⚙️ Custom / External Group ID...</option>
+                  </select>
+                </div>
+
+                {matchedGroup ? (
+                  <div
+                    style={{
+                      background: 'rgba(139, 92, 246, 0.08)',
+                      border: '1px solid rgba(139, 92, 246, 0.25)',
+                      borderRadius: 8,
+                      padding: '10px 12px',
+                      marginTop: 10,
+                      marginBottom: 12,
+                    }}
+                  >
+                    <div className="flex-between" style={{ marginBottom: 4 }}>
+                      <span
+                        style={{
+                          fontSize: 10,
+                          fontWeight: 700,
+                          color: '#a78bfa',
+                          backgroundColor: 'rgba(139, 92, 246, 0.2)',
+                          padding: '2px 6px',
+                          borderRadius: 4,
+                        }}
+                      >
+                        GROUP #{matchedGroup.groupId}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: 10,
+                          color: '#94a3b8',
+                          textTransform: 'uppercase',
+                        }}
+                      >
+                        {matchedGroup.source}
+                      </span>
+                    </div>
+                    <div
+                      style={{
+                        fontWeight: 600,
+                        fontSize: 13,
+                        color: '#f8fafc',
+                      }}
+                    >
+                      {matchedGroup.title}
+                    </div>
+                    {matchedGroup.titleBn && (
+                      <div
+                        className="bn-font"
+                        style={{
+                          fontSize: 12,
+                          color: '#94a3b8',
+                          marginTop: 2,
+                        }}
+                      >
+                        {matchedGroup.titleBn}
+                      </div>
+                    )}
+                  </div>
+                ) : null}
+
+                {/* Manual Group Target Fields */}
+                <div className="form-group" style={{ marginTop: 8 }}>
+                  <label className="form-label">Target Group ID (Numeric)</label>
+                  <div className="input-with-icon">
+                    <Hash size={14} className="input-icon" />
+                    <input
+                      type="number"
+                      min={1}
+                      className="form-input has-icon"
+                      value={jumpData.targetGroupId || 1}
+                      onChange={(e) =>
+                        onUpdateNodeData(selectedNode.id, {
+                          ...jumpData,
+                          targetGroupId: Math.max(1, parseInt(e.target.value) || 1),
+                        })
+                      }
+                    />
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Target Group Title</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="e.g. 2: কৃষি প্রকল্প ও সম্পদ তথ্য"
+                    value={jumpData.targetGroupTitle || ''}
+                    onChange={(e) =>
+                      onUpdateNodeData(selectedNode.id, {
+                        ...jumpData,
+                        targetGroupTitle: e.target.value,
+                      })
+                    }
+                  />
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
+
+          {/* If Question Group Container Selected */}
+          {selectedNode && selectedNode.type === 'groupContainer' && (() => {
+            const containerData = selectedNode.data as any;
+            const childQuestionIds: string[] = containerData.questionIds || [];
+            const childQuestions = nodes.filter(
+              (n) => n.type === 'question' && childQuestionIds.includes(n.id)
+            );
+            const activeColor = containerData.color || '#0284c7';
+
+            const CATEGORY_OPTIONS: { value: string; label: string; defaultColor: string }[] = [
+              { value: 'kyc', label: 'Farmer KYC & Identity', defaultColor: '#0284c7' },
+              { value: 'land', label: 'Land & Plots', defaultColor: '#10b981' },
+              { value: 'crop', label: 'Crops & Yield', defaultColor: '#f59e0b' },
+              { value: 'financial', label: 'Financial & Income', defaultColor: '#8b5cf6' },
+              { value: 'verification', label: 'Geo & Field Verification', defaultColor: '#ec4899' },
+              { value: 'custom', label: 'Custom Domain Sets', defaultColor: '#64748b' },
+            ];
+
+            const PRESET_COLORS = [
+              '#0284c7', // Sky
+              '#10b981', // Emerald
+              '#f59e0b', // Amber
+              '#8b5cf6', // Violet
+              '#ec4899', // Pink
+              '#06b6d4', // Cyan
+              '#6366f1', // Indigo
+              '#64748b', // Slate
+            ];
+
+            return (
+              <div className="node-inspector-block">
+                <div className="flex-between">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span
+                      style={{
+                        backgroundColor: activeColor,
+                        width: 10,
+                        height: 10,
+                        borderRadius: '50%',
+                        display: 'inline-block',
+                        boxShadow: `0 0 8px ${activeColor}80`,
+                      }}
+                    />
+                    <span className="badge-type">Question Group</span>
+                    <span
+                      className="group-cat-chip"
+                      style={{
+                        backgroundColor: `${activeColor}18`,
+                        color: activeColor,
+                        borderColor: `${activeColor}40`,
+                      }}
+                    >
+                      <Tag size={9} />
+                      <span>{(containerData.category || 'custom').toUpperCase()}</span>
+                    </span>
+                  </div>
+                  <button
+                    className="icon-action-btn text-danger"
+                    onClick={() => {
+                      if (containerData.onDeleteGroup) {
+                        containerData.onDeleteGroup(selectedNode.id);
+                      } else {
+                        onDeleteNode(selectedNode.id);
+                      }
+                    }}
+                    title="Delete Question Group"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+
+                <div className="form-row-2" style={{ marginTop: 12 }}>
+                  <div className="form-group flex-1">
+                    <label className="form-label required-label">Backend Group ID *</label>
+                    <div className="input-with-icon">
+                      <Hash size={14} className="input-icon" />
+                      <input
+                        type="number"
+                        min={1}
+                        className="form-input has-icon"
+                        value={containerData.numericGroupId || 1}
+                        onChange={(e) => {
+                          const newId = Math.max(1, parseInt(e.target.value) || 1);
+                          onUpdateNodeData(selectedNode.id, {
+                            ...selectedNode.data,
+                            numericGroupId: newId,
+                          });
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <div className="form-group flex-1">
+                    <label className="form-label">Questions</label>
+                    <div
+                      className="form-input"
+                      style={{
+                        opacity: 0.9,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontWeight: 600,
+                        fontSize: 12,
+                      }}
+                    >
+                      {childQuestions.length || containerData.questionCount || 0} Questions
+                    </div>
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Group Title (English)</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={containerData.title || ''}
+                    onChange={(e) =>
+                      onUpdateNodeData(selectedNode.id, {
+                        ...selectedNode.data,
+                        title: e.target.value,
+                      })
+                    }
+                    placeholder="e.g. Farmer Personal KYC"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Group Title (Bengali)</label>
+                  <input
+                    type="text"
+                    className="form-input bn-font"
+                    value={containerData.titleBn || ''}
+                    onChange={(e) =>
+                      onUpdateNodeData(selectedNode.id, {
+                        ...selectedNode.data,
+                        titleBn: e.target.value,
+                      })
+                    }
+                    placeholder="e.g. কৃষকের ব্যক্তিগত তথ্য"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Domain Category</label>
+                  <select
+                    className="form-select"
+                    value={containerData.category || 'custom'}
+                    onChange={(e) => {
+                      const newCat = e.target.value;
+                      const matched = CATEGORY_OPTIONS.find((c) => c.value === newCat);
+                      onUpdateNodeData(selectedNode.id, {
+                        ...selectedNode.data,
+                        category: newCat,
+                        color: matched ? matched.defaultColor : activeColor,
+                      });
+                    }}
+                  >
+                    {CATEGORY_OPTIONS.map((cat) => (
+                      <option key={cat.value} value={cat.value}>
+                        {cat.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Accent Theme Color</label>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+                    {PRESET_COLORS.map((c) => (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() =>
+                          onUpdateNodeData(selectedNode.id, {
+                            ...selectedNode.data,
+                            color: c,
+                          })
+                        }
+                        style={{
+                          width: 24,
+                          height: 24,
+                          borderRadius: 6,
+                          backgroundColor: c,
+                          border: activeColor === c ? '2px solid #fff' : '2px solid transparent',
+                          boxShadow: activeColor === c ? `0 0 8px ${c}` : 'none',
+                          cursor: 'pointer',
+                          transition: 'transform 0.15s ease',
+                          transform: activeColor === c ? 'scale(1.15)' : 'scale(1)',
+                        }}
+                        title={`Select color ${c}`}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                  {containerData.onToggleCollapse && (
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                      onClick={() => containerData.onToggleCollapse(selectedNode.id)}
+                    >
+                      {containerData.isCollapsed ? (
+                        <>
+                          <ChevronDown size={14} />
+                          <span>Expand</span>
+                        </>
+                      ) : (
+                        <>
+                          <ChevronUp size={14} />
+                          <span>Collapse</span>
+                        </>
+                      )}
+                    </button>
+                  )}
+                  {containerData.onUngroup && (
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      style={{ flex: 1 }}
+                      onClick={() => containerData.onUngroup(selectedNode.id)}
+                    >
+                      Ungroup
+                    </button>
+                  )}
+                </div>
+
+                {/* Child Questions Preview List */}
+                {childQuestions.length > 0 && (
+                  <div className="form-group" style={{ marginTop: 16 }}>
+                    <div className="flex-between" style={{ marginBottom: 6 }}>
+                      <label className="form-label" style={{ fontWeight: 600 }}>
+                        Group Questions ({childQuestions.length})
+                      </label>
+                      <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Sequential order</span>
+                    </div>
+                    <div
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 6,
+                        maxHeight: 180,
+                        overflowY: 'auto',
+                        padding: 4,
+                      }}
+                    >
+                      {childQuestions.map((cq, idx) => {
+                        const qd = cq.data as any;
+                        return (
+                          <div
+                            key={cq.id}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 8,
+                              padding: '6px 8px',
+                              borderRadius: 6,
+                              background: 'var(--bg-surface-elevated)',
+                              border: '1px solid var(--border-subtle)',
+                              fontSize: 11,
+                            }}
+                          >
+                            <span
+                              style={{
+                                width: 18,
+                                height: 18,
+                                borderRadius: '50%',
+                                background: 'var(--bg-surface)',
+                                border: '1px solid var(--border-default)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: 10,
+                                fontWeight: 700,
+                                color: 'var(--text-muted)',
+                                flexShrink: 0,
+                              }}
+                            >
+                              {idx + 1}
+                            </span>
+                            <span
+                              style={{
+                                fontSize: 9,
+                                fontWeight: 600,
+                                padding: '1px 5px',
+                                borderRadius: 4,
+                                background: `${activeColor}15`,
+                                color: activeColor,
+                                border: `1px solid ${activeColor}30`,
+                                textTransform: 'uppercase',
+                                flexShrink: 0,
+                              }}
+                            >
+                              {qd.answer_type || 'string'}
+                            </span>
+                            <span
+                              className="bn-font"
+                              style={{
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                color: 'var(--text-primary)',
+                                flex: 1,
+                              }}
+                              title={qd.question_bn || qd.question}
+                            >
+                              Q{qd.question_id}: {qd.question_bn || qd.question}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* If Other Flowchart Node (Start, End, Process, Document) */}
+          {selectedNode &&
+            selectedNode.type !== 'question' &&
+            selectedNode.type !== 'decision' &&
+            selectedNode.type !== 'groupJump' &&
+            selectedNode.type !== 'groupContainer' && (
+              <div className="node-inspector-block">
+                <div className="flex-between">
+                  <span className="badge-type">{selectedNode.type}</span>
+                  <button
+                    className="icon-action-btn text-danger"
+                    onClick={() => onDeleteNode(selectedNode.id)}
+                    title="Delete"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Label</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={(selectedNode.data as any).label || ''}
+                    onChange={(e) =>
+                      onUpdateNodeData(selectedNode.id, {
+                        ...selectedNode.data,
+                        label: e.target.value,
+                      })
+                    }
+                  />
+                </div>
+              </div>
+            )}
 
           {/* If Nothing Selected: Group Settings */}
           {!selectedNode && !selectedEdge && (

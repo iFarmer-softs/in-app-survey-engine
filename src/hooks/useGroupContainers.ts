@@ -1,0 +1,437 @@
+import { useCallback } from 'react';
+import { MarkerType } from '@xyflow/react';
+import type { Node, Edge, NodeChange } from '@xyflow/react';
+import type { ReusableQuestionGroup } from '../types/group';
+import { calculateGroupQuestionLayout } from '../utils/flowLayout';
+
+interface UseGroupContainersProps {
+  nodes: Node[];
+  edges: Edge[];
+  setNodes: (nodes: Node[] | ((nds: Node[]) => Node[])) => void;
+  setEdges: (edges: Edge[] | ((eds: Edge[]) => Edge[])) => void;
+  onNodesChange: (changes: NodeChange[]) => void;
+  setSelectedNodeId: (id: string | null) => void;
+  setActiveView: (view: 'editor' | 'list' | 'groups') => void;
+  setCenter: (x: number, y: number, options?: { zoom?: number; duration?: number }) => void;
+}
+
+export function useGroupContainers({
+  nodes,
+  edges,
+  setNodes,
+  setEdges,
+  onNodesChange,
+  setSelectedNodeId,
+  setActiveView,
+  setCenter,
+}: UseGroupContainersProps) {
+  // Synchronized node dragging: moving a group container moves all its child questions in real-time
+  const handleNodesChange = useCallback(
+    (changes: NodeChange[]) => {
+      const extraChanges: NodeChange[] = [];
+
+      changes.forEach((change) => {
+        if (change.type === 'position' && change.position) {
+          const node = nodes.find((n) => n.id === change.id);
+          if (node && node.type === 'groupContainer') {
+            const childIds: string[] =
+              (node.data as any)?.questionIds ||
+              nodes
+                .filter((n) => (n.data as any)?.containerId === node.id)
+                .map((n) => n.id);
+
+            if (childIds.length > 0) {
+              const dx = change.position.x - node.position.x;
+              const dy = change.position.y - node.position.y;
+              if (dx !== 0 || dy !== 0) {
+                childIds.forEach((childId) => {
+                  const childNode = nodes.find((n) => n.id === childId);
+                  if (childNode) {
+                    extraChanges.push({
+                      type: 'position',
+                      id: childId,
+                      position: {
+                        x: childNode.position.x + dx,
+                        y: childNode.position.y + dy,
+                      },
+                      dragging: change.dragging,
+                    });
+                  }
+                });
+              }
+            }
+          }
+        }
+      });
+
+      onNodesChange(extraChanges.length > 0 ? [...changes, ...extraChanges] : changes);
+    },
+    [nodes, onNodesChange]
+  );
+
+  // Group Container Handlers: Collapse / Expand, Ungroup, Delete
+  const handleToggleGroupCollapse = useCallback(
+    (containerNodeId: string) => {
+      let willCollapse = false;
+      let targetChildIds: string[] = [];
+
+      setNodes((currentNodes) => {
+        const containerNode = currentNodes.find((n) => n.id === containerNodeId);
+        if (!containerNode || containerNode.type !== 'groupContainer') {
+          return currentNodes;
+        }
+
+        const isCurrentlyCollapsed = Boolean((containerNode.data as any).isCollapsed);
+        willCollapse = !isCurrentlyCollapsed;
+        const containerY = containerNode.position.y;
+        const containerX = containerNode.position.x;
+
+        // 1. Resolve child nodes for this group container
+        const rawChildIds: string[] = (containerNode.data as any).questionIds || [];
+        const thisGroupChildren = currentNodes.filter(
+          (n) => rawChildIds.includes(n.id) || (n.data as any)?.containerId === containerNodeId
+        );
+        targetChildIds = thisGroupChildren.map((n) => n.id);
+
+        // 2. Compute dynamic layout offsets and expanded height
+        const { offsets, totalExpandedHeight } = calculateGroupQuestionLayout(thisGroupChildren);
+
+        // Difference between expanded frame height and collapsed milestone card height (~105px)
+        const heightDiff = Math.max(0, totalExpandedHeight - 105);
+        const shiftAmount = willCollapse ? -heightDiff : heightDiff;
+
+        // 3. Map ALL group containers and their child questions across canvas
+        const childToContainerMap = new Map<string, string>();
+        const containerToChildrenMap = new Map<string, string[]>();
+
+        currentNodes.forEach((node) => {
+          if (node.type === 'groupContainer') {
+            const qIds: string[] = (node.data as any)?.questionIds || [];
+            containerToChildrenMap.set(node.id, [...qIds]);
+            qIds.forEach((qId) => childToContainerMap.set(qId, node.id));
+          }
+        });
+
+        currentNodes.forEach((node) => {
+          const cId = (node.data as any)?.containerId;
+          if (cId) {
+            childToContainerMap.set(node.id, cId);
+            if (containerToChildrenMap.has(cId)) {
+              const list = containerToChildrenMap.get(cId)!;
+              if (!list.includes(node.id)) {
+                list.push(node.id);
+              }
+            }
+          }
+        });
+
+        // 4. Identify downstream top-level nodes (in same vertical column or reachable via edges)
+        const downstreamTopLevelIds = new Set<string>();
+
+        // (a) Topological BFS along edges starting from containerNodeId and its child questions
+        const edgeVisited = new Set<string>();
+        const queue: string[] = [containerNodeId, ...targetChildIds];
+        while (queue.length > 0) {
+          const curr = queue.shift()!;
+          if (edgeVisited.has(curr)) continue;
+          edgeVisited.add(curr);
+
+          edges.forEach((edge) => {
+            if (edge.source === curr) {
+              const targetNode = currentNodes.find((n) => n.id === edge.target);
+              if (targetNode) {
+                const targetContainerId = childToContainerMap.get(targetNode.id);
+                if (targetContainerId && targetContainerId !== containerNodeId) {
+                  downstreamTopLevelIds.add(targetContainerId);
+                  queue.push(targetContainerId);
+                } else if (!targetContainerId && targetNode.id !== containerNodeId) {
+                  downstreamTopLevelIds.add(targetNode.id);
+                  queue.push(targetNode.id);
+                }
+              }
+            }
+          });
+        }
+
+        // (b) Also include top-level nodes located directly downstream in the same vertical column
+        currentNodes.forEach((n) => {
+          if (childToContainerMap.has(n.id)) return;
+          if (n.id === containerNodeId) return;
+
+          const isSameColumn = Math.abs(n.position.x - containerX) < 220;
+          const isBelow = n.position.y > containerY + 60;
+          if (isSameColumn && isBelow) {
+            downstreamTopLevelIds.add(n.id);
+          }
+        });
+
+        // (c) Children belonging to downstream group containers
+        const downstreamChildIds = new Set<string>();
+        downstreamTopLevelIds.forEach((tlId) => {
+          const children = containerToChildrenMap.get(tlId) || [];
+          children.forEach((cId) => downstreamChildIds.add(cId));
+        });
+
+        // 5. Update nodes immutably
+        return currentNodes.map((node) => {
+          if (node.id === containerNodeId) {
+            return {
+              ...node,
+              data: {
+                ...node.data,
+                isCollapsed: willCollapse,
+                expandedHeight: totalExpandedHeight,
+                childOffsets: offsets,
+              },
+            };
+          }
+
+          if (targetChildIds.includes(node.id)) {
+            const idx = targetChildIds.indexOf(node.id);
+            return {
+              ...node,
+              hidden: willCollapse,
+              position: !willCollapse
+                ? {
+                    x: containerX + 30,
+                    y: containerY + (offsets[idx] ?? (115 + idx * 200)),
+                  }
+                : node.position,
+            };
+          }
+
+          if (downstreamTopLevelIds.has(node.id)) {
+            return {
+              ...node,
+              position: {
+                ...node.position,
+                y: node.position.y + shiftAmount,
+              },
+            };
+          }
+
+          if (downstreamChildIds.has(node.id)) {
+            return {
+              ...node,
+              position: {
+                ...node.position,
+                y: node.position.y + shiftAmount,
+              },
+            };
+          }
+
+          return node;
+        });
+      });
+
+      setEdges((currentEdges) => {
+        return currentEdges.map((edge) => {
+          if (
+            (edge.data as any)?.containerId === containerNodeId ||
+            (targetChildIds.includes(edge.source) && targetChildIds.includes(edge.target))
+          ) {
+            return {
+              ...edge,
+              hidden: willCollapse,
+            };
+          }
+          return edge;
+        });
+      });
+    },
+    [setNodes, setEdges, edges]
+  );
+
+  const handleUngroup = useCallback(
+    (containerNodeId: string) => {
+      setNodes((currentNodes) => {
+        const containerNode = currentNodes.find((n) => n.id === containerNodeId);
+        if (!containerNode) return currentNodes;
+        const childIds: string[] = (containerNode.data as any).questionIds || [];
+
+        return currentNodes
+          .filter((n) => n.id !== containerNodeId)
+          .map((n) => {
+            if (childIds.includes(n.id) || (n.data as any)?.containerId === containerNodeId) {
+              return {
+                ...n,
+                hidden: false,
+                data: {
+                  ...n.data,
+                  containerId: undefined,
+                },
+              };
+            }
+            return n;
+          });
+      });
+
+      setEdges((currentEdges) => {
+        return currentEdges.map((e) => {
+          if ((e.data as any)?.containerId === containerNodeId) {
+            return {
+              ...e,
+              hidden: false,
+              data: {
+                ...e.data,
+                containerId: undefined,
+              },
+            };
+          }
+          return e;
+        });
+      });
+    },
+    [setNodes, setEdges]
+  );
+
+  const handleDeleteGroupContainer = useCallback(
+    (containerNodeId: string) => {
+      setNodes((currentNodes) => {
+        const containerNode = currentNodes.find((n) => n.id === containerNodeId);
+        if (!containerNode) return currentNodes;
+        const childIds: string[] = (containerNode.data as any).questionIds || [];
+
+        return currentNodes.filter(
+          (n) =>
+            n.id !== containerNodeId &&
+            !childIds.includes(n.id) &&
+            (n.data as any)?.containerId !== containerNodeId
+        );
+      });
+
+      setEdges((currentEdges) => {
+        return currentEdges.filter(
+          (e) =>
+            (e.data as any)?.containerId !== containerNodeId &&
+            e.source !== containerNodeId &&
+            e.target !== containerNodeId
+        );
+      });
+    },
+    [setNodes, setEdges]
+  );
+
+  // Insert Question Group into canvas wrapped in a collapsible GroupContainerNode
+  const handleInsertGroupIntoCanvas = useCallback(
+    (
+      group: ReusableQuestionGroup,
+      targetPos?: { x: number; y: number },
+      startCollapsed: boolean = false
+    ) => {
+      const currentHighestId = nodes.reduce((max, n) => {
+        if (n.type === 'question' && (n.data as any)?.question_id) {
+          return Math.max(max, Number((n.data as any).question_id) || 0);
+        }
+        return max;
+      }, 100);
+
+      const lastNode = nodes[nodes.length - 1];
+      const startX = targetPos ? targetPos.x : (lastNode ? lastNode.position.x : 350);
+      const startY = targetPos ? targetPos.y : (lastNode ? lastNode.position.y + 180 : 150);
+
+      const containerId = `grp-container-${Date.now().toString().slice(-5)}`;
+      const questionNodeIds: string[] = [];
+      const newNodes: Node[] = [];
+      const newEdges: Edge[] = [];
+
+      const { offsets, totalExpandedHeight } = calculateGroupQuestionLayout(group.questions);
+
+      group.questions.forEach((q, idx) => {
+        const qId = currentHighestId + 1 + idx;
+        const nodeId = `q-${qId}`;
+        questionNodeIds.push(nodeId);
+
+        newNodes.push({
+          id: nodeId,
+          type: 'question',
+          position: {
+            x: startX + 40,
+            y: startY + offsets[idx],
+          },
+          hidden: startCollapsed,
+          data: {
+            question_id: qId,
+            question: q.question,
+            question_bn: q.question_bn,
+            answer_type: q.answer_type,
+            mandatory: q.mandatory ?? true,
+            editable: q.editable ?? true,
+            placeholder: q.placeholder || '',
+            hint: q.hint || '',
+            options: q.options || '',
+            containerId,
+            group: group.groupId || 1,
+            group_name: group.name,
+          },
+        });
+
+        if (idx > 0) {
+          const prevNodeId = `q-${currentHighestId + idx}`;
+          newEdges.push({
+            id: `edge-${prevNodeId}-${nodeId}-${Date.now().toString().slice(-4)}`,
+            source: prevNodeId,
+            target: nodeId,
+            type: 'surveyEdge',
+            hidden: startCollapsed,
+            markerEnd: {
+              type: MarkerType.ArrowClosed,
+              width: 16,
+              height: 16,
+            },
+            data: {
+              rule: 'Next',
+              containerId,
+            },
+          });
+        }
+      });
+
+      // The Group Container Node (framing header with collapse/expand toggle)
+      const containerNode: Node = {
+        id: containerId,
+        type: 'groupContainer',
+        position: { x: startX, y: startY },
+        data: {
+          groupId: group.id,
+          numericGroupId: group.groupId || 1,
+          title: group.name,
+          titleBn: group.nameBn,
+          category: group.category,
+          color: group.color,
+          isCollapsed: startCollapsed,
+          questionIds: questionNodeIds,
+          questionCount: group.questions.length,
+          expandedHeight: totalExpandedHeight,
+          childOffsets: offsets,
+          onToggleCollapse: handleToggleGroupCollapse,
+          onUngroup: handleUngroup,
+          onDeleteGroup: handleDeleteGroupContainer,
+        },
+      };
+
+      setNodes((nds) => nds.concat(containerNode).concat(newNodes));
+      setEdges((eds) => eds.concat(newEdges));
+
+      setSelectedNodeId(containerId);
+      setActiveView('editor');
+
+      setTimeout(() => {
+        setCenter(startX + 140, startY + 90, {
+          zoom: 0.9,
+          duration: 500,
+        });
+      }, 100);
+    },
+    [nodes, setNodes, setEdges, setCenter, setSelectedNodeId, setActiveView, handleToggleGroupCollapse, handleUngroup, handleDeleteGroupContainer]
+  );
+
+  return {
+    handleNodesChange,
+    handleToggleGroupCollapse,
+    handleUngroup,
+    handleDeleteGroupContainer,
+    handleInsertGroupIntoCanvas,
+  };
+}
+

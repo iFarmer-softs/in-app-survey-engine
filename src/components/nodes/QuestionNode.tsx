@@ -17,6 +17,9 @@ import {
   GitBranch,
   Edit3,
   Lock,
+  Sparkles,
+  EyeOff,
+  Ban,
 } from 'lucide-react';
 import type { QuestionNodeData, AnswerType } from '../../types/survey';
 
@@ -144,9 +147,76 @@ export const QuestionNode = memo(({ data, selected }: NodeProps) => {
 
       {/* Header with ID and Widget Badge */}
       <div className="node-header">
-        <div className="node-id-badge">
-          <span>Q#{nodeData.question_id}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div className="node-id-badge">
+            <span>Q#{nodeData.question_id}</span>
+          </div>
+
+          {/* Status flag badges */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            {nodeData.editable === false && (
+              <span
+                title="Locked / Read-only"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  background: 'rgba(239, 68, 68, 0.15)',
+                  color: '#f87171',
+                  borderRadius: 3,
+                  padding: '2px 4px',
+                }}
+              >
+                <Lock size={10} />
+              </span>
+            )}
+            {nodeData.auto_filled && (
+              <span
+                title="Auto-filled from records"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  background: 'rgba(139, 92, 246, 0.15)',
+                  color: '#c084fc',
+                  borderRadius: 3,
+                  padding: '2px 4px',
+                }}
+              >
+                <Sparkles size={10} />
+              </span>
+            )}
+            {nodeData.hidden && (
+              <span
+                title="Starts hidden on page load"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  background: 'rgba(245, 158, 11, 0.15)',
+                  color: '#fbbf24',
+                  borderRadius: 3,
+                  padding: '2px 4px',
+                }}
+              >
+                <EyeOff size={10} />
+              </span>
+            )}
+            {nodeData.active === false && (
+              <span
+                title="Inactive / Disabled"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  background: 'rgba(239, 68, 68, 0.2)',
+                  color: '#ef4444',
+                  borderRadius: 3,
+                  padding: '2px 4px',
+                }}
+              >
+                <Ban size={10} />
+              </span>
+            )}
+          </div>
         </div>
+
         <div
           className="node-widget-badge"
           style={{ color: widget.color, backgroundColor: widget.bg }}

@@ -3,15 +3,24 @@ import {
   Search,
   PlusCircle,
   Layers,
-  Edit3,
+  SquarePen,
   Trash2,
   Workflow,
   Tag,
   AlertTriangle,
   X,
   RotateCcw,
+  ArrowDownUp,
 } from 'lucide-react';
 import type { ReusableQuestionGroup, GroupCategory } from '../../types/group';
+
+type SortOption =
+  | 'id_asc'
+  | 'id_desc'
+  | 'name_asc'
+  | 'name_desc'
+  | 'questions_desc'
+  | 'questions_asc';
 
 interface QuestionGroupListViewProps {
   groups: ReusableQuestionGroup[];
@@ -42,10 +51,27 @@ export const QuestionGroupListView: React.FC<QuestionGroupListViewProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<'all' | GroupCategory>('all');
+  const [sortBy, setSortBy] = useState<SortOption>('id_asc');
   const [groupToDelete, setGroupToDelete] = useState<ReusableQuestionGroup | null>(null);
 
-  const filteredGroups = useMemo(() => {
-    return groups.filter((g) => {
+  const stats = useMemo(() => {
+    const total = groups.length;
+    const totalQuestions = groups.reduce((acc, g) => acc + g.questions.length, 0);
+    const categoriesCount = new Set(groups.map((g) => g.category)).size;
+    const customSets = groups.filter((g) => g.category === 'custom').length;
+    return { total, totalQuestions, categoriesCount, customSets };
+  }, [groups]);
+
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = { all: groups.length };
+    groups.forEach((g) => {
+      counts[g.category] = (counts[g.category] || 0) + 1;
+    });
+    return counts;
+  }, [groups]);
+
+  const sortedAndFilteredGroups = useMemo(() => {
+    const filtered = groups.filter((g) => {
       const matchSearch =
         g.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         g.nameBn.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -61,35 +87,36 @@ export const QuestionGroupListView: React.FC<QuestionGroupListViewProps> = ({
 
       return matchSearch && matchCategory;
     });
-  }, [groups, searchQuery, selectedCategory]);
+
+    return filtered.sort((a, b) => {
+      const idA = a.groupId || 1;
+      const idB = b.groupId || 1;
+      if (sortBy === 'id_asc') return idA - idB;
+      if (sortBy === 'id_desc') return idB - idA;
+      if (sortBy === 'name_asc') return a.name.localeCompare(b.name);
+      if (sortBy === 'name_desc') return b.name.localeCompare(a.name);
+      if (sortBy === 'questions_desc') return b.questions.length - a.questions.length;
+      if (sortBy === 'questions_asc') return a.questions.length - b.questions.length;
+      return 0;
+    });
+  }, [groups, searchQuery, selectedCategory, sortBy]);
 
   return (
     <div className="flowchart-dashboard-container group-dashboard-container">
-      {/* Dashboard Header Banner */}
-      <div className="dashboard-banner">
-        <div className="dashboard-banner-left">
-          <div className="banner-badge-row">
-            <span className="banner-badge">
-              <Layers size={13} />
-              <span>Reusable Question Sets</span>
-            </span>
-            <span className="banner-count">{groups.length} Pre-built Groups</span>
+      {/* 1. Dashboard Header Banner */}
+      <div className="dashboard-header-banner">
+        <div className="dashboard-title-area">
+          <div className="dashboard-badge">
+            <Layers size={16} className="text-emerald" />
+            <span>REUSABLE TEMPLATES</span>
           </div>
-          <h1 className="dashboard-title">Question Groups Library</h1>
-          <p className="dashboard-sub">
+          <h1 className="dashboard-main-title">Question Groups Library</h1>
+          <p className="dashboard-subtitle">
             Modular bundles of standardized survey questions that can be dropped into any flowchart on demand.
           </p>
         </div>
 
-        <div className="dashboard-banner-right">
-          <button
-            className="btn btn-primary btn-create-lg"
-            onClick={onCreateGroupInStudio}
-            title="Visually design questions using the Flowchart Studio canvas"
-          >
-            <PlusCircle size={17} />
-            <span>Design New Group in Studio</span>
-          </button>
+        <div className="dashboard-header-actions" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           {onResetDefaults && (
             <button
               className="btn btn-secondary"
@@ -100,48 +127,107 @@ export const QuestionGroupListView: React.FC<QuestionGroupListViewProps> = ({
               <span>Restore Defaults</span>
             </button>
           )}
+
+          <button
+            className="btn btn-primary create-hero-btn"
+            onClick={onCreateGroupInStudio}
+            title="Visually design questions using the Flowchart Studio canvas"
+          >
+            <PlusCircle size={18} />
+            <span>Design New Group</span>
+          </button>
         </div>
       </div>
 
-      {/* Filter and Search Bar */}
-      <div className="dashboard-filter-bar">
-        <div className="search-input-wrap">
-          <Search size={16} className="search-icon" />
-          <input
-            type="text"
-            className="dashboard-search-input"
-            placeholder="Search question groups or specific questions..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-          {searchQuery && (
-            <button
-              type="button"
-              className="clear-search-btn"
-              onClick={() => setSearchQuery('')}
-              title="Clear search"
-            >
-              ×
-            </button>
-          )}
+      {/* 2. KPI Stats Bar */}
+      <div className="dashboard-stats-grid">
+        <div className="stat-card">
+          <div className="stat-value">{stats.total}</div>
+          <div className="stat-label">Total Question Groups</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-value text-emerald">{stats.totalQuestions}</div>
+          <div className="stat-label">Total Mapped Questions</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-value text-cyan">{stats.categoriesCount}</div>
+          <div className="stat-label">Active Categories</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-value text-amber">{stats.customSets}</div>
+          <div className="stat-label">Custom Domain Sets</div>
+        </div>
+      </div>
+
+      {/* 3. Controls Bar: Two-tier layout for spacious, un-congested UX */}
+      <div className="dashboard-controls-section" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {/* Tier 1: Search + Sort Dropdown + Match Summary */}
+        <div className="dashboard-filter-bar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+          <div className="search-input-wrap">
+            <Search size={16} className="search-icon" />
+            <input
+              type="text"
+              className="dashboard-search-input"
+              placeholder="Search question groups or specific questions..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                className="clear-search-btn"
+                onClick={() => setSearchQuery('')}
+                title="Clear search"
+              >
+                ×
+              </button>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <ArrowDownUp size={14} style={{ color: 'var(--text-muted)' }} />
+              <select
+                className="form-select"
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as SortOption)}
+                style={{ minWidth: 180, height: 38, fontSize: 12, padding: '4px 10px' }}
+                aria-label="Sort Question Groups"
+              >
+                <option value="id_asc">Sort: Group ID (1 → 9)</option>
+                <option value="id_desc">Sort: Group ID (9 → 1)</option>
+                <option value="name_asc">Sort: Title (A → Z)</option>
+                <option value="name_desc">Sort: Title (Z → A)</option>
+                <option value="questions_desc">Sort: Most Questions</option>
+                <option value="questions_asc">Sort: Fewest Questions</option>
+              </select>
+            </div>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+              Showing {sortedAndFilteredGroups.length} of {groups.length}
+            </span>
+          </div>
         </div>
 
-        <div className="filter-chips-row">
+        {/* Tier 2: Category Filter Pills */}
+        <div className="category-filter-chips" style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
           {CATEGORIES.map((cat) => (
             <button
               key={cat.id}
-              className={`filter-chip ${selectedCategory === cat.id ? 'is-active' : ''}`}
+              className={`filter-pill ${selectedCategory === cat.id ? 'is-active' : ''}`}
               onClick={() => setSelectedCategory(cat.id)}
             >
               <span>{cat.label}</span>
+              <span style={{ opacity: 0.7, marginLeft: 5, fontSize: 11, fontWeight: 700 }}>
+                ({categoryCounts[cat.id] || 0})
+              </span>
             </button>
           ))}
         </div>
       </div>
 
-      {/* Question Groups Grid */}
+      {/* 4. Question Groups Grid */}
       <div className="groups-catalog-grid">
-        {filteredGroups.length === 0 ? (
+        {sortedAndFilteredGroups.length === 0 ? (
           <div className="dashboard-empty-state">
             <Layers size={44} className="empty-icon" />
             <h3 className="empty-title">No question groups found</h3>
@@ -169,7 +255,7 @@ export const QuestionGroupListView: React.FC<QuestionGroupListViewProps> = ({
             )}
           </div>
         ) : (
-          filteredGroups.map((group) => {
+          sortedAndFilteredGroups.map((group) => {
             return (
               <div
                 key={group.id}
@@ -179,13 +265,26 @@ export const QuestionGroupListView: React.FC<QuestionGroupListViewProps> = ({
                 {/* Card Top */}
                 <div className="group-card-header">
                   <div className="group-card-title-group">
-                    <div className="category-pill-wrap">
+                    <div className="category-pill-wrap" style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
+                      {group.groupId && (
+                        <span
+                          className="group-cat-pill"
+                          style={{
+                            backgroundColor: `${group.color}25`,
+                            color: group.color,
+                            borderColor: `${group.color}50`,
+                            fontWeight: 700,
+                          }}
+                        >
+                          <span>GROUP #{group.groupId}</span>
+                        </span>
+                      )}
                       <span
                         className="group-cat-pill"
                         style={{
-                          backgroundColor: `${group.color}20`,
+                          backgroundColor: `${group.color}15`,
                           color: group.color,
-                          borderColor: `${group.color}40`,
+                          borderColor: `${group.color}35`,
                         }}
                       >
                         <Tag size={10} />
@@ -241,14 +340,14 @@ export const QuestionGroupListView: React.FC<QuestionGroupListViewProps> = ({
                       onClick={() => onEditGroupInStudio(group)}
                       title="Edit Group in Flowchart Studio"
                     >
-                      <Edit3 size={14} />
+                      <SquarePen size={15} />
                     </button>
                     <button
                       className="btn-card-action btn-delete-action"
                       onClick={() => setGroupToDelete(group)}
                       title="Delete Group"
                     >
-                      <Trash2 size={14} />
+                      <Trash2 size={15} />
                     </button>
                   </div>
                 </div>

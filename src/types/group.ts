@@ -21,6 +21,7 @@ export interface GroupQuestionTemplate {
 
 export interface ReusableQuestionGroup {
   id: string;
+  groupId?: number; // Numeric group identifier for backend KYC & jump connectors (e.g. 25)
   name: string;
   nameBn: string;
   description: string;

@@ -6,13 +6,14 @@ import {
   ChevronUp,
   Tag,
   Layers,
-  Trash2,
+  Trash,
   Ungroup,
 } from 'lucide-react';
 import type { GroupCategory } from '../../types/group';
 
 export interface GroupContainerNodeData {
   groupId: string;
+  numericGroupId?: number;
   title: string;
   titleBn?: string;
   category: GroupCategory;
@@ -96,6 +97,20 @@ export const GroupContainerNode = memo(
 
             <div className="group-titles-wrap">
               <div className="group-category-tag-row">
+                {nodeData.numericGroupId && (
+                  <span
+                    className="group-cat-chip"
+                    style={{
+                      backgroundColor: `${color}25`,
+                      color,
+                      borderColor: `${color}60`,
+                      fontWeight: 700,
+                    }}
+                  >
+                    <span>GROUP #{nodeData.numericGroupId}</span>
+                  </span>
+                )}
+
                 <span
                   className="group-cat-chip"
                   style={{
@@ -170,7 +185,7 @@ export const GroupContainerNode = memo(
                 }}
                 title="Delete this entire question group and its questions"
               >
-                <Trash2 size={13} />
+                <Trash size={13} />
               </button>
             )}
           </div>

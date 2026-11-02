@@ -10,6 +10,11 @@ import {
   ArrowRight,
   Edit3,
   Lock,
+  CheckCircle2,
+  Ban,
+  Sparkles,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import type {
   AnswerType,
@@ -18,6 +23,7 @@ import type {
   GroupJumpNodeData,
   ValidationType,
 } from '../../types/survey';
+import { loadAllGroups } from '../../utils/groupStorage';
 import type { GroupMeta } from '../../utils/schemaCompiler';
 
 interface RightSidebarProps {
@@ -188,8 +194,8 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
           </div>
 
           <div className="inspector-content">
-            {/* Question ID & Answer Type */}
-            <div className="form-row">
+            {/* Question ID & Group Display Order */}
+            <div className="form-row-2">
               <div className="form-group flex-1">
                 <label className="form-label">Question ID</label>
                 <input
@@ -202,6 +208,31 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
                 />
               </div>
 
+              <div className="form-group flex-1">
+                <label className="form-label">Display Order</label>
+                <input
+                  type="number"
+                  className="form-input"
+                  placeholder="e.g. 1"
+                  value={qData.group_display_order ?? ''}
+                  onChange={(e) =>
+                    handleChange(
+                      'group_display_order',
+                      e.target.value === '' ? undefined : parseInt(e.target.value)
+                    )
+                  }
+                />
+              </div>
+            </div>
+
+            {/* Question Level Flags: Mandatory, Editable, Active, Auto-filled, Hidden */}
+            <div style={{ marginTop: 10, marginBottom: 6 }}>
+              <span className="text-secondary font-mono text-xs font-semibold" style={{ letterSpacing: '0.5px' }}>
+                QUESTION VALIDATION & FLAGS
+              </span>
+            </div>
+
+            <div className="form-row-2" style={{ marginBottom: 6 }}>
               <div className="form-group flex-1">
                 <label className="form-label">Mandatory?</label>
                 <div
@@ -231,6 +262,72 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
                     <>
                       <Lock size={14} />
                       <span>Locked</span>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="form-row-2" style={{ marginBottom: 6 }}>
+              <div className="form-group flex-1">
+                <label className="form-label">Active Status?</label>
+                <div
+                  className={`toggle-pill ${
+                    (qData.active ?? true) ? 'is-checked' : 'is-locked'
+                  }`}
+                  onClick={() => handleChange('active', !(qData.active ?? true))}
+                  title="Toggle whether question is actively evaluated in this survey"
+                >
+                  {(qData.active ?? true) ? (
+                    <>
+                      <CheckCircle2 size={14} />
+                      <span>Active</span>
+                    </>
+                  ) : (
+                    <>
+                      <Ban size={14} />
+                      <span>Inactive</span>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              <div className="form-group flex-1">
+                <label className="form-label">Auto-filled?</label>
+                <div
+                  className={`toggle-pill ${
+                    qData.auto_filled ? 'is-purple' : ''
+                  }`}
+                  onClick={() => handleChange('auto_filled', !qData.auto_filled)}
+                  title="Indicates whether this field is pre-filled from farmer records"
+                >
+                  <Sparkles size={14} />
+                  <span>
+                    {qData.auto_filled ? 'Auto-filled' : 'Manual Input'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="form-row" style={{ marginBottom: 10 }}>
+              <div className="form-group flex-1">
+                <label className="form-label">Initial Visibility</label>
+                <div
+                  className={`toggle-pill ${
+                    qData.hidden ? 'is-amber' : ''
+                  }`}
+                  onClick={() => handleChange('hidden', !qData.hidden)}
+                  title="When true, starts hidden until triggered by conditional logic"
+                >
+                  {qData.hidden ? (
+                    <>
+                      <EyeOff size={14} />
+                      <span>Hidden on Start</span>
+                    </>
+                  ) : (
+                    <>
+                      <Eye size={14} />
+                      <span>Visible on Start</span>
                     </>
                   )}
                 </div>
@@ -426,6 +523,9 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
 
     if (selectedNode.type === 'groupJump') {
       const jumpData = selectedNode.data as unknown as GroupJumpNodeData;
+      const allSavedGroups = loadAllGroups();
+      const matchedGroup = allSavedGroups.find((g) => g.groupId === jumpData.targetGroupId);
+
       return (
         <aside className="sidebar right-sidebar">
           <div className="sidebar-header flex-between">
@@ -445,6 +545,38 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
           </div>
 
           <div className="inspector-content">
+            <div className="form-group">
+              <label className="form-label required-label">
+                Target Question Group (Jump Destination)
+              </label>
+              <select
+                className="form-select"
+                value={matchedGroup ? matchedGroup.id : 'custom'}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === 'custom') return;
+                  const target = allSavedGroups.find((g) => g.id === val);
+                  if (target) {
+                    onUpdateNodeData(selectedNode.id, {
+                      ...jumpData,
+                      targetGroupId: target.groupId || 1,
+                      targetGroupTitle: target.nameBn
+                        ? `${target.name} (${target.nameBn})`
+                        : target.name,
+                    });
+                  }
+                }}
+              >
+                <option value="">-- Select Target Group --</option>
+                {allSavedGroups.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    [Group #{g.groupId || 1}] {g.name} {g.nameBn ? `(${g.nameBn})` : ''}
+                  </option>
+                ))}
+                <option value="custom">⚙️ Custom / External Group ID...</option>
+              </select>
+            </div>
+
             <div className="form-group">
               <label className="form-label">Target Group ID</label>
               <input

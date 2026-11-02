@@ -5,6 +5,7 @@ const STORAGE_KEY = 'ifarmer_reusable_question_groups';
 export const DEFAULT_QUESTION_GROUPS: ReusableQuestionGroup[] = [
   {
     id: 'grp-kyc-basic',
+    groupId: 1,
     name: 'Farmer Identity & KYC',
     nameBn: 'কৃষকের পরিচয় ও কেওয়াইসি (KYC)',
     description: 'Core farmer biometric, identity, and contact verification questions.',
@@ -47,6 +48,7 @@ export const DEFAULT_QUESTION_GROUPS: ReusableQuestionGroup[] = [
   },
   {
     id: 'grp-land-cultivation',
+    groupId: 2,
     name: 'Land & Cultivation Assessment',
     nameBn: 'আবাদি জমি ও চাষাবাদ তথ্য',
     description: 'Landholding size, ownership structure, and plot details.',
@@ -81,6 +83,7 @@ export const DEFAULT_QUESTION_GROUPS: ReusableQuestionGroup[] = [
   },
   {
     id: 'grp-crop-production',
+    groupId: 3,
     name: 'Crop & Production Details',
     nameBn: 'ফসল উৎপাদন ও মৌসুম তথ্য',
     description: 'Crop variety, harvest forecast, and cultivation cycle.',
@@ -113,6 +116,7 @@ export const DEFAULT_QUESTION_GROUPS: ReusableQuestionGroup[] = [
   },
   {
     id: 'grp-financial-income',
+    groupId: 4,
     name: 'Farm Financials & Income',
     nameBn: 'কৃষি আয় ও আর্থিক অবস্থা',
     description: 'Monthly income, secondary livelihood sources, and bank details.',
@@ -146,6 +150,7 @@ export const DEFAULT_QUESTION_GROUPS: ReusableQuestionGroup[] = [
   },
   {
     id: 'grp-geo-verification',
+    groupId: 5,
     name: 'Geo-Verification & Field Visit',
     nameBn: 'খামারের জিও-লোকেশন ও মাঠ পরিদর্শন',
     description: 'Field photo with GPS coordinates and facilitator remarks.',
@@ -204,10 +209,16 @@ export function createNewQuestionGroup(
   description: string,
   category: GroupCategory,
   color: string,
-  questions: GroupQuestionTemplate[]
+  questions: GroupQuestionTemplate[],
+  groupId?: number
 ): ReusableQuestionGroup {
+  const groups = loadAllGroups();
+  const maxGroupId = groups.reduce((max, g) => (g.groupId && g.groupId > max ? g.groupId : max), 0);
+  const assignedGroupId = groupId && groupId > 0 ? groupId : maxGroupId + 1;
+
   const newGroup: ReusableQuestionGroup = {
     id: `grp-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+    groupId: assignedGroupId,
     name,
     nameBn: nameBn || name,
     description: description || 'Custom reusable question group.',
@@ -218,7 +229,6 @@ export function createNewQuestionGroup(
     questions,
   };
 
-  const groups = loadAllGroups();
   const updated = [newGroup, ...groups];
   saveAllGroups(updated);
   return newGroup;
