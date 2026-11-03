@@ -30,4 +30,6 @@ export interface ReusableQuestionGroup {
   createdAt: string;
   updatedAt: string;
   questions: GroupQuestionTemplate[];
+  flowNodes?: any[];
+  flowEdges?: any[];
 }

@@ -12,6 +12,7 @@ export const GroupJumpNode = memo(({ data, selected }: NodeProps) => {
       <Handle
         type="target"
         position={Position.Top}
+        id="in"
         className="node-handle target-handle"
       />
       <div className="jump-inner">
@@ -41,6 +42,7 @@ export const StartNode = memo(({ data, selected }: NodeProps) => {
       <Handle
         type="source"
         position={Position.Bottom}
+        id="default-next"
         className="node-handle source-handle"
       />
     </div>
@@ -55,6 +57,7 @@ export const EndNode = memo(({ data, selected }: NodeProps) => {
       <Handle
         type="target"
         position={Position.Top}
+        id="in"
         className="node-handle target-handle"
       />
       <div className="pill-node-inner">
@@ -73,6 +76,7 @@ export const ProcessNode = memo(({ data, selected }: NodeProps) => {
       <Handle
         type="target"
         position={Position.Top}
+        id="in"
         className="node-handle target-handle"
       />
       <div className="process-inner">
@@ -85,6 +89,7 @@ export const ProcessNode = memo(({ data, selected }: NodeProps) => {
       <Handle
         type="source"
         position={Position.Bottom}
+        id="default-next"
         className="node-handle source-handle"
       />
     </div>
@@ -99,6 +104,7 @@ export const DocumentNode = memo(({ data, selected }: NodeProps) => {
       <Handle
         type="target"
         position={Position.Top}
+        id="in"
         className="node-handle target-handle"
       />
       <div className="document-inner">
@@ -111,6 +117,7 @@ export const DocumentNode = memo(({ data, selected }: NodeProps) => {
       <Handle
         type="source"
         position={Position.Bottom}
+        id="default-next"
         className="node-handle source-handle"
       />
     </div>

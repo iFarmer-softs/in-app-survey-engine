@@ -20,6 +20,107 @@ const OPTION_BASED_TYPES: AnswerType[] = [
 ];
 
 /**
+ * Resolves the numeric group ID of any given node (question or container).
+ */
+export function resolveNodeGroupId(
+  node: Node | undefined,
+  allNodes: Node[] = [],
+  fallbackGroup: number = 1
+): number {
+  if (!node || !node.data) return fallbackGroup;
+  const d = node.data as any;
+
+  // 1. If the node itself is a group container or frame
+  if (node.type === 'groupContainer' || node.type === 'groupFrame') {
+    if (typeof d.numericGroupId === 'number' && !isNaN(d.numericGroupId) && d.numericGroupId > 0) {
+      return d.numericGroupId;
+    }
+    if (d.groupId) {
+      const parsed = parseInt(String(d.groupId).replace(/\D+/g, ''), 10);
+      if (!isNaN(parsed) && parsed > 0) return parsed;
+    }
+  }
+
+  // 2. Authoritative: If node has a containerId pointing to a container or frame
+  if (d.containerId) {
+    const container = allNodes.find((n) => n.id === d.containerId);
+    if (container) {
+      const cd = container.data as any;
+      if (typeof cd?.numericGroupId === 'number' && !isNaN(cd.numericGroupId) && cd.numericGroupId > 0) {
+        return cd.numericGroupId;
+      }
+      if (cd?.groupId) {
+        const parsed = parseInt(String(cd.groupId).replace(/\D+/g, ''), 10);
+        if (!isNaN(parsed) && parsed > 0) return parsed;
+      }
+    }
+  }
+
+  // 3. Spatial containment check: is this node inside any groupFrame or groupContainer?
+  if (node.position && allNodes.length > 0) {
+    const nx = node.position.x;
+    const ny = node.position.y;
+    const enclosing = allNodes.find((n) => {
+      if (n.id === node.id) return false;
+      if (n.type !== 'groupFrame' && n.type !== 'groupContainer') return false;
+      let w = 440;
+      let h = 480;
+      if (typeof n.width === 'number' && n.width > 0) w = n.width;
+      else if (n.measured?.width && n.measured.width > 0) w = n.measured.width;
+      else if (n.style?.width) {
+        const p = parseInt(String(n.style.width), 10);
+        if (!isNaN(p) && p > 0) w = p;
+      }
+      if (typeof n.height === 'number' && n.height > 0) h = n.height;
+      else if (n.measured?.height && n.measured.height > 0) h = n.measured.height;
+      else if (n.style?.height) {
+        const p = parseInt(String(n.style.height), 10);
+        if (!isNaN(p) && p > 0) h = p;
+      }
+      return nx >= n.position.x && nx <= n.position.x + w && ny >= n.position.y && ny <= n.position.y + h;
+    });
+
+    if (enclosing) {
+      const ed = enclosing.data as any;
+      if (typeof ed?.numericGroupId === 'number' && !isNaN(ed.numericGroupId) && ed.numericGroupId > 0) {
+        return ed.numericGroupId;
+      }
+      if (ed?.groupId) {
+        const parsed = parseInt(String(ed.groupId).replace(/\D+/g, ''), 10);
+        if (!isNaN(parsed) && parsed > 0) return parsed;
+      }
+    }
+  }
+
+  // 4. Direct property on the question node
+  if (typeof d.group === 'number' && !isNaN(d.group) && d.group > 0) {
+    return d.group;
+  }
+  if (typeof d.numericGroupId === 'number' && !isNaN(d.numericGroupId) && d.numericGroupId > 0) {
+    return d.numericGroupId;
+  }
+
+  return fallbackGroup;
+}
+
+/**
+ * Checks whether an edge connects nodes belonging to two different survey groups.
+ */
+export function isCrossGroupEdge(
+  edge: Edge,
+  allNodes: Node[],
+  fallbackGroup: number = 1
+): boolean {
+  const sourceNode = allNodes.find((n) => n.id === edge.source);
+  const targetNode = allNodes.find((n) => n.id === edge.target);
+  if (!sourceNode || !targetNode) return false;
+  if (sourceNode.type === 'groupJump' || targetNode.type === 'groupJump') return false;
+  const sourceGroup = resolveNodeGroupId(sourceNode, allNodes, fallbackGroup);
+  const targetGroup = resolveNodeGroupId(targetNode, allNodes, fallbackGroup);
+  return sourceGroup !== targetGroup;
+}
+
+/**
  * Determines if a set of branches from a source node to a target node represents
  * an invalid binary contradiction or 100% full-set redundancy (e.g. Yes AND No, True AND False,
  * Match AND Else, or all available options pointing to the same child).

@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 
 const STORAGE_KEY_LEFT_WIDTH = 'survey_left_sidebar_width';
 const STORAGE_KEY_RIGHT_WIDTH = 'survey_right_sidebar_width';
+const STORAGE_KEY_BOTTOM_HEIGHT = 'survey_bottom_dock_height';
 
 const DEFAULT_LEFT_WIDTH = 290;
 const MIN_LEFT_WIDTH = 210;
@@ -10,6 +11,10 @@ const MAX_LEFT_WIDTH = 520;
 const DEFAULT_RIGHT_WIDTH = 340;
 const MIN_RIGHT_WIDTH = 260;
 const MAX_RIGHT_WIDTH = 640;
+
+const DEFAULT_BOTTOM_HEIGHT = 260;
+const MIN_BOTTOM_HEIGHT = 160;
+const MAX_BOTTOM_HEIGHT = 500;
 
 export function useSidebarResizer() {
   const [leftWidth, setLeftWidth] = useState<number>(() => {
@@ -34,10 +39,23 @@ export function useSidebarResizer() {
     return DEFAULT_RIGHT_WIDTH;
   });
 
-  const [resizingSide, setResizingSide] = useState<'left' | 'right' | null>(null);
+  const [bottomHeight, setBottomHeight] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_BOTTOM_HEIGHT);
+      const parsed = saved ? parseInt(saved, 10) : NaN;
+      if (!isNaN(parsed) && parsed >= MIN_BOTTOM_HEIGHT && parsed <= MAX_BOTTOM_HEIGHT) {
+        return parsed;
+      }
+    } catch {}
+    return DEFAULT_BOTTOM_HEIGHT;
+  });
+
+  const [resizingSide, setResizingSide] = useState<'left' | 'right' | 'bottom' | null>(null);
 
   const startXRef = useRef<number>(0);
+  const startYRef = useRef<number>(0);
   const startWidthRef = useRef<number>(0);
+  const startHeightRef = useRef<number>(0);
 
   // Left Sidebar Drag Handler
   const startResizingLeft = useCallback(
@@ -63,6 +81,18 @@ export function useSidebarResizer() {
     [rightWidth]
   );
 
+  // Bottom Dock Drag Handler
+  const startResizingBottom = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      setResizingSide('bottom');
+      startYRef.current = e.clientY;
+      startHeightRef.current = bottomHeight;
+      document.body.classList.add('is-resizing-sidebar');
+    },
+    [bottomHeight]
+  );
+
   // Reset to default on double click
   const resetLeftWidth = useCallback(() => {
     setLeftWidth(DEFAULT_LEFT_WIDTH);
@@ -76,6 +106,14 @@ export function useSidebarResizer() {
     setRightWidth(DEFAULT_RIGHT_WIDTH);
     try {
       localStorage.setItem(STORAGE_KEY_RIGHT_WIDTH, String(DEFAULT_RIGHT_WIDTH));
+    } catch {}
+    setTimeout(() => window.dispatchEvent(new Event('resize')), 50);
+  }, []);
+
+  const resetBottomHeight = useCallback(() => {
+    setBottomHeight(DEFAULT_BOTTOM_HEIGHT);
+    try {
+      localStorage.setItem(STORAGE_KEY_BOTTOM_HEIGHT, String(DEFAULT_BOTTOM_HEIGHT));
     } catch {}
     setTimeout(() => window.dispatchEvent(new Event('resize')), 50);
   }, []);
@@ -99,6 +137,13 @@ export function useSidebarResizer() {
           Math.max(MIN_RIGHT_WIDTH, startWidthRef.current + delta)
         );
         setRightWidth(newWidth);
+      } else if (resizingSide === 'bottom') {
+        const delta = startYRef.current - e.clientY;
+        const newHeight = Math.min(
+          MAX_BOTTOM_HEIGHT,
+          Math.max(MIN_BOTTOM_HEIGHT, startHeightRef.current + delta)
+        );
+        setBottomHeight(newHeight);
       }
     };
 
@@ -115,6 +160,13 @@ export function useSidebarResizer() {
           setRightWidth((w) => {
             localStorage.setItem(STORAGE_KEY_RIGHT_WIDTH, String(w));
             return w;
+          });
+        } catch {}
+      } else if (resizingSide === 'bottom') {
+        try {
+          setBottomHeight((h) => {
+            localStorage.setItem(STORAGE_KEY_BOTTOM_HEIGHT, String(h));
+            return h;
           });
         } catch {}
       }
@@ -137,11 +189,14 @@ export function useSidebarResizer() {
   return {
     leftWidth,
     rightWidth,
+    bottomHeight,
     resizingSide,
     startResizingLeft,
     startResizingRight,
+    startResizingBottom,
     resetLeftWidth,
     resetRightWidth,
+    resetBottomHeight,
   };
 }
 

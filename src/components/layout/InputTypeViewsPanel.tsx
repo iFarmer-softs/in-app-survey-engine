@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { MarkerType } from '@xyflow/react';
 import type { Node, Edge } from '@xyflow/react';
 import {
   Type,
@@ -32,6 +33,9 @@ import {
   Tag,
   ChevronDown,
   ChevronUp,
+  Network,
+  Database,
+  Link2,
 } from 'lucide-react';
 import type {
   AnswerType,
@@ -41,6 +45,7 @@ import type {
 } from '../../types/survey';
 import type { ReusableQuestionGroup } from '../../types/group';
 import type { GroupMeta } from '../../utils/schemaCompiler';
+import { resolveNodeGroupId } from '../../utils/flowValidator';
 
 interface InputTypeItem {
   type: AnswerType;
@@ -181,6 +186,8 @@ interface InputTypeViewsPanelProps {
     nameBn: string,
     options?: string
   ) => void;
+  onAddEdge?: (edge: Edge) => void;
+  onDeleteEdge?: (edgeId: string) => void;
 }
 
 export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
@@ -201,6 +208,8 @@ export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
   onDuplicateNode,
   onAddNestedQuestion,
   onAddQuestion,
+  onAddEdge,
+  onDeleteEdge,
 }) => {
   // Store active tab and track selection transitions during render
   const [tab, setTab] = useState<'widgets' | 'inspector'>(
@@ -209,6 +218,13 @@ export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
   const [prevSelectedId, setPrevSelectedId] = useState<string | null>(
     selectedNode?.id || selectedEdge?.id || null
   );
+
+  // Cross-Group Foreign Dependency Builder State (MySQL Workbench style)
+  const [isCrossGroupBuilderOpen, setIsCrossGroupBuilderOpen] = useState(false);
+  const [crossSourceGroupId, setCrossSourceGroupId] = useState<number | ''>('');
+  const [crossSourceQuestionId, setCrossSourceQuestionId] = useState<string>('');
+  const [crossValType, setCrossValType] = useState<ValidationType>('match');
+  const [crossTriggerValue, setCrossTriggerValue] = useState<string>('');
 
   const currentSelectedId = selectedNode?.id || selectedEdge?.id || null;
   if (currentSelectedId !== prevSelectedId) {
@@ -231,7 +247,7 @@ export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
     });
     event.dataTransfer.setData('application/reactflow-node', payload);
     event.dataTransfer.setData('text/plain', payload);
-    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.effectAllowed = 'copyMove';
   };
 
   const handleApplyAnswerType = (item: InputTypeItem) => {
@@ -273,7 +289,7 @@ export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
               {selectedNode
                 ? selectedNode.type === 'question'
                   ? 'Question Inspector'
-                  : selectedNode.type === 'groupContainer'
+                  : selectedNode.type === 'groupContainer' || selectedNode.type === 'groupFrame'
                   ? 'Question Group Inspector'
                   : selectedNode.type === 'decision'
                   ? 'Decision Inspector'
@@ -811,6 +827,393 @@ export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
                   }
                 />
               </div>
+
+              {/* Cross-Group Dependencies (MySQL Workbench ERD Style) */}
+              {(() => {
+                const currentGroupNum = groupMeta.groupNumber || 1;
+                const currentQuestionGroup = resolveNodeGroupId(
+                  selectedNode,
+                  nodes,
+                  currentGroupNum
+                );
+
+                // Find incoming cross-group edges targeting this question
+                const incomingCrossGroupEdges = edges.filter((e) => {
+                  if (e.target !== selectedNode.id) return false;
+                  const srcNode = nodes.find((n) => n.id === e.source);
+                  if (!srcNode || srcNode.type !== 'question') return false;
+                  const srcGroup = resolveNodeGroupId(srcNode, nodes, currentGroupNum);
+                  return srcGroup !== currentQuestionGroup;
+                });
+
+                // Compute available source groups (excluding the question's own group)
+                const groupMap = new Map<number, string>();
+                nodes.forEach((n) => {
+                  if (n.type === 'groupContainer' || n.type === 'groupFrame') {
+                    const gId =
+                      (n.data as any)?.numericGroupId || parseInt((n.data as any)?.groupId) || 1;
+                    const gTitle = (n.data as any)?.title || `Group ${gId}`;
+                    groupMap.set(gId, gTitle);
+                  }
+                });
+                groups.forEach((g) => {
+                  const gId = typeof g.groupId === 'number' ? g.groupId : parseInt(g.id, 10);
+                  if (!isNaN(gId)) {
+                    groupMap.set(gId, g.name);
+                  }
+                });
+                nodes.forEach((n) => {
+                  if (n.type === 'question') {
+                    const gId = resolveNodeGroupId(n, nodes, currentGroupNum);
+                    if (!groupMap.has(gId)) {
+                      groupMap.set(gId, (n.data as any)?.group_name || `Group ${gId}`);
+                    }
+                  }
+                });
+
+                const otherGroups = Array.from(groupMap.entries())
+                  .map(([id, title]) => ({ id, title }))
+                  .filter((g) => g.id !== currentQuestionGroup)
+                  .sort((a, b) => a.id - b.id);
+
+                // Available question nodes in the selected source group
+                const availableSourceQuestions = nodes.filter((n) => {
+                  if (n.type !== 'question') return false;
+                  const gId = resolveNodeGroupId(n, nodes, currentGroupNum);
+                  return crossSourceGroupId !== '' && gId === Number(crossSourceGroupId);
+                });
+
+                const selectedSourceQNode = nodes.find((n) => n.id === crossSourceQuestionId);
+                const sourceOptions = (selectedSourceQNode?.data as any)?.options
+                  ? String((selectedSourceQNode?.data as any)?.options)
+                      .split(',')
+                      .map((s) => s.trim())
+                      .filter(Boolean)
+                  : [];
+
+                const handleAddCrossDependency = () => {
+                  if (!selectedSourceQNode || !selectedNode) return;
+                  const srcGroup = resolveNodeGroupId(selectedSourceQNode, nodes, 1);
+                  const tgtGroup = currentQuestionGroup;
+                  const srcQData = selectedSourceQNode.data as unknown as QuestionNodeData;
+                  const targetData = selectedNode.data as unknown as QuestionNodeData;
+
+                  let sourceHandle: string | undefined = undefined;
+                  if (crossValType === 'match' && crossTriggerValue) {
+                    sourceHandle = `opt-${encodeURIComponent(crossTriggerValue.trim())}`;
+                  }
+
+                  const ruleDesc =
+                    crossValType === 'match'
+                      ? `IF "${crossTriggerValue}"`
+                      : `IF ${crossValType === 'greater' ? '>' : '<'} ${crossTriggerValue}`;
+                  const edgeLabel = `[G${srcGroup}➔G${tgtGroup}] ${ruleDesc}`;
+                  const newEdgeId = `e-cross-${selectedSourceQNode.id}-${selectedNode.id}-${Date.now()}`;
+
+                  const newEdge: Edge = {
+                    id: newEdgeId,
+                    source: selectedSourceQNode.id,
+                    sourceHandle,
+                    target: selectedNode.id,
+                    targetHandle: 'in',
+                    type: 'surveyEdge',
+                    animated: true,
+                    label: edgeLabel,
+                    style: {
+                      stroke: '#8b5cf6',
+                      strokeWidth: 2,
+                      strokeDasharray: '5 5',
+                    },
+                    markerEnd: {
+                      type: MarkerType.ArrowClosed,
+                      width: 16,
+                      height: 16,
+                      color: '#8b5cf6',
+                    },
+                    data: {
+                      validationType: crossValType,
+                      triggerValue: crossTriggerValue,
+                      isCrossGroup: true,
+                      sourceGroup: srcGroup,
+                      targetGroup: tgtGroup,
+                    },
+                  };
+
+                  if (onAddEdge) {
+                    onAddEdge(newEdge);
+                  }
+
+                  // Update target question to start hidden and update depends_on
+                  const currentDependsOn = Array.isArray(targetData.depends_on)
+                    ? [...targetData.depends_on]
+                    : [];
+                  if (srcQData.question_id && !currentDependsOn.includes(srcQData.question_id)) {
+                    currentDependsOn.push(srcQData.question_id);
+                  }
+
+                  onUpdateNodeData(selectedNode.id, {
+                    ...targetData,
+                    hidden: true,
+                    depends_on: currentDependsOn,
+                  });
+
+                  setIsCrossGroupBuilderOpen(false);
+                  setCrossTriggerValue('');
+                };
+
+                const handleRemoveCrossDependency = (edgeId: string, srcId: string) => {
+                  if (onDeleteEdge) {
+                    onDeleteEdge(edgeId);
+                  }
+                  const srcNode = nodes.find((n) => n.id === srcId);
+                  const parentQId = (srcNode?.data as any)?.question_id;
+                  const targetData = selectedNode.data as unknown as QuestionNodeData;
+                  const remainingEdgesFromParent = edges.filter(
+                    (e) => e.id !== edgeId && e.target === selectedNode.id && e.source === srcId
+                  );
+                  if (parentQId && remainingEdgesFromParent.length === 0) {
+                    const newDependsOn = Array.isArray(targetData.depends_on)
+                      ? targetData.depends_on.filter((id: number) => id !== parentQId)
+                      : [];
+                    onUpdateNodeData(selectedNode.id, {
+                      ...targetData,
+                      depends_on: newDependsOn.length > 0 ? newDependsOn : undefined,
+                    });
+                  }
+                };
+
+                return (
+                  <div className="cross-group-inspector-card">
+                    <div className="cross-group-header">
+                      <div className="cross-group-title-row">
+                        <Network size={14} />
+                        <span>Cross-Group Logic (Foreign Keys)</span>
+                      </div>
+                      <span className="cross-group-badge-count">
+                        {incomingCrossGroupEdges.length} Active
+                      </span>
+                    </div>
+
+                    <p className="cross-group-desc">
+                      Connect conditions from questions in other groups, just like table relationships in MySQL Workbench.
+                    </p>
+
+                    {/* Existing Cross-group rules targeting this question */}
+                    {incomingCrossGroupEdges.length > 0 ? (
+                      <div className="cross-group-items-list">
+                        {incomingCrossGroupEdges.map((cEdge) => {
+                          const srcNode = nodes.find((n) => n.id === cEdge.source);
+                          const srcData = srcNode?.data as any;
+                          const srcGroupId = resolveNodeGroupId(srcNode, nodes, 1);
+                          const edgeData = (cEdge.data as any) || {};
+                          const condText =
+                            edgeData.triggerValue !== undefined && edgeData.triggerValue !== ''
+                              ? `IF ${edgeData.validationType === 'greater' ? '>' : edgeData.validationType === 'less' ? '<' : '=='} "${edgeData.triggerValue}"`
+                              : cEdge.label || 'Cross-Group Dependency';
+
+                          return (
+                            <div key={cEdge.id} className="cross-group-item-card">
+                              <div className="cross-group-item-main">
+                                <div className="cross-group-origin-tag">
+                                  <Database size={10} />
+                                  <span>Group {srcGroupId}</span>
+                                  <span>•</span>
+                                  <span>Q#{srcData?.question_id || '?'}</span>
+                                </div>
+                                <div
+                                  className="cross-group-question-name bn-font"
+                                  title={srcData?.question_bn || srcData?.question}
+                                >
+                                  {srcData?.question_bn || srcData?.question || 'Source Question'}
+                                </div>
+                                <div className="cross-group-condition-tag">
+                                  <span>{condText}</span>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                className="icon-action-btn text-danger"
+                                onClick={() => handleRemoveCrossDependency(cEdge.id, cEdge.source)}
+                                title="Remove Cross-Group Link"
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div
+                        style={{
+                          fontSize: 11,
+                          color: 'var(--text-muted)',
+                          fontStyle: 'italic',
+                          padding: '4px 0',
+                        }}
+                      >
+                        No incoming cross-group conditions yet.
+                      </div>
+                    )}
+
+                    {/* Inline Foreign Key Builder */}
+                    {!isCrossGroupBuilderOpen ? (
+                      <button
+                        type="button"
+                        className="btn-add-cross-group"
+                        onClick={() => setIsCrossGroupBuilderOpen(true)}
+                      >
+                        <Plus size={13} />
+                        <span>Add Dependency from Another Group</span>
+                      </button>
+                    ) : (
+                      <div className="cross-group-form-builder">
+                        <div className="flex-between">
+                          <span
+                            style={{
+                              fontSize: 10,
+                              fontWeight: 700,
+                              color: '#c084fc',
+                              textTransform: 'uppercase',
+                            }}
+                          >
+                            New Cross-Group Rule
+                          </span>
+                          <button
+                            type="button"
+                            className="icon-action-btn"
+                            style={{ width: 20, height: 20 }}
+                            onClick={() => setIsCrossGroupBuilderOpen(false)}
+                          >
+                            <Trash2 size={11} />
+                          </button>
+                        </div>
+
+                        {/* Step 1: Source Group */}
+                        <div className="form-group">
+                          <label className="form-label" style={{ fontSize: 10 }}>
+                            1. Source Group (Table)
+                          </label>
+                          <select
+                            className="form-select"
+                            value={crossSourceGroupId}
+                            onChange={(e) => {
+                              const val = e.target.value === '' ? '' : Number(e.target.value);
+                              setCrossSourceGroupId(val);
+                              setCrossSourceQuestionId('');
+                              setCrossTriggerValue('');
+                            }}
+                          >
+                            <option value="">-- Select Source Group --</option>
+                            {otherGroups.map((g) => (
+                              <option key={g.id} value={g.id}>
+                                Group {g.id}: {g.title}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Step 2: Source Question */}
+                        {crossSourceGroupId !== '' && (
+                          <div className="form-group">
+                            <label className="form-label" style={{ fontSize: 10 }}>
+                              2. Source Question (Column)
+                            </label>
+                            <select
+                              className="form-select bn-font"
+                              value={crossSourceQuestionId}
+                              onChange={(e) => {
+                                setCrossSourceQuestionId(e.target.value);
+                                setCrossTriggerValue('');
+                              }}
+                            >
+                              <option value="">-- Select Question --</option>
+                              {availableSourceQuestions.map((q) => {
+                                const qData = q.data as any;
+                                return (
+                                  <option key={q.id} value={q.id}>
+                                    Q#{qData.question_id}: {qData.question_bn || qData.question}
+                                  </option>
+                                );
+                              })}
+                            </select>
+                          </div>
+                        )}
+
+                        {/* Step 3: Condition Type & Trigger Value */}
+                        {crossSourceQuestionId && (
+                          <>
+                            <div className="form-row-2">
+                              <div className="form-group flex-1">
+                                <label className="form-label" style={{ fontSize: 10 }}>
+                                  3. Condition
+                                </label>
+                                <select
+                                  className="form-select"
+                                  value={crossValType}
+                                  onChange={(e) =>
+                                    setCrossValType(e.target.value as ValidationType)
+                                  }
+                                >
+                                  <option value="match">Match (==)</option>
+                                  <option value="greater">Greater (&gt;)</option>
+                                  <option value="less">Less (&lt;)</option>
+                                </select>
+                              </div>
+
+                              <div className="form-group flex-1">
+                                <label className="form-label" style={{ fontSize: 10 }}>
+                                  4. Trigger Value
+                                </label>
+                                <input
+                                  type="text"
+                                  className="form-input bn-font"
+                                  placeholder="e.g. হ্যাঁ or 50"
+                                  value={crossTriggerValue}
+                                  onChange={(e) => setCrossTriggerValue(e.target.value)}
+                                />
+                              </div>
+                            </div>
+
+                            {/* Option Presets from Source Question */}
+                            {sourceOptions.length > 0 && (
+                              <div className="cross-group-quick-pills">
+                                <span style={{ fontSize: 9, color: 'var(--text-muted)' }}>
+                                  Source Options:
+                                </span>
+                                {sourceOptions.map((opt, i) => (
+                                  <span
+                                    key={i}
+                                    className={`cross-group-pill-opt ${
+                                      crossTriggerValue === opt ? 'is-selected' : ''
+                                    }`}
+                                    onClick={() => {
+                                      setCrossTriggerValue(opt);
+                                      setCrossValType('match');
+                                    }}
+                                  >
+                                    {opt}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+
+                            <button
+                              type="button"
+                              className="btn-add-cross-group"
+                              style={{ background: '#8b5cf6', color: '#fff', marginTop: 4 }}
+                              disabled={!crossTriggerValue}
+                              onClick={handleAddCrossDependency}
+                            >
+                              <Link2 size={13} />
+                              <span>Link Cross-Group Dependency</span>
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           )}
 
@@ -885,7 +1288,7 @@ export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
 
             // Available Canvas Group Containers
             const canvasGroups = nodes
-              .filter((n) => n.type === 'groupContainer')
+              .filter((n) => n.type === 'groupContainer' || n.type === 'groupFrame')
               .map((n) => {
                 const d = n.data as any;
                 const gId = Number(d.numericGroupId || 1);
@@ -1102,11 +1505,14 @@ export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
           })()}
 
           {/* If Question Group Container Selected */}
-          {selectedNode && selectedNode.type === 'groupContainer' && (() => {
+          {selectedNode && (selectedNode.type === 'groupContainer' || selectedNode.type === 'groupFrame') && (() => {
             const containerData = selectedNode.data as any;
             const childQuestionIds: string[] = containerData.questionIds || [];
             const childQuestions = nodes.filter(
-              (n) => n.type === 'question' && childQuestionIds.includes(n.id)
+              (n) =>
+                n.type !== 'groupContainer' &&
+                n.type !== 'groupFrame' &&
+                (childQuestionIds.includes(n.id) || (n.data as any)?.containerId === selectedNode.id)
             );
             const activeColor = containerData.color || '#0284c7';
 
@@ -1424,7 +1830,8 @@ export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
             selectedNode.type !== 'question' &&
             selectedNode.type !== 'decision' &&
             selectedNode.type !== 'groupJump' &&
-            selectedNode.type !== 'groupContainer' && (
+            selectedNode.type !== 'groupContainer' &&
+            selectedNode.type !== 'groupFrame' && (
               <div className="node-inspector-block">
                 <div className="flex-between">
                   <span className="badge-type">{selectedNode.type}</span>

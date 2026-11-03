@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import { addEdge, MarkerType } from '@xyflow/react';
 import type { Connection, Edge, Node } from '@xyflow/react';
 import type { WarningAlertData } from '../components/modals/WarningAlertModal';
-import { isBinaryRedundantBranch } from '../utils/flowValidator';
+import { isBinaryRedundantBranch, resolveNodeGroupId } from '../utils/flowValidator';
 
 interface UseFlowCanvasConnectionsProps {
   nodes: Node[];
@@ -85,20 +85,35 @@ export function useFlowCanvasConnections({
         }
       }
 
+      const sourceNode = nodes.find((n) => n.id === params.source);
+      const targetNode = nodes.find((n) => n.id === params.target);
+      const sourceGroup = resolveNodeGroupId(sourceNode, nodes, 1);
+      const targetGroup = resolveNodeGroupId(targetNode, nodes, 1);
+      const isCrossGroup =
+        sourceNode?.type !== 'groupJump' &&
+        targetNode?.type !== 'groupJump' &&
+        sourceGroup !== targetGroup;
+
       let edgeLabel: string | undefined = undefined;
-      let strokeColor = '#10b981';
+      let strokeColor = isCrossGroup ? '#8b5cf6' : '#10b981';
       let triggerVal = '';
 
       if (params.sourceHandle && params.sourceHandle.startsWith('opt-')) {
         triggerVal = decodeURIComponent(params.sourceHandle.replace('opt-', ''));
         edgeLabel = `IF "${triggerVal}"`;
-        strokeColor = '#f59e0b';
+        if (!isCrossGroup) strokeColor = '#f59e0b';
       } else if (params.sourceHandle === 'match') {
         edgeLabel = 'MATCH';
-        strokeColor = '#f59e0b';
+        if (!isCrossGroup) strokeColor = '#f59e0b';
       } else if (params.sourceHandle === 'else') {
         edgeLabel = 'ELSE';
-        strokeColor = '#ec4899';
+        if (!isCrossGroup) strokeColor = '#ec4899';
+      }
+
+      if (isCrossGroup) {
+        edgeLabel = edgeLabel
+          ? `[G${sourceGroup}➔G${targetGroup}] ${edgeLabel}`
+          : `Cross-Group: G${sourceGroup} ➔ G${targetGroup}`;
       }
 
       setEdges((eds) =>
@@ -111,7 +126,7 @@ export function useFlowCanvasConnections({
             style: {
               stroke: strokeColor,
               strokeWidth: 2,
-              strokeDasharray: strokeColor === '#f59e0b' ? '4 4' : undefined,
+              strokeDasharray: isCrossGroup || strokeColor === '#f59e0b' ? '5 5' : undefined,
             },
             markerEnd: {
               type: MarkerType.ArrowClosed,
@@ -123,6 +138,9 @@ export function useFlowCanvasConnections({
               validationType: 'match',
               triggerValue: triggerVal,
               routingType: edgeRouting,
+              isCrossGroup,
+              sourceGroup: isCrossGroup ? sourceGroup : undefined,
+              targetGroup: isCrossGroup ? targetGroup : undefined,
             },
           },
           eds

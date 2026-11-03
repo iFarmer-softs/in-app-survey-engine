@@ -67,7 +67,8 @@ export type FlowNodeType =
   | 'groupJump'
   | 'process'
   | 'document'
-  | 'groupContainer';
+  | 'groupContainer'
+  | 'groupFrame';
 
 export interface QuestionNodeData {
   question_id: number;
@@ -88,6 +89,8 @@ export interface QuestionNodeData {
   group?: number;
   group_name?: string;
   containerId?: string;
+  depends_on?: number[] | null;
+  validation?: any;
 }
 
 export interface DecisionNodeData {

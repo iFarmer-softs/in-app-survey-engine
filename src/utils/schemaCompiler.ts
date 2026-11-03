@@ -8,6 +8,7 @@ import type {
   GroupJumpNodeData,
   ValidationConfig,
 } from '../types/survey';
+import { resolveNodeGroupId } from './flowValidator';
 
 export interface GroupMeta {
   groupNumber: number;
@@ -28,18 +29,16 @@ export function compileFlowToSchema(
   const questionNodes = nodes.filter((n) => n.type === 'question');
   const jumpNodes = nodes.filter((n) => n.type === 'groupJump');
 
-  const containerMap = new Map<string, any>();
-  for (const n of nodes) {
-    if (n.type === 'groupContainer') {
-      containerMap.set(n.id, n.data);
+  const getNodeGroup = (node?: Node, nodeData?: any): number => {
+    if (node) {
+      return resolveNodeGroupId(node, nodes, meta.groupNumber);
     }
-  }
-
-  const getNodeGroup = (nodeData: any): number => {
-    if (nodeData?.group) return Number(nodeData.group);
-    if (nodeData?.containerId && containerMap.has(nodeData.containerId)) {
-      const cData = containerMap.get(nodeData.containerId);
-      if (cData?.numericGroupId) return Number(cData.numericGroupId);
+    if (nodeData?.containerId) {
+      const container = nodes.find((n) => n.id === nodeData.containerId);
+      if (container) return resolveNodeGroupId(container, nodes, meta.groupNumber);
+    }
+    if (typeof nodeData?.group === 'number' && !isNaN(nodeData.group) && nodeData.group > 0) {
+      return nodeData.group;
     }
     return meta.groupNumber;
   };
@@ -88,8 +87,8 @@ export function compileFlowToSchema(
           }
 
           const parentKey = String(parentId);
-          const parentGroup = getNodeGroup(parentData);
-          const currentGroup = getNodeGroup(data);
+          const parentGroup = getNodeGroup(sourceNode, parentData);
+          const currentGroup = getNodeGroup(qNode, data);
           const isSameGroup = parentGroup === currentGroup;
 
           if (optFromHandle) {
@@ -180,8 +179,8 @@ export function compileFlowToSchema(
               dependsOn.push(parentId);
             }
 
-            const parentGroup = getNodeGroup(parentData);
-            const currentGroup = getNodeGroup(data);
+            const parentGroup = getNodeGroup(parentQuestionNode, parentData);
+            const currentGroup = getNodeGroup(qNode, data);
             if (decData.conditionType === 'match') {
               const matches: Record<string, boolean> = {};
               matches[String(decData.comparisonValue)] = true;
@@ -212,7 +211,7 @@ export function compileFlowToSchema(
       answer_type: data.answer_type || 'string',
       placeholder: data.placeholder ?? null,
       options: data.options || undefined,
-      group: getNodeGroup(rawAny),
+      group: getNodeGroup(qNode, rawAny),
       group_display_order:
         rawAny.group_display_order ??
         (sortedQuestionNodes.indexOf(qNode) + 1) * 2 - 1,
@@ -567,6 +566,14 @@ export function parseSchemaToFlow(schema: DynamicKycGroupResponse | any[] | any)
           }
         }
 
+        const ruleObj: any = item.validation ? item.validation[parentKey] : null;
+        const parentItem = rawQuestions.find((q) => String(q.question_id) === parentKey);
+        const isCrossGroupRule = Boolean(
+          ruleObj && (ruleObj.is_same_group === false || (ruleObj.group && item.group && ruleObj.group !== item.group))
+        );
+        const sourceGroupNum = ruleObj?.group ?? (parentItem ? parentItem.group : undefined);
+        const targetGroupNum = item.group;
+
         triggerVals.forEach((triggerVal) => {
           let ruleLabel = 'Depends On';
           if (valType === 'match') {
@@ -577,10 +584,16 @@ export function parseSchemaToFlow(schema: DynamicKycGroupResponse | any[] | any)
             ruleLabel = `IF < ${triggerVal}`;
           }
 
+          if (isCrossGroupRule) {
+            ruleLabel = `[G${sourceGroupNum ?? '?'}➔G${targetGroupNum ?? '?'}] ${ruleLabel}`;
+          }
+
           let sourceHandle: string | undefined = undefined;
           if (valType === 'match' && triggerVal) {
             sourceHandle = `opt-${encodeURIComponent(triggerVal.trim())}`;
           }
+
+          const strokeColor = isCrossGroupRule ? '#8b5cf6' : '#f59e0b';
 
           edges.push({
             id: `e-dep-${parentKey}-${qId}-${index}-${Math.random().toString(36).slice(2, 7)}`,
@@ -590,16 +603,19 @@ export function parseSchemaToFlow(schema: DynamicKycGroupResponse | any[] | any)
             type: 'surveyEdge',
             label: ruleLabel,
             animated: true,
-            style: { stroke: '#f59e0b', strokeWidth: 2, strokeDasharray: '4 4' },
+            style: { stroke: strokeColor, strokeWidth: 2, strokeDasharray: '5 5' },
             markerEnd: {
               type: MarkerType.ArrowClosed,
               width: 16,
               height: 16,
-              color: '#f59e0b',
+              color: strokeColor,
             },
             data: {
               validationType: valType,
               triggerValue: triggerVal,
+              isCrossGroup: isCrossGroupRule,
+              sourceGroup: sourceGroupNum,
+              targetGroup: targetGroupNum,
             },
           });
         });

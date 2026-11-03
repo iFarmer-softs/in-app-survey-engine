@@ -220,7 +220,7 @@ export const LeftSidebar: React.FC = () => {
         nameBn,
       })
     );
-    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.effectAllowed = 'copyMove';
   };
 
   const filteredItems = PALETTE_ITEMS.filter((item) => {

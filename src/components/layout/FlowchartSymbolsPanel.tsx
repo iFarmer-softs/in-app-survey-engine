@@ -59,6 +59,21 @@ const FLOWCHART_SYMBOLS: FlowchartSymbol[] = [
     ),
   },
   {
+    id: 'symbol-group-frame',
+    name: 'Group Area Frame',
+    nameBn: 'গ্রুপ বাউন্ডারি ফ্রেম (এরিয়া)',
+    standardSymbol: 'Frame (Bounding Box)',
+    nodeType: 'groupFrame',
+    color: '#8b5cf6',
+    description: 'Resizable area to drop & bundle question symbols together',
+    svgShape: (
+      <svg viewBox="0 0 44 26" className="symbol-svg" fill="none">
+        <rect x="2" y="2" width="40" height="22" rx="4" stroke="currentColor" strokeWidth="1.8" strokeDasharray="3 2" fill="currentColor" fillOpacity="0.12" />
+        <rect x="5" y="5" width="16" height="5" rx="2" fill="currentColor" fillOpacity="0.4" />
+      </svg>
+    ),
+  },
+  {
     id: 'symbol-decision',
     name: 'Decision / Branch',
     nameBn: 'শর্ত / লজিক্যাল শাখা (হীরক/ডায়মন্ড)',
@@ -176,7 +191,7 @@ export const FlowchartSymbolsPanel: React.FC<FlowchartSymbolsPanelProps> = ({
     });
     event.dataTransfer.setData('application/reactflow-node', payload);
     event.dataTransfer.setData('text/plain', payload);
-    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.effectAllowed = 'copyMove';
   };
 
   const onDragStartGroup = (
@@ -186,7 +201,7 @@ export const FlowchartSymbolsPanel: React.FC<FlowchartSymbolsPanelProps> = ({
     const payload = JSON.stringify(group);
     event.dataTransfer.setData('application/reactflow-question-group', payload);
     event.dataTransfer.setData('text/plain', payload);
-    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.effectAllowed = 'copyMove';
   };
 
   const filteredSymbols = useMemo(() => {

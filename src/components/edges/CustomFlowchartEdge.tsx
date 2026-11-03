@@ -8,7 +8,8 @@ import {
   useReactFlow,
 } from '@xyflow/react';
 import type { EdgeProps } from '@xyflow/react';
-import { X, GitBranch } from 'lucide-react';
+import { X, GitBranch, Network } from 'lucide-react';
+import { resolveNodeGroupId } from '../../utils/flowValidator';
 
 export interface CustomEdgeData {
   validationType?: 'match' | 'greater' | 'less';
@@ -16,10 +17,15 @@ export interface CustomEdgeData {
   routingType?: 'smoothstep' | 'bezier' | 'straight';
   label?: string;
   isError?: boolean;
+  isCrossGroup?: boolean;
+  sourceGroup?: number;
+  targetGroup?: number;
 }
 
 export const CustomFlowchartEdge: React.FC<EdgeProps> = ({
   id,
+  source,
+  target,
   sourceX,
   sourceY,
   targetX,
@@ -33,8 +39,29 @@ export const CustomFlowchartEdge: React.FC<EdgeProps> = ({
   label,
   sourceHandleId,
 }) => {
-  const { setEdges } = useReactFlow();
+  const { setEdges, getNode, getNodes } = useReactFlow();
   const edgeData = (data as CustomEdgeData) || {};
+
+  // Dynamically resolve source and target node groups to ensure 100% accurate live cross-group detection
+  const allNodes = getNodes();
+  const sourceNode = source ? getNode(source) : undefined;
+  const targetNode = target ? getNode(target) : undefined;
+
+  const dynamicSourceGroup = sourceNode ? resolveNodeGroupId(sourceNode, allNodes) : edgeData.sourceGroup;
+  const dynamicTargetGroup = targetNode ? resolveNodeGroupId(targetNode, allNodes) : edgeData.targetGroup;
+
+  const isCrossGroup =
+    Boolean(edgeData.isCrossGroup) ||
+    Boolean(
+      sourceNode &&
+      targetNode &&
+      sourceNode.type !== 'groupJump' &&
+      targetNode.type !== 'groupJump' &&
+      dynamicSourceGroup !== dynamicTargetGroup
+    );
+
+  const effectiveSourceGroup = edgeData.sourceGroup ?? dynamicSourceGroup;
+  const effectiveTargetGroup = edgeData.targetGroup ?? dynamicTargetGroup;
 
   // Determine routing geometry
   const routing = edgeData.routingType || 'smoothstep';
@@ -99,6 +126,8 @@ export const CustomFlowchartEdge: React.FC<EdgeProps> = ({
   let strokeColor = '#3b82f6'; // default blue
   if (edgeData.isError) {
     strokeColor = '#ef4444';
+  } else if (isCrossGroup) {
+    strokeColor = '#8b5cf6'; // vibrant purple for cross-group foreign dependency
   } else if (isConditional || isDecisionMatch) {
     strokeColor = '#f59e0b'; // amber
   } else if (isDecisionElse) {
@@ -111,7 +140,7 @@ export const CustomFlowchartEdge: React.FC<EdgeProps> = ({
     ...style,
     stroke: strokeColor,
     strokeWidth: selected ? 2.5 : style.strokeWidth || 2,
-    strokeDasharray: isConditional || isDecisionElse ? '5 5' : style.strokeDasharray,
+    strokeDasharray: isCrossGroup || isConditional || isDecisionElse ? '5 5' : style.strokeDasharray,
     transition: 'stroke 0.2s, stroke-width 0.2s',
   };
 
@@ -138,10 +167,31 @@ export const CustomFlowchartEdge: React.FC<EdgeProps> = ({
             pointerEvents: 'all',
           }}
           className={`custom-edge-badge-container ${selected ? 'is-selected' : ''} ${
-            isConditional ? 'is-conditional' : ''
+            isCrossGroup ? 'is-cross-group' : isConditional ? 'is-conditional' : ''
           }`}
         >
-          {isConditional ? (
+          {isCrossGroup ? (
+            <div
+              className={`custom-edge-pill pill-cross-group ${edgeData.isError ? 'pill-error' : ''}`}
+              title={`Cross-Group Dependency: Group ${effectiveSourceGroup ?? '?'} ➔ Group ${effectiveTargetGroup ?? '?'}`}
+            >
+              <Network size={11} className="edge-pill-icon" />
+              {effectiveSourceGroup !== undefined && effectiveTargetGroup !== undefined && (
+                <span className="edge-cross-group-badge">
+                  G{effectiveSourceGroup}➔G{effectiveTargetGroup}
+                </span>
+              )}
+              <span className="edge-pill-text">{conditionText || 'Cross-Group'}</span>
+              <button
+                type="button"
+                className="edge-delete-btn"
+                onClick={handleDelete}
+                title="Delete Cross-Group Connection"
+              >
+                <X size={10} />
+              </button>
+            </div>
+          ) : isConditional ? (
             <div
               className={`custom-edge-pill ${
                 edgeData.isError ? 'pill-error' : isDecisionElse ? 'pill-else' : 'pill-condition'

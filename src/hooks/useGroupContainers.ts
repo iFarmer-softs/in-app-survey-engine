@@ -33,7 +33,7 @@ export function useGroupContainers({
       changes.forEach((change) => {
         if (change.type === 'position' && change.position) {
           const node = nodes.find((n) => n.id === change.id);
-          if (node && node.type === 'groupContainer') {
+          if (node && (node.type === 'groupContainer' || node.type === 'groupFrame')) {
             const childIds: string[] =
               (node.data as any)?.questionIds ||
               nodes
@@ -329,6 +329,102 @@ export function useGroupContainers({
       const lastNode = nodes[nodes.length - 1];
       const startX = targetPos ? targetPos.x : (lastNode ? lastNode.position.x : 350);
       const startY = targetPos ? targetPos.y : (lastNode ? lastNode.position.y + 180 : 150);
+
+      // If group has a full flowchart node graph (decisions, processes, start/end, documents, groupFrames, edges)
+      if (group.flowNodes && group.flowNodes.length > 0) {
+        const minX = Math.min(...group.flowNodes.map((n: Node) => n.position.x));
+        const minY = Math.min(...group.flowNodes.map((n: Node) => n.position.y));
+        const offsetX = startX - minX;
+        const offsetY = startY - minY;
+
+        let nextQId = currentHighestId + 1;
+        const idMap = new Map<string, string>();
+
+        group.flowNodes.forEach((wn: Node) => {
+          if (wn.type === 'question') {
+            const newQId = nextQId++;
+            idMap.set(wn.id, `q-${newQId}`);
+          } else if (wn.type === 'groupFrame' || wn.type === 'groupContainer') {
+            idMap.set(
+              wn.id,
+              `grp-frame-${Date.now().toString().slice(-4)}-${Math.random().toString(36).slice(2, 5)}`
+            );
+          } else {
+            idMap.set(
+              wn.id,
+              `${wn.type}-${Date.now().toString().slice(-4)}-${Math.random().toString(36).slice(2, 5)}`
+            );
+          }
+        });
+
+        const deployedNodes: Node[] = group.flowNodes.map((wn: Node) => {
+          const newId = idMap.get(wn.id) || wn.id;
+          const newContainerId = (wn.data as any)?.containerId
+            ? idMap.get((wn.data as any).containerId) || (wn.data as any).containerId
+            : undefined;
+
+          let qId: number | undefined;
+          if (wn.type === 'question') {
+            const mappedStr = newId.replace('q-', '');
+            qId = parseInt(mappedStr, 10);
+          }
+
+          let updatedQuestionIds: string[] | undefined;
+          if (Array.isArray((wn.data as any)?.questionIds)) {
+            updatedQuestionIds = (wn.data as any).questionIds.map(
+              (oldId: string) => idMap.get(oldId) || oldId
+            );
+          }
+
+          return {
+            ...wn,
+            id: newId,
+            position: {
+              x: Math.round(wn.position.x + offsetX),
+              y: Math.round(wn.position.y + offsetY),
+            },
+            selected: wn.type === 'groupFrame' || wn.type === 'groupContainer',
+            data: {
+              ...wn.data,
+              ...(newContainerId ? { containerId: newContainerId } : {}),
+              ...(qId ? { question_id: qId } : {}),
+              ...(updatedQuestionIds
+                ? { questionIds: updatedQuestionIds, questionCount: updatedQuestionIds.length }
+                : {}),
+            },
+          };
+        });
+
+        const deployedEdges: Edge[] = (group.flowEdges || []).map((we: Edge) => {
+          const newSource = idMap.get(we.source) || we.source;
+          const newTarget = idMap.get(we.target) || we.target;
+          return {
+            ...we,
+            id: `edge-${newSource}-${newTarget}-${Date.now().toString().slice(-4)}`,
+            source: newSource,
+            target: newTarget,
+            data: { ...we.data },
+          };
+        });
+
+        setNodes((nds) => nds.concat(deployedNodes));
+        setEdges((eds) => eds.concat(deployedEdges));
+
+        const focusNode =
+          deployedNodes.find((n) => n.type === 'groupFrame' || n.type === 'groupContainer') ||
+          deployedNodes[0];
+        if (focusNode) {
+          setSelectedNodeId(focusNode.id);
+          setActiveView('editor');
+          setTimeout(() => {
+            setCenter(focusNode.position.x + 220, focusNode.position.y + 200, {
+              zoom: 0.85,
+              duration: 500,
+            });
+          }, 100);
+        }
+        return;
+      }
 
       const containerId = `grp-container-${Date.now().toString().slice(-5)}`;
       const questionNodeIds: string[] = [];

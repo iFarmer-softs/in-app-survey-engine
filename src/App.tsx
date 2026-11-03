@@ -13,13 +13,14 @@ import {
 } from '@xyflow/react';
 import type { Edge, Node } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { Layers, Sparkles, PanelLeftOpen, PanelRightOpen } from 'lucide-react';
+import { Layers, Sparkles, PanelLeftOpen, PanelRightOpen, Crop } from 'lucide-react';
 
 import { Header } from './components/layout/Header';
 import { GroupTemplateHeader } from './components/layout/GroupTemplateHeader';
 import { AdminLeftSidebar } from './components/layout/AdminLeftSidebar';
 import { FlowchartSymbolsPanel } from './components/layout/FlowchartSymbolsPanel';
 import { InputTypeViewsPanel } from './components/layout/InputTypeViewsPanel';
+import { GroupWorkshopCanvas, type WorkshopBridge } from './components/canvas/GroupWorkshopCanvas';
 import { FlowchartListView } from './components/dashboard/FlowchartListView';
 import { QuestionGroupListView } from './components/groups/QuestionGroupListView';
 import { CreateFlowchartModal } from './components/modals/CreateFlowchartModal';
@@ -34,6 +35,7 @@ import { CustomFlowchartEdge } from './components/edges/CustomFlowchartEdge';
 import { QuestionNode } from './components/nodes/QuestionNode';
 import { DecisionNode } from './components/nodes/DecisionNode';
 import { GroupContainerNode } from './components/nodes/GroupContainerNode';
+import { GroupFrameNode } from './components/nodes/GroupFrameNode';
 import {
   GroupJumpNode,
   StartNode,
@@ -77,6 +79,7 @@ const baseNodeTypes = {
   process: ProcessNode,
   document: DocumentNode,
   groupContainer: GroupContainerNode,
+  groupFrame: GroupFrameNode,
 };
 
 const edgeTypes = {
@@ -97,6 +100,14 @@ const FlowEditor: React.FC = () => {
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+
+  // Workshop Selection & Bridge State
+  const [selectedSource, setSelectedSource] = useState<'main' | 'workshop'>('main');
+  const [workshopSelectedNodeId, setWorkshopSelectedNodeId] = useState<string | null>(null);
+  const [workshopSelectedEdgeId, setWorkshopSelectedEdgeId] = useState<string | null>(null);
+  const [workshopNodes, setWorkshopNodes] = useState<Node[]>([]);
+  const [workshopEdges, setWorkshopEdges] = useState<Edge[]>([]);
+  const workshopBridgeRef = useRef<WorkshopBridge | null>(null);
 
   // Sidebar expand / collapse states with persistent localStorage
   const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState<boolean>(() => {
@@ -137,16 +148,28 @@ const FlowEditor: React.FC = () => {
     });
   }, []);
 
-  // Draggable sidebar resizer hook (Antigravity Style)
+  // Draggable sidebar & bottom dock resizer hook (Antigravity Style)
   const {
     leftWidth,
     rightWidth,
+    bottomHeight,
     resizingSide,
     startResizingLeft,
     startResizingRight,
+    startResizingBottom,
     resetLeftWidth,
     resetRightWidth,
+    resetBottomHeight,
   } = useSidebarResizer();
+
+  const [isBottomDockOpen, setIsBottomDockOpen] = useState(true);
+  const toggleBottomDock = useCallback(() => {
+    setIsBottomDockOpen((prev) => {
+      const next = !prev;
+      setTimeout(() => window.dispatchEvent(new Event('resize')), 250);
+      return next;
+    });
+  }, []);
 
   // Dark / Light / System Theme hook
   const { theme, resolvedTheme, setTheme, cycleTheme } = useTheme();
@@ -362,32 +385,155 @@ const FlowEditor: React.FC = () => {
     [saveSelectionAsGroupAction, selectedQuestionTemplates]
   );
 
-  // Selected entities
-  const selectedNode = useMemo(
-    () => nodes.find((n) => n.id === selectedNodeId) || null,
-    [nodes, selectedNodeId]
-  );
-  const selectedEdge = useMemo(
-    () => edges.find((e) => e.id === selectedEdgeId) || null,
-    [edges, selectedEdgeId]
-  );
+  // Instant Wrap Selection in Group Frame directly on canvas (Marquee & Cmd/Ctrl+G)
+  const handleWrapSelectionInFrame = useCallback(() => {
+    if (selectedQuestionNodes.length === 0) return;
 
-  // Selection handlers: auto-open right inspector when an item is selected
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+
+    selectedQuestionNodes.forEach((n) => {
+      const w = n.measured?.width || 270;
+      const h = n.measured?.height || 200;
+      minX = Math.min(minX, n.position.x);
+      minY = Math.min(minY, n.position.y);
+      maxX = Math.max(maxX, n.position.x + w);
+      maxY = Math.max(maxY, n.position.y + h);
+    });
+
+    const padding = 35;
+    const frameX = minX - padding;
+    const frameY = minY - 55;
+    const frameW = Math.max(340, maxX - minX + padding * 2);
+    const frameH = Math.max(220, maxY - minY + 55 + padding);
+
+    const nextGrpId = groupMeta.groupNumber + 1;
+    const newFrameId = `grp-frame-${Date.now().toString().slice(-4)}`;
+
+    const newFrame: Node = {
+      id: newFrameId,
+      type: 'groupFrame',
+      position: { x: Math.round(frameX), y: Math.round(frameY) },
+      style: { width: Math.round(frameW), height: Math.round(frameH) },
+      zIndex: 0,
+      selected: true,
+      data: {
+        groupId: newFrameId,
+        numericGroupId: nextGrpId,
+        title: `Group Area ${nextGrpId}`,
+        titleBn: `গ্রুপ এলাকা ${nextGrpId}`,
+        category: 'custom',
+        color: '#8b5cf6',
+        questionIds: selectedQuestionNodes.map((n) => n.id),
+        questionCount: selectedQuestionNodes.length,
+      },
+    };
+
+    setNodes((nds) => {
+      const updated = nds.map((n) => {
+        if (selectedQuestionNodes.some((s) => s.id === n.id)) {
+          return {
+            ...n,
+            selected: false,
+            data: {
+              ...n.data,
+              containerId: newFrameId,
+              group: nextGrpId,
+            },
+          };
+        }
+        return n;
+      });
+      return [newFrame, ...updated];
+    });
+
+    setSelectedNodeId(newFrameId);
+  }, [selectedQuestionNodes, groupMeta.groupNumber, setNodes]);
+
+  // Global hotkey: Cmd/Ctrl + G to wrap selected questions into a Group Frame
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'g') {
+        e.preventDefault();
+        handleWrapSelectionInFrame();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleWrapSelectionInFrame]);
+
+  // Selected entities across Main Flowchart and Group Workshop canvases
+  const activeSelectedNode = useMemo(() => {
+    if (selectedSource === 'workshop') {
+      return workshopNodes.find((n) => n.id === workshopSelectedNodeId) || null;
+    }
+    return nodes.find((n) => n.id === selectedNodeId) || null;
+  }, [selectedSource, workshopNodes, workshopSelectedNodeId, nodes, selectedNodeId]);
+
+  const activeSelectedEdge = useMemo(() => {
+    if (selectedSource === 'workshop') {
+      return workshopEdges.find((e) => e.id === workshopSelectedEdgeId) || null;
+    }
+    return edges.find((e) => e.id === selectedEdgeId) || null;
+  }, [selectedSource, workshopEdges, workshopSelectedEdgeId, edges, selectedEdgeId]);
+
+  const activeNodes = selectedSource === 'workshop' ? workshopNodes : nodes;
+  const activeEdges = selectedSource === 'workshop' ? workshopEdges : edges;
+
+  // Selection handlers: auto-open right inspector when an item is selected on Main Canvas
   const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
+    setSelectedSource('main');
     setSelectedNodeId(node.id);
     setSelectedEdgeId(null);
+    setWorkshopSelectedNodeId(null);
+    setWorkshopSelectedEdgeId(null);
     setIsRightSidebarOpen(true);
   }, []);
 
   const onEdgeClick = useCallback((_: React.MouseEvent, edge: Edge) => {
+    setSelectedSource('main');
     setSelectedEdgeId(edge.id);
     setSelectedNodeId(null);
+    setWorkshopSelectedNodeId(null);
+    setWorkshopSelectedEdgeId(null);
     setIsRightSidebarOpen(true);
   }, []);
 
   const onPaneClick = useCallback(() => {
     setSelectedNodeId(null);
     setSelectedEdgeId(null);
+  }, []);
+
+  // Selection handlers: auto-open right inspector when an item is selected on Group Workshop Canvas
+  const handleWorkshopSelectNode = useCallback((node: Node | null) => {
+    if (node) {
+      setSelectedSource('workshop');
+      setWorkshopSelectedNodeId(node.id);
+      setWorkshopSelectedEdgeId(null);
+      setSelectedNodeId(null);
+      setSelectedEdgeId(null);
+      setIsRightSidebarOpen(true);
+    } else {
+      setWorkshopSelectedNodeId(null);
+    }
+  }, []);
+
+  const handleWorkshopSelectEdge = useCallback((edge: Edge | null) => {
+    if (edge) {
+      setSelectedSource('workshop');
+      setWorkshopSelectedEdgeId(edge.id);
+      setWorkshopSelectedNodeId(null);
+      setSelectedNodeId(null);
+      setSelectedEdgeId(null);
+      setIsRightSidebarOpen(true);
+    } else {
+      setWorkshopSelectedEdgeId(null);
+    }
   }, []);
 
   // Drag-and-drop drop handler
@@ -474,9 +620,54 @@ const FlowEditor: React.FC = () => {
 
       let nodeData: any = {};
 
+      // Check if dropped inside an existing group container or frame on the main canvas
+      const targetContainer = nodes.find((n) => {
+        if (n.type !== 'groupContainer' && n.type !== 'groupFrame') return false;
+        let width = 350;
+        let height = 400;
+        if (n.type === 'groupContainer') {
+          width = 350;
+          height =
+            (n.data as any)?.expandedHeight ||
+            Math.max(220, ((n.data as any)?.questionCount || (n.data as any)?.questionIds?.length || 0) * 230 + 100);
+        } else if (n.type === 'groupFrame') {
+          if (typeof n.width === 'number' && !isNaN(n.width) && n.width > 0) {
+            width = n.width;
+          } else if (n.measured?.width && n.measured.width > 0) {
+            width = n.measured.width;
+          } else if (n.style?.width) {
+            const parsed = parseInt(String(n.style.width), 10);
+            if (!isNaN(parsed) && parsed > 0) width = parsed;
+          } else {
+            width = 440;
+          }
+
+          if (typeof n.height === 'number' && !isNaN(n.height) && n.height > 0) {
+            height = n.height;
+          } else if (n.measured?.height && n.measured.height > 0) {
+            height = n.measured.height;
+          } else if (n.style?.height) {
+            const parsed = parseInt(String(n.style.height), 10);
+            if (!isNaN(parsed) && parsed > 0) height = parsed;
+          } else {
+            height = 480;
+          }
+        }
+        return (
+          position.x >= n.position.x &&
+          position.x <= n.position.x + width &&
+          position.y >= n.position.y &&
+          position.y <= n.position.y + height
+        );
+      });
+
       if (nodeType === 'question') {
+        const cData = targetContainer?.data as any;
         nodeData = {
           question_id: newQId,
+          group: cData ? cData.numericGroupId || parseInt(cData.groupId) || groupMeta.groupNumber : groupMeta.groupNumber,
+          containerId: targetContainer ? targetContainer.id : undefined,
+          customColor: cData?.color,
           question: name || 'New Question',
           question_bn: nameBn || name || 'নতুন প্রশ্ন',
           answer_type: answerType || 'string',
@@ -485,6 +676,18 @@ const FlowEditor: React.FC = () => {
           placeholder: '',
           hint: '',
           options: options || '',
+        };
+      } else if (nodeType === 'groupFrame') {
+        const nextGrpId = groupMeta.groupNumber + 1;
+        nodeData = {
+          groupId: `grp-frame-${Date.now().toString().slice(-4)}`,
+          numericGroupId: nextGrpId,
+          title: name || `Group Area ${nextGrpId}`,
+          titleBn: nameBn || `গ্রুপ এলাকা ${nextGrpId}`,
+          category: 'custom',
+          color: '#8b5cf6',
+          questionIds: [],
+          questionCount: 0,
         };
       } else if (nodeType === 'decision') {
         nodeData = {
@@ -503,14 +706,52 @@ const FlowEditor: React.FC = () => {
         };
       }
 
+      // If dropped inside a container or frame, place it cleanly inside
+      let nodePos = position;
+      if (targetContainer && nodeType === 'question') {
+        const existingChildIds = (targetContainer.data as any)?.questionIds || [];
+        const xOffset = targetContainer.type === 'groupFrame' ? 85 : 35;
+        nodePos = {
+          x: targetContainer.position.x + xOffset,
+          y: targetContainer.position.y + 60 + existingChildIds.length * 200,
+        };
+      }
+
       const newNode: Node = {
         id: newNodeId,
         type: nodeType,
-        position,
+        position: nodePos,
+        zIndex: nodeType === 'groupFrame' || nodeType === 'groupContainer' ? 0 : 10,
+        style: nodeType === 'groupFrame' ? { width: 440, height: 480 } : undefined,
         data: nodeData,
       };
 
-      setNodes((nds) => nds.concat(newNode));
+      setNodes((nds) => {
+        const nextNodes = nds.concat(newNode);
+        if (targetContainer && nodeType === 'question') {
+          return nextNodes.map((n) => {
+            if (n.id === targetContainer.id) {
+              const prevIds = (n.data as any).questionIds || [];
+              const updatedIds = [...prevIds, newNodeId];
+              const newCount = updatedIds.length;
+              const currentHeight = (n.style?.height ? parseInt(String(n.style.height), 10) : 0) || 220;
+              const neededHeight = Math.max(currentHeight, newCount * 220 + 120);
+              return {
+                ...n,
+                style: n.type === 'groupFrame' ? { ...n.style, height: neededHeight } : n.style,
+                data: {
+                  ...n.data,
+                  questionIds: updatedIds,
+                  questionCount: newCount,
+                  expandedHeight: neededHeight,
+                },
+              };
+            }
+            return n;
+          });
+        }
+        return nextNodes;
+      });
       setSelectedNodeId(newNodeId);
     },
     [nodes, screenToFlowPosition, setNodes, groupMeta.groupNumber, handleInsertGroupIntoCanvas]
@@ -549,6 +790,18 @@ const FlowEditor: React.FC = () => {
           hint: '',
           options: '',
         };
+      } else if (nodeType === 'groupFrame') {
+        const nextGrpId = groupMeta.groupNumber + 1;
+        nodeData = {
+          groupId: `grp-frame-${Date.now().toString().slice(-4)}`,
+          numericGroupId: nextGrpId,
+          title: name || `Group Area ${nextGrpId}`,
+          titleBn: nameBn || `গ্রুপ এলাকা ${nextGrpId}`,
+          category: 'custom',
+          color: '#8b5cf6',
+          questionIds: [],
+          questionCount: 0,
+        };
       } else if (nodeType === 'decision') {
         nodeData = {
           label: 'Condition Check',
@@ -570,6 +823,8 @@ const FlowEditor: React.FC = () => {
         id: newNodeId,
         type: nodeType,
         position: { x: posX, y: posY },
+        zIndex: nodeType === 'groupFrame' || nodeType === 'groupContainer' ? 0 : 10,
+        style: nodeType === 'groupFrame' ? { width: 440, height: 480 } : undefined,
         data: nodeData,
       };
 
@@ -669,6 +924,22 @@ const FlowEditor: React.FC = () => {
     [setEdges]
   );
 
+  // Add Edge
+  const handleAddEdge = useCallback(
+    (newEdge: Edge) => {
+      setEdges((eds) => [...eds, newEdge]);
+    },
+    [setEdges]
+  );
+
+  // Delete Edge
+  const handleDeleteEdge = useCallback(
+    (edgeId: string) => {
+      setEdges((eds) => eds.filter((e) => e.id !== edgeId));
+    },
+    [setEdges]
+  );
+
   // Update Group Meta
   const handleUpdateGroupMeta = useCallback(
     (newMeta: Partial<GroupMeta>) => {
@@ -733,6 +1004,67 @@ const FlowEditor: React.FC = () => {
       setSelectedNodeId(newNodeId);
     },
     [nodes, setNodes]
+  );
+
+  // Active mutation dispatchers that automatically route to either Main Canvas or Group Workshop Canvas
+  const activeUpdateNodeData = useCallback(
+    (nodeId: string, newData: any) => {
+      if (selectedSource === 'workshop') {
+        workshopBridgeRef.current?.updateNodeData(nodeId, newData);
+      } else {
+        handleUpdateNodeData(nodeId, newData);
+      }
+    },
+    [selectedSource, handleUpdateNodeData]
+  );
+
+  const activeDeleteNode = useCallback(
+    (nodeId: string) => {
+      if (selectedSource === 'workshop') {
+        workshopBridgeRef.current?.deleteNode(nodeId);
+        setWorkshopSelectedNodeId(null);
+      } else {
+        handleDeleteNode(nodeId);
+      }
+    },
+    [selectedSource, handleDeleteNode]
+  );
+
+  const activeDuplicateNode = useCallback(
+    (nodeId: string) => {
+      if (selectedSource === 'workshop') {
+        const target = workshopNodes.find((n) => n.id === nodeId);
+        if (target) {
+          workshopBridgeRef.current?.duplicateNode(target);
+        }
+      } else {
+        handleDuplicateNode(nodeId);
+      }
+    },
+    [selectedSource, workshopNodes, handleDuplicateNode]
+  );
+
+  const activeUpdateEdgeData = useCallback(
+    (edgeId: string, newEdgeData: any) => {
+      if (selectedSource === 'workshop') {
+        workshopBridgeRef.current?.updateEdgeData(edgeId, newEdgeData);
+      } else {
+        handleUpdateEdgeData(edgeId, newEdgeData);
+      }
+    },
+    [selectedSource, handleUpdateEdgeData]
+  );
+
+  const activeDeleteEdge = useCallback(
+    (edgeId: string) => {
+      if (selectedSource === 'workshop') {
+        workshopBridgeRef.current?.deleteEdge(edgeId);
+        setWorkshopSelectedEdgeId(null);
+      } else {
+        handleDeleteEdge(edgeId);
+      }
+    },
+    [selectedSource, handleDeleteEdge]
   );
 
   // Auto-branch from option handle
@@ -1034,80 +1366,134 @@ const FlowEditor: React.FC = () => {
                 />
               )}
 
-              {/* CENTER: React Flow Canvas */}
-              <main
-                className="canvas-wrapper canvas-container"
-                ref={reactFlowWrapper}
-                onDrop={onDrop}
-                onDragOver={onDragOver}
+              {/* CENTER: React Flow Canvas & Question Group Studio Dock */}
+              <div
+                className="canvas-and-dock-container"
+                style={{
+                  flex: 1,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  height: '100%',
+                  minWidth: 0,
+                  overflow: 'hidden',
+                  position: 'relative',
+                }}
               >
-                {!groupDesignSession && selectedQuestionNodes.length >= 1 && (
-                  <div className="canvas-floating-selection-bar">
-                    <div className="selection-bar-badge">
-                      <Layers size={13} className="text-emerald" />
-                      <span>
-                        <strong>{selectedQuestionNodes.length}</strong> Question{selectedQuestionNodes.length > 1 ? 's' : ''} Selected
-                      </span>
-                    </div>
-                    <button
-                      className="btn btn-primary btn-floating-save-group"
-                      onClick={() => setIsSaveSelectionModalOpen(true)}
-                      title="Bundle selected questions into a reusable Question Group"
-                    >
-                      <Sparkles size={14} />
-                      <span>Create Group from Selection</span>
-                    </button>
-                  </div>
-                )}
-
-                <ReactFlow
-                  nodes={nodes}
-                  edges={edges}
-                  onNodesChange={handleNodesChange}
-                  onEdgesChange={onEdgesChange}
-                  onConnect={onConnect}
+                <main
+                  className="canvas-wrapper canvas-container"
+                  ref={reactFlowWrapper}
                   onDrop={onDrop}
                   onDragOver={onDragOver}
-                  onNodeClick={onNodeClick}
-                  onEdgeClick={onEdgeClick}
-                  onPaneClick={onPaneClick}
-                  nodeTypes={nodeTypes}
-                  edgeTypes={edgeTypes}
-                  defaultEdgeOptions={{
-                    type: 'surveyEdge',
-                    markerEnd: {
-                      type: MarkerType.ArrowClosed,
-                      width: 16,
-                      height: 16,
-                    },
-                  }}
-                  fitView
-                  deleteKeyCode={['Backspace', 'Delete']}
-                  elevateNodesOnSelect={false}
-                  className="survey-flow-canvas"
+                  style={{ flex: 1, minHeight: 0 }}
                 >
-                  <Controls className="flow-controls" />
-                  <MiniMap
-                    className="flow-minimap"
-                    nodeColor={(n) => {
-                      if (n.type === 'start') return '#10b981';
-                      if (n.type === 'end') return '#ef4444';
-                      if (n.type === 'decision') return '#f59e0b';
-                      if (n.type === 'groupJump') return '#8b5cf6';
-                      if (n.type === 'process') return '#6366f1';
-                      if (n.type === 'document') return '#06b6d4';
-                      return '#0284c7';
+                  {!groupDesignSession && selectedQuestionNodes.length >= 1 && (
+                    <div className="canvas-floating-selection-bar">
+                      <div className="selection-bar-badge">
+                        <Layers size={13} className="text-emerald" />
+                        <span>
+                          <strong>{selectedQuestionNodes.length}</strong> Question{selectedQuestionNodes.length > 1 ? 's' : ''} Selected
+                        </span>
+                      </div>
+                      <button
+                        className="btn btn-primary btn-floating-save-group"
+                        onClick={() => setIsSaveSelectionModalOpen(true)}
+                        title="Bundle selected questions into a reusable Question Group"
+                      >
+                        <Sparkles size={14} />
+                        <span>Create Group from Selection</span>
+                      </button>
+
+                      <button
+                        className="btn btn-secondary btn-floating-save-group"
+                        onClick={handleWrapSelectionInFrame}
+                        title="Wrap selected questions into a Group Frame right here on canvas (Ctrl+G)"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}
+                      >
+                        <Crop size={14} className="text-emerald" />
+                        <span>Wrap in Group Frame (Ctrl+G)</span>
+                      </button>
+                    </div>
+                  )}
+
+                  <ReactFlow
+                    nodes={nodes}
+                    edges={edges}
+                    onNodesChange={handleNodesChange}
+                    onEdgesChange={onEdgesChange}
+                    onConnect={onConnect}
+                    onDrop={onDrop}
+                    onDragOver={onDragOver}
+                    onNodeClick={onNodeClick}
+                    onEdgeClick={onEdgeClick}
+                    onPaneClick={onPaneClick}
+                    nodeTypes={nodeTypes}
+                    edgeTypes={edgeTypes}
+                    defaultEdgeOptions={{
+                      type: 'surveyEdge',
+                      markerEnd: {
+                        type: MarkerType.ArrowClosed,
+                        width: 16,
+                        height: 16,
+                      },
                     }}
-                    position="bottom-left"
+                    fitView
+                    deleteKeyCode={['Backspace', 'Delete']}
+                    elevateNodesOnSelect={false}
+                    className="survey-flow-canvas"
+                  >
+                    <Controls className="flow-controls" />
+                    <MiniMap
+                      className="flow-minimap"
+                      nodeColor={(n) => {
+                        if (n.type === 'start') return '#10b981';
+                        if (n.type === 'end') return '#ef4444';
+                        if (n.type === 'decision') return '#f59e0b';
+                        if (n.type === 'groupJump') return '#8b5cf6';
+                        if (n.type === 'process') return '#6366f1';
+                        if (n.type === 'document') return '#06b6d4';
+                        return '#0284c7';
+                      }}
+                      position="bottom-left"
+                    />
+                    <Background
+                      variant={BackgroundVariant.Dots}
+                      gap={20}
+                      size={1}
+                      color={resolvedTheme === 'light' ? '#cbd5e1' : '#334155'}
+                    />
+                  </ReactFlow>
+                </main>
+
+                {/* Bottom Dock Resizer Handle (only when open) */}
+                {!groupDesignSession && isBottomDockOpen && (
+                  <div
+                    className={`bottom-dock-resizer ${resizingSide === 'bottom' ? 'is-active' : ''}`}
+                    onMouseDown={startResizingBottom}
+                    onDoubleClick={resetBottomHeight}
+                    title="Drag to resize Question Group Studio, double-click to reset"
                   />
-                  <Background
-                    variant={BackgroundVariant.Dots}
-                    gap={20}
-                    size={1}
-                    color={resolvedTheme === 'light' ? '#cbd5e1' : '#334155'}
+                )}
+
+                {/* Bottom Group Creation Workshop Canvas (Independent Split-Screen Flow Canvas) */}
+                {!groupDesignSession && (
+                  <GroupWorkshopCanvas
+                    isOpen={isBottomDockOpen}
+                    height={bottomHeight}
+                    isResizing={resizingSide === 'bottom'}
+                    onToggleOpen={toggleBottomDock}
+                    onDeployGroupToSurvey={(grp) => handleInsertGroupIntoCanvas(grp)}
+                    onSaveToLibrary={() => refreshGroups()}
+                    theme={resolvedTheme}
+                    onSelectNode={handleWorkshopSelectNode}
+                    onSelectEdge={handleWorkshopSelectEdge}
+                    onWorkshopNodesChange={setWorkshopNodes}
+                    onWorkshopEdgesChange={setWorkshopEdges}
+                    onRegisterBridge={(bridge) => {
+                      workshopBridgeRef.current = bridge;
+                    }}
                   />
-                </ReactFlow>
-              </main>
+                )}
+              </div>
 
               {/* Right Resizer Splitter (Antigravity Style) */}
               {isRightSidebarOpen && (
@@ -1125,19 +1511,21 @@ const FlowEditor: React.FC = () => {
                 width={rightWidth}
                 isResizing={resizingSide === 'right'}
                 onToggleCollapse={toggleRightSidebar}
-                selectedNode={selectedNode}
-                selectedEdge={selectedEdge}
-                nodes={nodes}
-                edges={edges}
+                selectedNode={activeSelectedNode}
+                selectedEdge={activeSelectedEdge}
+                nodes={activeNodes}
+                edges={activeEdges}
                 groups={groups}
                 groupMeta={groupMeta}
-                onUpdateNodeData={handleUpdateNodeData}
-                onUpdateEdgeData={handleUpdateEdgeData}
+                onUpdateNodeData={activeUpdateNodeData}
+                onUpdateEdgeData={activeUpdateEdgeData}
                 onUpdateGroupMeta={handleUpdateGroupMeta}
-                onDeleteNode={handleDeleteNode}
-                onDuplicateNode={handleDuplicateNode}
+                onDeleteNode={activeDeleteNode}
+                onDuplicateNode={activeDuplicateNode}
                 onAddNestedQuestion={handleAddNestedQuestion}
                 onAddQuestion={handleAddQuestionFromWidget}
+                onAddEdge={handleAddEdge}
+                onDeleteEdge={activeDeleteEdge}
               />
             </div>
           </div>

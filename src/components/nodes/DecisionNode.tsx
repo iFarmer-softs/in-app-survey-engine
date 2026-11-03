@@ -12,6 +12,7 @@ export const DecisionNode = memo(({ data, selected }: NodeProps) => {
       <Handle
         type="target"
         position={Position.Top}
+        id="in"
         className="node-handle target-handle"
       />
 
