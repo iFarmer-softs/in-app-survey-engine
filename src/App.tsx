@@ -138,7 +138,7 @@ const FlowEditor: React.FC = () => {
       const next = !prev;
       try {
         localStorage.setItem('survey_left_sidebar_open', String(next));
-      } catch {}
+      } catch { }
       setTimeout(() => window.dispatchEvent(new Event('resize')), 250);
       return next;
     });
@@ -149,7 +149,7 @@ const FlowEditor: React.FC = () => {
       const next = !prev;
       try {
         localStorage.setItem('survey_right_sidebar_open', String(next));
-      } catch {}
+      } catch { }
       setTimeout(() => window.dispatchEvent(new Event('resize')), 250);
       return next;
     });

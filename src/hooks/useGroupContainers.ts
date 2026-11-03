@@ -242,9 +242,9 @@ export function useGroupContainers({
               hidden: willCollapse,
               position: !willCollapse
                 ? {
-                    x: containerX + 30,
-                    y: containerY + (offsets[idx] ?? (115 + idx * 200)),
-                  }
+                  x: containerX + 30,
+                  y: containerY + (offsets[idx] ?? (115 + idx * 200)),
+                }
                 : node.position,
             };
           }
@@ -341,7 +341,7 @@ export function useGroupContainers({
       setNodes((currentNodes) => {
         const containerNode = currentNodes.find((n) => n.id === containerNodeId);
         if (!containerNode) return currentNodes;
-        
+
         // 1. Explicit child IDs
         const childIds: string[] = (containerNode.data as any).questionIds || [];
         childIds.forEach((id) => deletedNodeIds.add(id));

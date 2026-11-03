@@ -1152,12 +1152,40 @@ body.is-resizing-sidebar * {
   height: 10px !important;
   background-color: var(--bg-surface-elevated) !important;
   border: 2px solid var(--emerald) !important;
-  transition: transform var(--transition-fast);
+  transition: transform var(--transition-fast), opacity var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .node-handle:hover {
-  transform: scale(1.3);
+  transform: scale(1.35) !important;
   background-color: var(--emerald) !important;
+  box-shadow: 0 0 8px var(--emerald-glow) !important;
+  z-index: 20 !important;
+}
+
+/* Auxiliary 8-way multi-port connection handles */
+.aux-handle {
+  opacity: 0.35;
+  border-color: rgba(16, 185, 129, 0.6) !important;
+}
+
+.survey-node:hover .aux-handle,
+.survey-node.is-selected .aux-handle,
+.react-flow.is-connecting .aux-handle {
+  opacity: 0.95;
+  border-color: var(--emerald) !important;
+}
+
+.aux-handle:hover {
+  opacity: 1 !important;
+}
+
+/* 4 Corner Vertices vs 4 Edge Midpoints */
+.corner-handle {
+  z-index: 15;
+}
+
+.midpoint-handle {
+  z-index: 16;
 }
 
 .match-handle {

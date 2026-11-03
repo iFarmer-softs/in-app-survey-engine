@@ -1,6 +1,7 @@
 import React, { memo } from 'react';
 import { Handle, Position } from '@xyflow/react';
 import type { NodeProps } from '@xyflow/react';
+import { EightWayHandles } from './EightWayHandles';
 import {
   Type,
   AlignLeft,
@@ -138,13 +139,8 @@ export const QuestionNode = memo(({ data, selected }: NodeProps) => {
 
   return (
     <div className={`survey-node question-node ${selected ? 'is-selected' : ''}`}>
-      {/* Top Handle for Incoming Connections */}
-      <Handle
-        type="target"
-        position={Position.Top}
-        id="in"
-        className="node-handle target-handle"
-      />
+      {/* 8-Way Connection Anchors around Perimeter */}
+      <EightWayHandles hideRight={hasOptions} />
 
       {/* Header with ID and Widget Badge */}
       <div className="node-header">
@@ -299,14 +295,6 @@ export const QuestionNode = memo(({ data, selected }: NodeProps) => {
           </div>
         )}
       </div>
-
-      {/* Default/Unconditional Output Handle at Bottom */}
-      <Handle
-        type="source"
-        position={Position.Bottom}
-        id="default-next"
-        className="node-handle source-handle"
-      />
     </div>
   );
 });

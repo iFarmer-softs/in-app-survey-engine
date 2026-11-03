@@ -3,18 +3,14 @@ import { Handle, Position } from '@xyflow/react';
 import type { NodeProps } from '@xyflow/react';
 import { FastForward, Play, CheckCircle2, Cpu, FileText } from 'lucide-react';
 import type { GroupJumpNodeData } from '../../types/survey';
+import { EightWayHandles } from './EightWayHandles';
 
 export const GroupJumpNode = memo(({ data, selected }: NodeProps) => {
   const nodeData = data as unknown as GroupJumpNodeData;
 
   return (
     <div className={`survey-node group-jump-node ${selected ? 'is-selected' : ''}`}>
-      <Handle
-        type="target"
-        position={Position.Top}
-        id="in"
-        className="node-handle target-handle"
-      />
+      <EightWayHandles hideBottom={true} />
       <div className="jump-inner">
         <FastForward size={16} className="jump-icon" />
         <div className="jump-text">
@@ -73,12 +69,7 @@ EndNode.displayName = 'EndNode';
 export const ProcessNode = memo(({ data, selected }: NodeProps) => {
   return (
     <div className={`survey-node process-node ${selected ? 'is-selected' : ''}`}>
-      <Handle
-        type="target"
-        position={Position.Top}
-        id="in"
-        className="node-handle target-handle"
-      />
+      <EightWayHandles />
       <div className="process-inner">
         <Cpu size={14} className="process-icon" />
         <div className="process-info">
@@ -86,12 +77,6 @@ export const ProcessNode = memo(({ data, selected }: NodeProps) => {
           <span className="process-name">{(data?.label as string) || (data?.name as string) || 'Auto Computation'}</span>
         </div>
       </div>
-      <Handle
-        type="source"
-        position={Position.Bottom}
-        id="default-next"
-        className="node-handle source-handle"
-      />
     </div>
   );
 });
@@ -101,12 +86,7 @@ ProcessNode.displayName = 'ProcessNode';
 export const DocumentNode = memo(({ data, selected }: NodeProps) => {
   return (
     <div className={`survey-node document-node ${selected ? 'is-selected' : ''}`}>
-      <Handle
-        type="target"
-        position={Position.Top}
-        id="in"
-        className="node-handle target-handle"
-      />
+      <EightWayHandles />
       <div className="document-inner">
         <FileText size={14} className="document-icon" />
         <div className="document-info">
@@ -114,12 +94,6 @@ export const DocumentNode = memo(({ data, selected }: NodeProps) => {
           <span className="document-name">{(data?.label as string) || (data?.name as string) || 'Farmer Agreement'}</span>
         </div>
       </div>
-      <Handle
-        type="source"
-        position={Position.Bottom}
-        id="default-next"
-        className="node-handle source-handle"
-      />
     </div>
   );
 });
