@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Code2,
   Smartphone,
@@ -10,11 +10,18 @@ import {
   AlignHorizontalDistributeCenter,
   AlignVerticalDistributeCenter,
   GitBranch,
+  History,
+  GitCommit,
+  Rocket,
+  ChevronDown,
+  SlidersHorizontal,
 } from 'lucide-react';
 import type { GroupMeta } from '../../utils/schemaCompiler';
 
 interface HeaderProps {
   projectTitle?: string;
+  currentVersion?: string;
+  versionStatus?: 'published' | 'draft' | 'archived';
   groupMeta: GroupMeta;
   onOpenJsonModal: () => void;
   onOpenMobileModal: () => void;
@@ -30,10 +37,15 @@ interface HeaderProps {
   onChangeEdgeRouting: (routing: 'smoothstep' | 'bezier' | 'straight') => void;
   onAlignHorizontal: () => void;
   onAlignVertical: () => void;
+  onOpenVersionHistory?: () => void;
+  onOpenCreateSnapshot?: () => void;
+  onPublishVersion?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   projectTitle,
+  currentVersion = '1.0.0',
+  versionStatus = 'draft',
   groupMeta,
   onOpenJsonModal,
   onOpenMobileModal,
@@ -49,10 +61,44 @@ export const Header: React.FC<HeaderProps> = ({
   onChangeEdgeRouting,
   onAlignHorizontal,
   onAlignVertical,
+  onOpenVersionHistory,
+  onOpenCreateSnapshot,
+  onPublishVersion,
 }) => {
+  const [isVersionMenuOpen, setIsVersionMenuOpen] = useState(false);
+  const [isToolsMenuOpen, setIsToolsMenuOpen] = useState(false);
+
+  const versionDropdownRef = useRef<HTMLDivElement>(null);
+  const toolsDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close menus on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (
+        versionDropdownRef.current &&
+        !versionDropdownRef.current.contains(target)
+      ) {
+        setIsVersionMenuOpen(false);
+      }
+      if (
+        toolsDropdownRef.current &&
+        !toolsDropdownRef.current.contains(target)
+      ) {
+        setIsToolsMenuOpen(false);
+      }
+    };
+    if (isVersionMenuOpen || isToolsMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isVersionMenuOpen, isToolsMenuOpen]);
+
   return (
     <header className="app-header">
-      {/* Brand logo & title */}
+      {/* 1. Left: Brand & Title with Version Dropdown */}
       <div className="header-brand">
         {onBackToList && (
           <button
@@ -64,27 +110,136 @@ export const Header: React.FC<HeaderProps> = ({
             <span>Flowcharts</span>
           </button>
         )}
+
         <div className="brand-titles">
           <div className="brand-name-row">
             <span className="brand-product">
               {projectTitle || 'SurveyFlow Studio'}
             </span>
-            <span className="badge-beta">Dynamic KYC</span>
+
+            {/* Version Indicator Dropdown */}
+            <div
+              className="header-version-dropdown-container"
+              ref={versionDropdownRef}
+            >
+              <button
+                type="button"
+                className="header-version-pill"
+                onClick={() => setIsVersionMenuOpen((prev) => !prev)}
+                title="Flowchart Version & Release Management"
+              >
+                <GitBranch size={13} className="version-pill-icon" />
+                <span className="version-pill-text">v{currentVersion}</span>
+                <span className={`version-pill-tag tag-${versionStatus}`}>
+                  {versionStatus === 'published' ? 'Live' : 'Draft'}
+                </span>
+                <ChevronDown
+                  size={11}
+                  className={`version-chevron ${
+                    isVersionMenuOpen ? 'is-rotated' : ''
+                  }`}
+                />
+              </button>
+
+              {isVersionMenuOpen && (
+                <div className="header-version-menu animate-in">
+                  <div className="menu-header-info">
+                    <span className="menu-current-ver">
+                      Current: v{currentVersion}
+                    </span>
+                    <span className="menu-current-status">
+                      {versionStatus === 'published'
+                        ? '🟢 Published production release'
+                        : '🟡 Working draft (unreleased)'}
+                    </span>
+                  </div>
+
+                  <div className="menu-divider" />
+
+                  {onOpenCreateSnapshot && (
+                    <button
+                      type="button"
+                      className="version-menu-item"
+                      onClick={() => {
+                        setIsVersionMenuOpen(false);
+                        onOpenCreateSnapshot();
+                      }}
+                    >
+                      <GitCommit size={15} className="menu-icon text-blue-400" />
+                      <div className="menu-text-wrap">
+                        <span className="menu-title">Save Draft Snapshot</span>
+                        <span className="menu-desc">
+                          Record an immutable working checkpoint
+                        </span>
+                      </div>
+                    </button>
+                  )}
+
+                  {onPublishVersion && (
+                    <button
+                      type="button"
+                      className="version-menu-item"
+                      onClick={() => {
+                        setIsVersionMenuOpen(false);
+                        onPublishVersion();
+                      }}
+                    >
+                      <Rocket
+                        size={15}
+                        className="menu-icon text-emerald-400"
+                      />
+                      <div className="menu-text-wrap">
+                        <span className="menu-title">Publish Version</span>
+                        <span className="menu-desc">
+                          Bump version and promote to production
+                        </span>
+                      </div>
+                    </button>
+                  )}
+
+                  {onOpenVersionHistory && (
+                    <>
+                      <div className="menu-divider" />
+                      <button
+                        type="button"
+                        className="version-menu-item"
+                        onClick={() => {
+                          setIsVersionMenuOpen(false);
+                          onOpenVersionHistory();
+                        }}
+                      >
+                        <History
+                          size={15}
+                          className="menu-icon text-purple-400"
+                        />
+                        <div className="menu-text-wrap">
+                          <span className="menu-title">
+                            Version History & Diff
+                          </span>
+                          <span className="menu-desc">
+                            Timeline, audit notes, rollback, and JSON export
+                          </span>
+                        </div>
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
-          <span className="brand-sub">Visual Flowchart Designer & Schema Generator</span>
         </div>
       </div>
 
-      {/* Middle status & stats */}
+      {/* 2. Middle: Compact Status & Diagnostics */}
       <div className="header-meta">
-        <div className="meta-pill group-pill">
-          <span className="pill-dot"></span>
-          <span>Group {groupMeta.groupNumber} of {groupMeta.totalGroups}</span>
-        </div>
         <div className="meta-pill stats-pill">
-          <span>{nodeCount} Nodes</span>
+          <span>
+            Group {groupMeta.groupNumber}/{groupMeta.totalGroups}
+          </span>
           <span className="pill-divider">•</span>
-          <span>{edgeCount} Links</span>
+          <span>
+            {nodeCount} Nodes ({edgeCount} Links)
+          </span>
         </div>
 
         {/* Real-time Flow Diagnostics Pill */}
@@ -102,7 +257,7 @@ export const Header: React.FC<HeaderProps> = ({
           {diagnosticsErrors > 0 ? (
             <>
               <AlertTriangle size={13} className="text-red-400" />
-              <span>{diagnosticsErrors} Flow Errors</span>
+              <span>{diagnosticsErrors} Errors</span>
             </>
           ) : diagnosticsCount > 0 ? (
             <>
@@ -118,73 +273,138 @@ export const Header: React.FC<HeaderProps> = ({
         </button>
       </div>
 
-      {/* Action buttons & tools */}
+      {/* 3. Right: Clean Consolidated Action Group */}
       <div className="header-actions">
-        {/* Edge Routing Selector */}
-        <div className="header-routing-selector" title="Flowchart Line Style">
-          <GitBranch size={13} className="routing-icon" />
-          <select
-            value={edgeRouting}
-            onChange={(e) =>
-              onChangeEdgeRouting(
-                e.target.value as 'smoothstep' | 'bezier' | 'straight'
-              )
-            }
-            className="header-select-routing"
+        {/* Consolidated Canvas Tools & Layout Dropdown */}
+        <div className="header-tools-dropdown-container" ref={toolsDropdownRef}>
+          <button
+            type="button"
+            className="btn btn-secondary btn-tools-toggle"
+            onClick={() => setIsToolsMenuOpen((prev) => !prev)}
+            title="Canvas layout, alignment & line style options"
           >
-            <option value="smoothstep">Orthogonal (Flowchart)</option>
-            <option value="bezier">Smooth Curved</option>
-            <option value="straight">Straight Line</option>
-          </select>
+            <SlidersHorizontal size={14} />
+            <span>Tools</span>
+            <ChevronDown
+              size={11}
+              className={`tools-chevron ${isToolsMenuOpen ? 'is-rotated' : ''}`}
+            />
+          </button>
+
+          {isToolsMenuOpen && (
+            <div className="header-tools-menu animate-in">
+              {/* Section 1: Auto Layout & Align */}
+              <div className="tools-section-title">Layout & Alignment</div>
+              <button
+                type="button"
+                className="tools-menu-item"
+                onClick={() => {
+                  setIsToolsMenuOpen(false);
+                  onAutoLayout();
+                }}
+              >
+                <Sparkles size={14} className="text-emerald-400" />
+                <div className="tools-item-text">
+                  <span className="tools-title">Tree Auto Layout</span>
+                  <span className="tools-sub">Re-arrange hierarchy neatly</span>
+                </div>
+              </button>
+
+              <div className="tools-align-row">
+                <button
+                  type="button"
+                  className="tools-compact-btn"
+                  onClick={() => {
+                    onAlignHorizontal();
+                  }}
+                  title="Align selected nodes horizontally (Center Y)"
+                >
+                  <AlignHorizontalDistributeCenter size={13} />
+                  <span>Align Horizontal</span>
+                </button>
+                <button
+                  type="button"
+                  className="tools-compact-btn"
+                  onClick={() => {
+                    onAlignVertical();
+                  }}
+                  title="Align selected nodes vertically (Center X)"
+                >
+                  <AlignVerticalDistributeCenter size={13} />
+                  <span>Align Vertical</span>
+                </button>
+              </div>
+
+              <div className="menu-divider" />
+
+              {/* Section 2: Edge Line Style */}
+              <div className="tools-section-title">Connector Style</div>
+              <div className="tools-routing-options">
+                <button
+                  type="button"
+                  className={`routing-pill-btn ${
+                    edgeRouting === 'smoothstep' ? 'is-active' : ''
+                  }`}
+                  onClick={() => onChangeEdgeRouting('smoothstep')}
+                >
+                  Orthogonal
+                </button>
+                <button
+                  type="button"
+                  className={`routing-pill-btn ${
+                    edgeRouting === 'bezier' ? 'is-active' : ''
+                  }`}
+                  onClick={() => onChangeEdgeRouting('bezier')}
+                >
+                  Curved
+                </button>
+                <button
+                  type="button"
+                  className={`routing-pill-btn ${
+                    edgeRouting === 'straight' ? 'is-active' : ''
+                  }`}
+                  onClick={() => onChangeEdgeRouting('straight')}
+                >
+                  Straight
+                </button>
+              </div>
+
+              <div className="menu-divider" />
+
+              {/* Section 3: Reset Canvas */}
+              <button
+                type="button"
+                className="tools-menu-item item-danger"
+                onClick={() => {
+                  setIsToolsMenuOpen(false);
+                  onResetSample();
+                }}
+              >
+                <RotateCcw size={14} />
+                <div className="tools-item-text">
+                  <span className="tools-title">Reset to Default Sample</span>
+                  <span className="tools-sub">Reload seed flowchart</span>
+                </div>
+              </button>
+            </div>
+          )}
         </div>
 
-        {/* Alignment Tools */}
-        <div className="header-align-group">
-          <button
-            className="btn btn-icon"
-            onClick={onAlignHorizontal}
-            title="Align Nodes Horizontally (Center Y)"
-          >
-            <AlignHorizontalDistributeCenter size={14} />
-          </button>
-          <button
-            className="btn btn-icon"
-            onClick={onAlignVertical}
-            title="Align Nodes Vertically (Center X)"
-          >
-            <AlignVerticalDistributeCenter size={14} />
-          </button>
-        </div>
-
-        <button
-          className="btn btn-secondary"
-          onClick={onAutoLayout}
-          title="Hierarchical Tree Auto Layout (No branch overlap)"
-        >
-          <Sparkles size={14} />
-          <span>Tree Layout</span>
-        </button>
-
-        <button
-          className="btn btn-secondary"
-          onClick={onResetSample}
-          title="Reset to default sample"
-        >
-          <RotateCcw size={14} />
-          <span>Reset</span>
-        </button>
-
+        {/* Primary Action 1: Mobile Preview */}
         <button
           className="btn btn-secondary btn-mobile-preview"
           onClick={onOpenMobileModal}
+          title="Interactive Mobile App Emulator"
         >
           <Smartphone size={15} />
           <span>Mobile Preview</span>
         </button>
 
+        {/* Primary Action 2: Generate JSON */}
         <button
           className="btn btn-primary"
           onClick={onOpenJsonModal}
+          title="Generate & export compiled JSON survey schema"
         >
           <Code2 size={15} />
           <span>Generate JSON</span>

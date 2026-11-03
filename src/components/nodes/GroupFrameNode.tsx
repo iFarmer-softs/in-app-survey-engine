@@ -1,7 +1,7 @@
 import { memo } from 'react';
 import { Handle, Position, NodeResizer } from '@xyflow/react';
 import type { NodeProps } from '@xyflow/react';
-import { Layers, Sparkles } from 'lucide-react';
+import { Layers, Sparkles, Trash } from 'lucide-react';
 import type { GroupCategory } from '../../types/group';
 
 export interface GroupFrameNodeData {
@@ -18,12 +18,17 @@ export interface GroupFrameNodeData {
   onDeleteFrame?: (frameId: string) => void;
 }
 
-export const GroupFrameNode = memo(({ data, selected }: NodeProps) => {
+export interface GroupFrameNodeProps extends NodeProps {
+  onDeleteFrame?: (frameId: string) => void;
+}
+
+export const GroupFrameNode = memo(({ id, data, selected, onDeleteFrame }: GroupFrameNodeProps) => {
   const nodeData = data as unknown as GroupFrameNodeData;
   const isDropTarget = Boolean(nodeData.isDropTarget);
   const color = nodeData.color || '#8b5cf6';
   const activeColor = isDropTarget ? '#10b981' : color;
   const childCount = nodeData.questionCount ?? nodeData.questionIds?.length ?? 0;
+  const deleteHandler = onDeleteFrame || nodeData.onDeleteFrame;
 
   return (
     <div
@@ -87,10 +92,23 @@ export const GroupFrameNode = memo(({ data, selected }: NodeProps) => {
           </div>
         </div>
 
-        <div className="group-frame-header-right">
+        <div className="group-frame-header-right nodrag">
           <span className="group-frame-count-badge">
             {childCount} Question{childCount !== 1 ? 's' : ''} inside
           </span>
+          {deleteHandler && (
+            <button
+              type="button"
+              className="btn-group-icon-sm btn-delete"
+              onClick={(e) => {
+                e.stopPropagation();
+                deleteHandler(id);
+              }}
+              title="Delete group area and all contents inside"
+            >
+              <Trash size={12} />
+            </button>
+          )}
         </div>
       </div>
 

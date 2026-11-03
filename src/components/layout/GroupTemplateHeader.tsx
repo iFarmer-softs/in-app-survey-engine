@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import {
   ArrowLeft,
   Sparkles,
-  Layers,
   Settings2,
   TreePine,
   CheckCircle2,
@@ -81,15 +80,16 @@ export const GroupTemplateHeader: React.FC<GroupTemplateHeaderProps> = ({
 
   return (
     <header className="app-header group-template-header">
-      {/* Brand logo & title */}
+      {/* 1. Left: Back/Exit & Group Title */}
       <div className="header-brand">
         <button
+          type="button"
           className="header-back-list-btn"
           onClick={onExit}
           title="Exit Group Designer"
         >
           <ArrowLeft size={16} />
-          <span>Exit Designer</span>
+          <span>Exit</span>
         </button>
 
         <div className="brand-titles">
@@ -97,69 +97,63 @@ export const GroupTemplateHeader: React.FC<GroupTemplateHeaderProps> = ({
             <span className="brand-product">{name || 'New Question Group'}</span>
             <span
               className="group-cat-pill-mini"
-              style={{ backgroundColor: `${color}25`, color, borderColor: `${color}60` }}
+              style={{
+                backgroundColor: `${color}25`,
+                color,
+                borderColor: `${color}60`,
+              }}
             >
               <Tag size={10} />
               <span>{category.toUpperCase()}</span>
             </span>
-            <span className="badge-beta group-designer-badge">Group Designer</span>
           </div>
-          <span className="brand-sub bn-font">{nameBn || 'নতুন প্রশ্ন গ্রুপ টেমপ্লেট'}</span>
         </div>
       </div>
 
-      {/* Middle status & quick actions */}
+      {/* 2. Middle: Clean Stats Pill */}
       <div className="header-meta">
-        <div className="meta-pill group-pill" style={{ borderColor: `${color}40` }}>
-          <Layers size={13} style={{ color }} />
-          <span>Template Mode</span>
-        </div>
-
         <div className="meta-pill stats-pill">
           <span>{questionCount} Questions</span>
           <span className="pill-divider">•</span>
           <span>{edgeCount} Transitions</span>
         </div>
+      </div>
 
+      {/* 3. Right: Consolidated Action Buttons */}
+      <div className="header-actions">
         <button
-          className="btn-header-action"
-          onClick={handleOpenSettings}
-          title="Edit Group Title & Category"
-        >
-          <Settings2 size={14} />
-          <span>Group Settings</span>
-        </button>
-
-        <button
-          className="btn-header-action"
+          type="button"
+          className="btn btn-secondary"
           onClick={onAutoLayout}
-          title="Auto-organize questions vertically"
+          title="Auto-organize questions hierarchy vertically"
         >
           <TreePine size={14} />
           <span>Auto-Layout</span>
         </button>
-      </div>
 
-      {/* Right Primary Action */}
-      <div className="header-actions">
         <button
-          className="btn btn-secondary btn-header-cancel"
-          onClick={onExit}
+          type="button"
+          className="btn btn-secondary"
+          onClick={handleOpenSettings}
+          title="Edit Group Name, Bengali Title & Category"
         >
-          Discard
+          <Settings2 size={14} />
+          <span>Settings</span>
         </button>
 
         <button
+          type="button"
           className="btn btn-primary btn-save-template"
           onClick={onSave}
           disabled={questionCount === 0 || !name.trim()}
+          title="Save this reusable question group template"
         >
           <Sparkles size={14} />
-          <span>Save Group Template</span>
+          <span>Save Template</span>
         </button>
       </div>
 
-      {/* Inline Quick Settings Popover */}
+      {/* Settings Modal */}
       {isSettingsOpen && (
         <div className="modal-overlay" onClick={() => setIsSettingsOpen(false)}>
           <div
@@ -221,17 +215,24 @@ export const GroupTemplateHeader: React.FC<GroupTemplateHeaderProps> = ({
                 <div className="form-group">
                   <label className="form-label">Accent Color</label>
                   <div className="color-picker-row">
-                    {['#0284c7', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4'].map(
-                      (c) => (
-                        <button
-                          key={c}
-                          type="button"
-                          className={`color-swatch-btn ${tempColor === c ? 'is-selected' : ''}`}
-                          style={{ backgroundColor: c }}
-                          onClick={() => setTempColor(c)}
-                        />
-                      )
-                    )}
+                    {[
+                      '#0284c7',
+                      '#10b981',
+                      '#f59e0b',
+                      '#8b5cf6',
+                      '#ec4899',
+                      '#06b6d4',
+                    ].map((c) => (
+                      <button
+                        key={c}
+                        type="button"
+                        className={`color-swatch-btn ${
+                          tempColor === c ? 'is-selected' : ''
+                        }`}
+                        style={{ backgroundColor: c }}
+                        onClick={() => setTempColor(c)}
+                      />
+                    ))}
                   </div>
                 </div>
               </div>

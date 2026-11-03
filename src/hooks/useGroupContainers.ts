@@ -25,13 +25,49 @@ export function useGroupContainers({
   setActiveView,
   setCenter,
 }: UseGroupContainersProps) {
-  // Synchronized node dragging: moving a group container moves all its child questions in real-time
+  // Synchronized node dragging & cascading deletion: moving/deleting a group container cascades to all child questions
   const handleNodesChange = useCallback(
     (changes: NodeChange[]) => {
       const extraChanges: NodeChange[] = [];
+      const removedChildIds = new Set<string>();
+      const removedGroupIds = new Set<string>();
 
       changes.forEach((change) => {
-        if (change.type === 'position' && change.position) {
+        if (change.type === 'remove') {
+          const node = nodes.find((n) => n.id === change.id);
+          if (node && (node.type === 'groupContainer' || node.type === 'groupFrame')) {
+            removedGroupIds.add(node.id);
+            const childIds: string[] = (node.data as any)?.questionIds || [];
+            childIds.forEach((cid) => removedChildIds.add(cid));
+
+            const frameWidth = Number(node.style?.width) || (node.data as any)?.width || 440;
+            const frameHeight = Number(node.style?.height) || (node.data as any)?.height || 480;
+            const fx = node.position.x;
+            const fy = node.position.y;
+
+            nodes.forEach((n) => {
+              if (n.id !== node.id) {
+                if ((n.data as any)?.containerId === node.id) {
+                  removedChildIds.add(n.id);
+                } else if (
+                  n.position.x >= fx - 10 &&
+                  n.position.x <= fx + frameWidth + 10 &&
+                  n.position.y >= fy - 10 &&
+                  n.position.y <= fy + frameHeight + 10
+                ) {
+                  removedChildIds.add(n.id);
+                }
+              }
+            });
+
+            removedChildIds.forEach((childId) => {
+              extraChanges.push({
+                type: 'remove',
+                id: childId,
+              });
+            });
+          }
+        } else if (change.type === 'position' && change.position) {
           const node = nodes.find((n) => n.id === change.id);
           if (node && (node.type === 'groupContainer' || node.type === 'groupFrame')) {
             const childIds: string[] =
@@ -64,9 +100,22 @@ export function useGroupContainers({
         }
       });
 
+      if (removedChildIds.size > 0 || removedGroupIds.size > 0) {
+        setEdges((currentEdges) =>
+          currentEdges.filter(
+            (e) =>
+              !removedChildIds.has(e.source) &&
+              !removedChildIds.has(e.target) &&
+              !removedGroupIds.has(e.source) &&
+              !removedGroupIds.has(e.target) &&
+              !removedGroupIds.has((e.data as any)?.containerId)
+          )
+        );
+      }
+
       onNodesChange(extraChanges.length > 0 ? [...changes, ...extraChanges] : changes);
     },
-    [nodes, onNodesChange]
+    [nodes, onNodesChange, setEdges]
   );
 
   // Group Container Handlers: Collapse / Expand, Ungroup, Delete
@@ -287,29 +336,57 @@ export function useGroupContainers({
 
   const handleDeleteGroupContainer = useCallback(
     (containerNodeId: string) => {
+      const deletedNodeIds = new Set<string>([containerNodeId]);
+
       setNodes((currentNodes) => {
         const containerNode = currentNodes.find((n) => n.id === containerNodeId);
         if (!containerNode) return currentNodes;
+        
+        // 1. Explicit child IDs
         const childIds: string[] = (containerNode.data as any).questionIds || [];
+        childIds.forEach((id) => deletedNodeIds.add(id));
 
-        return currentNodes.filter(
-          (n) =>
-            n.id !== containerNodeId &&
-            !childIds.includes(n.id) &&
-            (n.data as any)?.containerId !== containerNodeId
-        );
+        // 2. Nodes pointing to containerId
+        currentNodes.forEach((n) => {
+          if ((n.data as any)?.containerId === containerNodeId) {
+            deletedNodeIds.add(n.id);
+          }
+        });
+
+        // 3. Spatially contained nodes within the frame
+        const frameWidth = Number(containerNode.style?.width) || (containerNode.data as any)?.width || 440;
+        const frameHeight = Number(containerNode.style?.height) || (containerNode.data as any)?.height || 480;
+        const fx = containerNode.position.x;
+        const fy = containerNode.position.y;
+
+        currentNodes.forEach((n) => {
+          if (n.id !== containerNodeId) {
+            if (
+              n.position.x >= fx - 10 &&
+              n.position.x <= fx + frameWidth + 10 &&
+              n.position.y >= fy - 10 &&
+              n.position.y <= fy + frameHeight + 10
+            ) {
+              deletedNodeIds.add(n.id);
+            }
+          }
+        });
+
+        return currentNodes.filter((n) => !deletedNodeIds.has(n.id));
       });
 
       setEdges((currentEdges) => {
         return currentEdges.filter(
           (e) =>
-            (e.data as any)?.containerId !== containerNodeId &&
-            e.source !== containerNodeId &&
-            e.target !== containerNodeId
+            !deletedNodeIds.has(e.source) &&
+            !deletedNodeIds.has(e.target) &&
+            (e.data as any)?.containerId !== containerNodeId
         );
       });
+
+      setSelectedNodeId(null);
     },
-    [setNodes, setEdges]
+    [setNodes, setEdges, setSelectedNodeId]
   );
 
   // Insert Question Group into canvas wrapped in a collapsible GroupContainerNode

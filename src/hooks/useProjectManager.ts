@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback } from 'react';
 import type { Node, Edge } from '@xyflow/react';
-import type { FlowchartProject } from '../types/project';
+import type { FlowchartProject, FlowchartVersion } from '../types/project';
 import type { GroupMeta } from '../utils/schemaCompiler';
 import {
   loadAllProjects,
@@ -9,6 +9,9 @@ import {
   setActiveProjectId as persistActiveProjectId,
   createBlankProject,
   duplicateProject,
+  addVersionSnapshot,
+  restoreProjectVersion,
+  ensureProjectVersions,
 } from '../utils/projectStorage';
 
 export function useProjectManager() {
@@ -20,7 +23,8 @@ export function useProjectManager() {
   );
 
   const activeProject = useMemo(() => {
-    return projects.find((p) => p.id === activeProjectId) || projects[0];
+    const found = projects.find((p) => p.id === activeProjectId) || projects[0];
+    return found ? ensureProjectVersions(found) : found;
   }, [projects, activeProjectId]);
 
   const refreshProjects = useCallback(() => {
@@ -31,9 +35,10 @@ export function useProjectManager() {
     (id: string, onLoaded?: (target: FlowchartProject) => void) => {
       const target = projects.find((p) => p.id === id);
       if (target) {
+        const normalized = ensureProjectVersions(target);
         setActiveProjectIdState(id);
         persistActiveProjectId(id);
-        onLoaded?.(target);
+        onLoaded?.(normalized);
       }
     },
     [projects]
@@ -115,6 +120,58 @@ export function useProjectManager() {
     [activeProject]
   );
 
+  const handleCreateVersionSnapshot = useCallback(
+    (
+      options: {
+        version: string;
+        title: string;
+        description?: string;
+        isPublished?: boolean;
+        createdBy?: string;
+      },
+      currentNodes?: Node[],
+      currentEdges?: Edge[],
+      currentMeta?: GroupMeta
+    ): FlowchartVersion | null => {
+      if (!activeProject) return null;
+
+      const { updatedProject, newVersion } = addVersionSnapshot(activeProject, {
+        ...options,
+        nodes: currentNodes || activeProject.nodes,
+        edges: currentEdges || activeProject.edges,
+        groupMeta: currentMeta || activeProject.groupMeta,
+      });
+
+      const updatedList = projects.map((p) =>
+        p.id === activeProject.id ? updatedProject : p
+      );
+
+      setProjects(updatedList);
+      saveAllProjects(updatedList);
+      return newVersion;
+    },
+    [activeProject, projects]
+  );
+
+  const handleRestoreVersion = useCallback(
+    (
+      versionId: string,
+      onRestored?: (restoredProject: FlowchartProject) => void
+    ) => {
+      if (!activeProject) return;
+
+      const restored = restoreProjectVersion(activeProject, versionId);
+      const updatedList = projects.map((p) =>
+        p.id === activeProject.id ? restored : p
+      );
+
+      setProjects(updatedList);
+      saveAllProjects(updatedList);
+      onRestored?.(restored);
+    },
+    [activeProject, projects]
+  );
+
   return {
     projects,
     setProjects,
@@ -126,6 +183,7 @@ export function useProjectManager() {
     handleDuplicateProject,
     handleDeleteProject,
     syncActiveProject,
+    handleCreateVersionSnapshot,
+    handleRestoreVersion,
   };
 }
-

@@ -14,6 +14,7 @@ import {
   Clock,
   ArrowRight,
   HelpCircle,
+  History,
 } from 'lucide-react';
 import type { FlowchartProject } from '../../types/project';
 import { compileFlowToSchema } from '../../utils/schemaCompiler';
@@ -25,6 +26,7 @@ interface FlowchartListViewProps {
   onCreateNew: () => void;
   onDuplicateProject: (id: string) => void;
   onDeleteProject: (id: string) => void;
+  onOpenVersionHistory?: (project: FlowchartProject) => void;
 }
 
 export const FlowchartListView: React.FC<FlowchartListViewProps> = ({
@@ -34,6 +36,7 @@ export const FlowchartListView: React.FC<FlowchartListViewProps> = ({
   onCreateNew,
   onDuplicateProject,
   onDeleteProject,
+  onOpenVersionHistory,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'published' | 'draft'>('all');
@@ -218,6 +221,9 @@ export const FlowchartListView: React.FC<FlowchartListViewProps> = ({
                       </>
                     )}
                   </span>
+                  <span className="version-pill-tag">
+                    v{p.currentVersion || '1.0.0'}
+                  </span>
                   {isActive && (
                     <span className="current-badge">
                       <Sparkles size={11} />
@@ -227,6 +233,15 @@ export const FlowchartListView: React.FC<FlowchartListViewProps> = ({
                 </div>
 
                 <div className="card-actions-quick" onClick={(e) => e.stopPropagation()}>
+                  {onOpenVersionHistory && (
+                    <button
+                      className="quick-icon-btn"
+                      title="View Version History & Releases"
+                      onClick={() => onOpenVersionHistory(p)}
+                    >
+                      <History size={14} />
+                    </button>
+                  )}
                   <button
                     className="quick-icon-btn"
                     title="Export JSON"

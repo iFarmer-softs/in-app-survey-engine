@@ -30,6 +30,8 @@ import { JsonExportModal } from './components/modals/JsonExportModal';
 import { MobilePreviewModal } from './components/modals/MobilePreviewModal';
 import { FlowDiagnosticsModal } from './components/modals/FlowDiagnosticsModal';
 import { WarningAlertModal } from './components/modals/WarningAlertModal';
+import { CreateVersionModal } from './components/modals/CreateVersionModal';
+import { VersionHistoryModal } from './components/modals/VersionHistoryModal';
 import { CustomFlowchartEdge } from './components/edges/CustomFlowchartEdge';
 
 import { QuestionNode } from './components/nodes/QuestionNode';
@@ -97,6 +99,11 @@ const FlowEditor: React.FC = () => {
   const [isJsonModalOpen, setIsJsonModalOpen] = useState(false);
   const [isMobileModalOpen, setIsMobileModalOpen] = useState(false);
   const [isDiagnosticsModalOpen, setIsDiagnosticsModalOpen] = useState(false);
+  const [isCreateVersionModalOpen, setIsCreateVersionModalOpen] = useState(false);
+  const [isInitialPublishMode, setIsInitialPublishMode] = useState(false);
+  const [isVersionHistoryModalOpen, setIsVersionHistoryModalOpen] = useState(false);
+  const [versionHistoryTargetProject, setVersionHistoryTargetProject] = useState<any | null>(null);
+  const [versionPreviewCustomSchema, setVersionPreviewCustomSchema] = useState<DynamicKycGroupResponse | null>(null);
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
@@ -204,6 +211,8 @@ const FlowEditor: React.FC = () => {
     handleDuplicateProject,
     handleDeleteProject,
     syncActiveProject,
+    handleCreateVersionSnapshot,
+    handleRestoreVersion,
   } = useProjectManager();
 
   // 2. React Flow canvas nodes and edges state
@@ -329,6 +338,41 @@ const FlowEditor: React.FC = () => {
     [createProjectAction, setNodes, setEdges, fitView]
   );
 
+  // Version Control Handlers
+  const handleExecuteCreateSnapshot = useCallback(
+    (params: {
+      version: string;
+      title: string;
+      description: string;
+      isPublished: boolean;
+      createdBy: string;
+    }) => {
+      handleCreateVersionSnapshot(params, nodes, edges, groupMeta);
+    },
+    [handleCreateVersionSnapshot, nodes, edges, groupMeta]
+  );
+
+  const handleExecuteRestoreSnapshot = useCallback(
+    (versionId: string) => {
+      handleRestoreVersion(versionId, (restored) => {
+        setNodes(restored.nodes);
+        setEdges(restored.edges);
+        setGroupMeta(restored.groupMeta);
+        setTimeout(() => fitView({ padding: 0.2, duration: 400 }), 150);
+      });
+    },
+    [handleRestoreVersion, setNodes, setEdges, fitView]
+  );
+
+  const handleOpenMobilePreviewFromVersion = useCallback(
+    (vNodes: Node[], vEdges: Edge[], vMeta: any) => {
+      const compiled = compileFlowToSchema(vNodes, vEdges, vMeta);
+      setVersionPreviewCustomSchema(compiled);
+      setIsMobileModalOpen(true);
+    },
+    []
+  );
+
   // Memoized custom node types with active callbacks
   const nodeTypes = useMemo(
     () => ({
@@ -341,8 +385,18 @@ const FlowEditor: React.FC = () => {
           onDeleteGroup={handleDeleteGroupContainer}
         />
       ),
+      groupFrame: (props: any) => (
+        <GroupFrameNode
+          {...props}
+          onDeleteFrame={handleDeleteGroupContainer}
+        />
+      ),
     }),
-    [handleToggleGroupCollapse, handleUngroup, handleDeleteGroupContainer]
+    [
+      handleToggleGroupCollapse,
+      handleUngroup,
+      handleDeleteGroupContainer,
+    ]
   );
 
   // Derived selected question nodes for "Save Selection as Group"
@@ -951,18 +1005,56 @@ const FlowEditor: React.FC = () => {
     []
   );
 
-  // Delete Node
+  // Delete Node (Cascades to all children if node is a Group Container or Group Frame)
   const handleDeleteNode = useCallback(
     (nodeId: string) => {
-      setNodes((nds) => nds.filter((n) => n.id !== nodeId));
+      const targetNode = nodes.find((n) => n.id === nodeId);
+      const toDelete = new Set<string>([nodeId]);
+
+      if (
+        targetNode &&
+        (targetNode.type === 'groupContainer' || targetNode.type === 'groupFrame')
+      ) {
+        const childIds: string[] = (targetNode.data as any)?.questionIds || [];
+        childIds.forEach((cid) => toDelete.add(cid));
+
+        const frameWidth =
+          Number(targetNode.style?.width) || (targetNode.data as any)?.width || 440;
+        const frameHeight =
+          Number(targetNode.style?.height) || (targetNode.data as any)?.height || 480;
+        const fx = targetNode.position.x;
+        const fy = targetNode.position.y;
+
+        nodes.forEach((n) => {
+          if (n.id !== nodeId) {
+            if ((n.data as any)?.containerId === nodeId) {
+              toDelete.add(n.id);
+            } else if (
+              n.position.x >= fx - 10 &&
+              n.position.x <= fx + frameWidth + 10 &&
+              n.position.y >= fy - 10 &&
+              n.position.y <= fy + frameHeight + 10
+            ) {
+              toDelete.add(n.id);
+            }
+          }
+        });
+      }
+
+      setNodes((nds) => nds.filter((n) => !toDelete.has(n.id)));
       setEdges((eds) =>
-        eds.filter((e) => e.source !== nodeId && e.target !== nodeId)
+        eds.filter(
+          (e) =>
+            !toDelete.has(e.source) &&
+            !toDelete.has(e.target) &&
+            (e.data as any)?.containerId !== nodeId
+        )
       );
-      if (selectedNodeId === nodeId) {
+      if (selectedNodeId && toDelete.has(selectedNodeId)) {
         setSelectedNodeId(null);
       }
     },
-    [selectedNodeId, setNodes, setEdges]
+    [nodes, selectedNodeId, setNodes, setEdges]
   );
 
   // Duplicate Node
@@ -1257,6 +1349,10 @@ const FlowEditor: React.FC = () => {
             onCreateNew={() => setIsCreateModalOpen(true)}
             onDuplicateProject={handleDuplicateProject}
             onDeleteProject={(id) => handleDeleteProject(id, handleSelectProject)}
+            onOpenVersionHistory={(proj) => {
+              setVersionHistoryTargetProject(proj);
+              setIsVersionHistoryModalOpen(true);
+            }}
           />
         ) : activeView === 'groups' ? (
           <QuestionGroupListView
@@ -1288,9 +1384,14 @@ const FlowEditor: React.FC = () => {
             ) : (
               <Header
                 projectTitle={activeProject?.title}
+                currentVersion={activeProject?.currentVersion || '1.0.0'}
+                versionStatus={activeProject?.status || 'draft'}
                 groupMeta={groupMeta}
                 onOpenJsonModal={() => setIsJsonModalOpen(true)}
-                onOpenMobileModal={() => setIsMobileModalOpen(true)}
+                onOpenMobileModal={() => {
+                  setVersionPreviewCustomSchema(null);
+                  setIsMobileModalOpen(true);
+                }}
                 onResetSample={handleResetSample}
                 onAutoLayout={handleAutoLayout}
                 onBackToList={() => {
@@ -1306,6 +1407,18 @@ const FlowEditor: React.FC = () => {
                 onChangeEdgeRouting={handleChangeEdgeRouting}
                 onAlignHorizontal={handleAlignHorizontal}
                 onAlignVertical={handleAlignVertical}
+                onOpenVersionHistory={() => {
+                  setVersionHistoryTargetProject(activeProject);
+                  setIsVersionHistoryModalOpen(true);
+                }}
+                onOpenCreateSnapshot={() => {
+                  setIsInitialPublishMode(false);
+                  setIsCreateVersionModalOpen(true);
+                }}
+                onPublishVersion={() => {
+                  setIsInitialPublishMode(true);
+                  setIsCreateVersionModalOpen(true);
+                }}
               />
             )}
 
@@ -1561,8 +1674,11 @@ const FlowEditor: React.FC = () => {
 
       <MobilePreviewModal
         isOpen={isMobileModalOpen}
-        onClose={() => setIsMobileModalOpen(false)}
-        schema={currentCompiledSchema}
+        onClose={() => {
+          setIsMobileModalOpen(false);
+          setVersionPreviewCustomSchema(null);
+        }}
+        schema={versionPreviewCustomSchema || currentCompiledSchema}
       />
 
       <FlowDiagnosticsModal
@@ -1571,6 +1687,33 @@ const FlowEditor: React.FC = () => {
         diagnostics={diagnostics}
         onSelectNode={handleFocusDiagnosticNode}
       />
+
+      <CreateVersionModal
+        isOpen={isCreateVersionModalOpen}
+        onClose={() => setIsCreateVersionModalOpen(false)}
+        currentVersion={activeProject?.currentVersion || '1.0.0'}
+        isInitialPublish={isInitialPublishMode}
+        onSubmit={handleExecuteCreateSnapshot}
+      />
+
+      {versionHistoryTargetProject && (
+        <VersionHistoryModal
+          isOpen={isVersionHistoryModalOpen}
+          onClose={() => {
+            setIsVersionHistoryModalOpen(false);
+            setVersionHistoryTargetProject(null);
+          }}
+          project={versionHistoryTargetProject}
+          currentNodes={nodes}
+          currentEdges={edges}
+          onRestoreVersion={handleExecuteRestoreSnapshot}
+          onOpenMobilePreview={handleOpenMobilePreviewFromVersion}
+          onOpenCreateVersion={() => {
+            setIsInitialPublishMode(false);
+            setIsCreateVersionModalOpen(true);
+          }}
+        />
+      )}
 
       <WarningAlertModal
         isOpen={Boolean(warningAlertData)}

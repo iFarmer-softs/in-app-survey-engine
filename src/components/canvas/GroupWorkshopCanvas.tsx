@@ -15,7 +15,6 @@ import type { Node, Edge, Connection, NodeChange } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import {
   Layers,
-  Plus,
   Trash2,
   ChevronDown,
   ChevronUp,
@@ -23,6 +22,7 @@ import {
   Send,
   BoxSelect,
   Crop,
+  SlidersHorizontal,
 } from 'lucide-react';
 import type { FlowNodeType, AnswerType } from '../../types/survey';
 import type {
@@ -128,6 +128,25 @@ const WorkshopFlowCanvasInner: React.FC<GroupWorkshopCanvasProps> = ({
   const [numericGroupId, setNumericGroupId] = useState<number>(2);
   const [category, setCategory] = useState<GroupCategory>('land');
   const [color, setColor] = useState('#10b981');
+  const [isConfigOpen, setIsConfigOpen] = useState(false);
+  const configDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        configDropdownRef.current &&
+        !configDropdownRef.current.contains(e.target as unknown as globalThis.Node)
+      ) {
+        setIsConfigOpen(false);
+      }
+    };
+    if (isConfigOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isConfigOpen]);
 
   // Initial group frame area node
   const initialFrameNode: Node = useMemo(
@@ -153,13 +172,49 @@ const WorkshopFlowCanvasInner: React.FC<GroupWorkshopCanvasProps> = ({
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([initialFrameNode]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
-  // Synchronized Frame Dragging: moving a frame moves its child questions
+  // Synchronized Frame Dragging & Cascading Deletion: moving/deleting a frame moves/deletes its child questions
   const handleNodesChange = useCallback(
     (changes: NodeChange[]) => {
       const extraChanges: NodeChange[] = [];
+      const removedChildIds = new Set<string>();
+      const removedFrameIds = new Set<string>();
 
       changes.forEach((change) => {
-        if (change.type === 'position' && change.position) {
+        if (change.type === 'remove') {
+          const node = nodes.find((n) => n.id === change.id);
+          if (node && (node.type === 'groupFrame' || node.type === 'groupContainer')) {
+            removedFrameIds.add(node.id);
+            const childIds: string[] = (node.data as any)?.questionIds || [];
+            childIds.forEach((cid) => removedChildIds.add(cid));
+
+            const frameWidth = Number(node.style?.width) || (node.data as any)?.width || 440;
+            const frameHeight = Number(node.style?.height) || (node.data as any)?.height || 480;
+            const fx = node.position.x;
+            const fy = node.position.y;
+
+            nodes.forEach((n) => {
+              if (n.id !== node.id) {
+                if ((n.data as any)?.containerId === node.id) {
+                  removedChildIds.add(n.id);
+                } else if (
+                  n.position.x >= fx - 10 &&
+                  n.position.x <= fx + frameWidth + 10 &&
+                  n.position.y >= fy - 10 &&
+                  n.position.y <= fy + frameHeight + 10
+                ) {
+                  removedChildIds.add(n.id);
+                }
+              }
+            });
+
+            removedChildIds.forEach((childId) => {
+              extraChanges.push({
+                type: 'remove',
+                id: childId,
+              });
+            });
+          }
+        } else if (change.type === 'position' && change.position) {
           const node = nodes.find((n) => n.id === change.id);
           if (node && node.type === 'groupFrame') {
             const childNodes = nodes.filter(
@@ -187,9 +242,22 @@ const WorkshopFlowCanvasInner: React.FC<GroupWorkshopCanvasProps> = ({
         }
       });
 
+      if (removedChildIds.size > 0 || removedFrameIds.size > 0) {
+        setEdges((currentEdges) =>
+          currentEdges.filter(
+            (e) =>
+              !removedChildIds.has(e.source) &&
+              !removedChildIds.has(e.target) &&
+              !removedFrameIds.has(e.source) &&
+              !removedFrameIds.has(e.target) &&
+              !removedFrameIds.has((e.data as any)?.containerId)
+          )
+        );
+      }
+
       onNodesChange(extraChanges.length > 0 ? [...changes, ...extraChanges] : changes);
     },
-    [nodes, onNodesChange]
+    [nodes, onNodesChange, setEdges]
   );
 
   // Connect edges inside workshop
@@ -316,6 +384,64 @@ const WorkshopFlowCanvasInner: React.FC<GroupWorkshopCanvasProps> = ({
     onWorkshopEdgesChange?.(edges);
   }, [edges, onWorkshopEdgesChange]);
 
+  // Delete workshop node (cascades to all contained nodes if deleting a group frame)
+  const handleDeleteWorkshopNode = useCallback(
+    (nodeId: string) => {
+      const targetNode = nodes.find((n) => n.id === nodeId);
+      const toDelete = new Set<string>([nodeId]);
+
+      if (targetNode && (targetNode.type === 'groupFrame' || targetNode.type === 'groupContainer')) {
+        const childIds: string[] = (targetNode.data as any)?.questionIds || [];
+        childIds.forEach((cid) => toDelete.add(cid));
+
+        const frameWidth = Number(targetNode.style?.width) || (targetNode.data as any)?.width || 440;
+        const frameHeight = Number(targetNode.style?.height) || (targetNode.data as any)?.height || 480;
+        const fx = targetNode.position.x;
+        const fy = targetNode.position.y;
+
+        nodes.forEach((n) => {
+          if (n.id !== nodeId) {
+            if ((n.data as any)?.containerId === nodeId) {
+              toDelete.add(n.id);
+            } else if (
+              n.position.x >= fx - 10 &&
+              n.position.x <= fx + frameWidth + 10 &&
+              n.position.y >= fy - 10 &&
+              n.position.y <= fy + frameHeight + 10
+            ) {
+              toDelete.add(n.id);
+            }
+          }
+        });
+      }
+
+      setNodes((nds) => nds.filter((n) => !toDelete.has(n.id)));
+      setEdges((eds) =>
+        eds.filter(
+          (e) =>
+            !toDelete.has(e.source) &&
+            !toDelete.has(e.target) &&
+            (e.data as any)?.containerId !== nodeId
+        )
+      );
+      onSelectNode?.(null);
+    },
+    [nodes, onSelectNode, setNodes, setEdges]
+  );
+
+  const workshopNodeTypes = useMemo(
+    () => ({
+      ...nodeTypes,
+      groupFrame: (props: any) => (
+        <GroupFrameNode
+          {...props}
+          onDeleteFrame={handleDeleteWorkshopNode}
+        />
+      ),
+    }),
+    [handleDeleteWorkshopNode]
+  );
+
   // Register bridge for inspector updates
   useEffect(() => {
     if (!onRegisterBridge) return;
@@ -337,9 +463,7 @@ const WorkshopFlowCanvasInner: React.FC<GroupWorkshopCanvasProps> = ({
         );
       },
       deleteNode: (nodeId: string) => {
-        setNodes((nds) => nds.filter((n) => n.id !== nodeId));
-        setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId));
-        onSelectNode?.(null);
+        handleDeleteWorkshopNode(nodeId);
       },
       duplicateNode: (node: Node) => {
         const newNodeId = `w-copy-${Date.now().toString().slice(-4)}`;
@@ -1122,101 +1246,126 @@ const WorkshopFlowCanvasInner: React.FC<GroupWorkshopCanvasProps> = ({
         <div className="workshop-header-left">
           <div className="workshop-badge">
             <Layers size={14} className="text-emerald" />
-            <span className="workshop-title">Group Creation Workbench Canvas</span>
+            <span className="workshop-title">Group Workbench</span>
           </div>
 
           <span className="workshop-status-pill">
-            {nodes.filter((n) => n.type === 'question').length} Questions Drafted
+            {nodes.filter((n) => n.type === 'question').length} Questions
           </span>
 
           {isOpen && (
-            <div className="workshop-quick-form">
-              <input
-                type="text"
-                className="workshop-input bn-font"
-                placeholder="বাংলা নাম"
-                value={groupNameBn}
-                onChange={(e) => setGroupNameBn(e.target.value)}
-                title="Bengali Group Name"
-              />
+            <div className="workshop-quick-form" onClick={(e) => e.stopPropagation()}>
               <input
                 type="text"
                 className="workshop-input"
-                placeholder="English Name"
+                placeholder="Group Name"
                 value={groupName}
                 onChange={(e) => setGroupName(e.target.value)}
-                title="English Group Name"
+                title="Group English Name"
               />
-              <input
-                type="number"
-                className="workshop-input-num"
-                placeholder="ID"
-                value={numericGroupId}
-                onChange={(e) => setNumericGroupId(parseInt(e.target.value) || 1)}
-                title="Numeric Group ID"
-              />
-              <select
-                className="workshop-select"
-                value={category}
-                onChange={(e) => setCategory(e.target.value as GroupCategory)}
-                title="Category"
-              >
-                {CATEGORIES.map((c) => (
-                  <option key={c.value} value={c.value}>
-                    {c.label}
-                  </option>
-                ))}
-              </select>
 
-              <div className="workshop-swatches">
-                {SWATCHES.map((hex) => (
+              {/* Group Config Dropdown */}
+              <div className="workshop-config-container" ref={configDropdownRef}>
+                <button
+                  type="button"
+                  className="workshop-config-toggle-btn"
+                  onClick={() => setIsConfigOpen((prev) => !prev)}
+                  title="Configure Group ID, Bengali Name, Category & Color"
+                >
                   <span
-                    key={hex}
-                    className={`workshop-swatch ${color === hex ? 'is-active' : ''}`}
-                    style={{ backgroundColor: hex }}
-                    onClick={() => setColor(hex)}
+                    className="config-color-indicator"
+                    style={{ backgroundColor: color }}
                   />
-                ))}
+                  <span>ID: {numericGroupId}</span>
+                  <SlidersHorizontal size={11} className="text-muted" />
+                </button>
+
+                {isConfigOpen && (
+                  <div className="workshop-config-popover animate-in">
+                    <div className="config-popover-title">Group Configuration</div>
+
+                    <div className="config-form-field">
+                      <label>Bengali Name (বাংলা নাম)</label>
+                      <input
+                        type="text"
+                        className="workshop-input bn-font"
+                        placeholder="বাংলা নাম"
+                        value={groupNameBn}
+                        onChange={(e) => setGroupNameBn(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="config-form-row">
+                      <div className="config-form-field">
+                        <label>Group ID</label>
+                        <input
+                          type="number"
+                          className="workshop-input-num"
+                          value={numericGroupId}
+                          onChange={(e) => setNumericGroupId(parseInt(e.target.value) || 1)}
+                        />
+                      </div>
+
+                      <div className="config-form-field flex-1">
+                        <label>Category</label>
+                        <select
+                          className="workshop-select"
+                          value={category}
+                          onChange={(e) => setCategory(e.target.value as GroupCategory)}
+                        >
+                          {CATEGORIES.map((c) => (
+                            <option key={c.value} value={c.value}>
+                              {c.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="config-form-field">
+                      <label>Accent Color</label>
+                      <div className="workshop-swatches">
+                        {SWATCHES.map((hex) => (
+                          <span
+                            key={hex}
+                            className={`workshop-swatch ${color === hex ? 'is-active' : ''}`}
+                            style={{ backgroundColor: hex }}
+                            onClick={() => setColor(hex)}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
         </div>
 
-        <div className="workshop-header-right">
+        <div className="workshop-header-right" onClick={(e) => e.stopPropagation()}>
           {isOpen && (
             <>
-              <button
-                type="button"
-                className={`btn-workshop-action ${isMarqueeMode ? 'is-active text-emerald' : ''}`}
-                onClick={() => setIsMarqueeMode((prev) => !prev)}
-                title="Draw Area Frame: Drag a marquee box on canvas to create group frame (Shortcut: F or Shift+Drag)"
-                style={isMarqueeMode ? { borderColor: 'var(--emerald)', background: 'rgba(16, 185, 129, 0.15)', color: 'var(--emerald)', fontWeight: 700 } : undefined}
-              >
-                <Crop size={12} />
-                <span>{isMarqueeMode ? 'Drawing Area...' : 'Draw Area [F]'}</span>
-              </button>
-
               {nodes.some((n) => n.selected && n.type !== 'groupFrame') && (
                 <button
                   type="button"
                   className="btn-workshop-action text-emerald"
                   onClick={handleGroupSelectionIntoFrame}
                   title="Wrap selected questions into a Group Area Frame (Ctrl+G)"
-                  style={{ borderColor: 'var(--emerald)', background: 'rgba(16, 185, 129, 0.12)', fontWeight: 700 }}
                 >
                   <BoxSelect size={12} />
-                  <span>Group Selected (Ctrl+G)</span>
+                  <span>Group Selected</span>
                 </button>
               )}
 
               <button
                 type="button"
-                className="btn-workshop-action"
-                onClick={handleAddGroupArea}
-                title="Draw / Place an additional Group Area Frame"
+                className={`btn-workshop-action ${isMarqueeMode ? 'is-active text-emerald' : ''}`}
+                onClick={() => setIsMarqueeMode((prev) => !prev)}
+                title="Draw Area Frame: Drag a box on canvas (Shortcut: F or Shift+Drag)"
+                style={isMarqueeMode ? { borderColor: 'var(--emerald)', background: 'rgba(16, 185, 129, 0.15)', color: 'var(--emerald)', fontWeight: 700 } : undefined}
               >
-                <Plus size={12} />
-                <span>+ Group Area</span>
+                <Crop size={12} />
+                <span>{isMarqueeMode ? 'Drawing...' : 'Draw Area'}</span>
               </button>
 
               <button
@@ -1245,7 +1394,7 @@ const WorkshopFlowCanvasInner: React.FC<GroupWorkshopCanvasProps> = ({
                 title="Package and deploy this group onto the main survey flow"
               >
                 <Send size={12} />
-                <span>Deploy to Main Survey</span>
+                <span>Deploy to Survey</span>
               </button>
             </>
           )}
@@ -1330,7 +1479,7 @@ const WorkshopFlowCanvasInner: React.FC<GroupWorkshopCanvasProps> = ({
             onEdgeClick={onEdgeClick}
             onPaneClick={onPaneClick}
             panOnDrag={isMarqueeMode ? false : true}
-            nodeTypes={nodeTypes}
+            nodeTypes={workshopNodeTypes}
             edgeTypes={edgeTypes}
             defaultEdgeOptions={{
               type: 'surveyEdge',
