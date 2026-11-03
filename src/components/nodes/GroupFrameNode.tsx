@@ -32,9 +32,8 @@ export const GroupFrameNode = memo(({ id, data, selected, onDeleteFrame }: Group
 
   return (
     <div
-      className={`group-frame-boundary ${selected ? 'is-selected' : ''} ${
-        isDropTarget ? 'is-drop-active' : ''
-      }`}
+      className={`group-frame-boundary ${selected ? 'is-selected' : ''} ${isDropTarget ? 'is-drop-active' : ''
+        }`}
       style={{
         width: '100%',
         height: '100%',
@@ -45,8 +44,8 @@ export const GroupFrameNode = memo(({ id, data, selected, onDeleteFrame }: Group
         boxShadow: isDropTarget
           ? `0 0 0 3px rgba(16, 185, 129, 0.6), 0 8px 24px rgba(0, 0, 0, 0.5)`
           : selected
-          ? `0 0 0 2px #10b981, 0 8px 24px -4px rgba(0,0,0,0.5)`
-          : `0 4px 16px -2px rgba(0,0,0,0.3)`,
+            ? `0 0 0 2px #10b981, 0 8px 24px -4px rgba(0,0,0,0.5)`
+            : `0 4px 16px -2px rgba(0,0,0,0.3)`,
       }}
     >
       <NodeResizer
