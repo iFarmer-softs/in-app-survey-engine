@@ -2123,5 +2123,143 @@ assert.strictEqual(checkFramesOverlap({ x: 1069, y: 100, w: 440, h: 480 }, obsta
 
 console.log('   ✅ Free Transit Dragging & Smart Auto-Nudge Non-Overlap on Release operating with 100% precision.');
 
-console.log('\n🎉 ALL TESTS PASSED SUCCESSFULLY! (25/25 test suites passed)\n');
+// 26. NestJS Backend Modules & Schema Compiler Engine Tests
+console.log('2️⃣6️⃣ Testing NestJS Backend Server Services (Projects, Groups, Compiler & Storage)...');
+
+// 26A: StorageService initialization and seed integrity
+const { StorageService } = await import('../../server/src/storage/storage.service.js');
+const { ProjectsService } = await import('../../server/src/projects/projects.service.js');
+const { GroupsService } = await import('../../server/src/groups/groups.service.js');
+const { CompilerService } = await import('../../server/src/compiler/compiler.service.js');
+
+const testStorage = new StorageService();
+testStorage.onModuleInit();
+const allProjects = testStorage.getAllProjects();
+assert.ok(allProjects.length >= 1, 'Projects list must contain seeded projects');
+
+const allGroups = testStorage.getAllGroups();
+assert.ok(allGroups.length >= 4, 'Groups list must contain default question groups');
+
+// 26B: ProjectsService CRUD & Version Snapshotting
+const mockDbService = {
+  isPostgresConnected: () => false,
+  getProjectsRepo: () => null,
+  getGroupsRepo: () => null,
+  getStatusInfo: () => ({ connected: false, type: 'file-fallback' }),
+};
+const projService = new ProjectsService(testStorage, mockDbService as any);
+const createdProj = await projService.create({
+  title: 'NestJS Test Survey Flow',
+  titleBn: 'নেস্ট জেএস টেস্ট জরিপ',
+  description: 'Automated test flowchart managed by NestJS backend.',
+  totalGroups: 2,
+});
+assert.strictEqual(createdProj.title, 'NestJS Test Survey Flow');
+assert.strictEqual(createdProj.currentVersion, '0.1.0');
+assert.strictEqual(createdProj.versions.length, 1);
+
+// Update project
+const updatedProj = await projService.update(createdProj.id, {
+  title: 'NestJS Test Survey Flow (Updated)',
+});
+assert.strictEqual(updatedProj.title, 'NestJS Test Survey Flow (Updated)');
+
+// Create version snapshot on server
+const { updatedProject: versionedProj, newVersion: serverVer } = await projService.createVersion(
+  createdProj.id,
+  {
+    version: '1.0.0',
+    title: 'V1.0 Production Release Snapshot',
+    isPublished: true,
+  }
+);
+assert.strictEqual(versionedProj.currentVersion, '1.0.0');
+assert.strictEqual(versionedProj.status, 'published');
+assert.strictEqual(serverVer.version, '1.0.0');
+
+// Restore version
+const restoredProj = await projService.restoreVersion(createdProj.id, createdProj.versions[0].id);
+assert.strictEqual(restoredProj.currentVersion, '0.1.0', 'Must restore to baseline version');
+
+// Delete test project
+await projService.delete(createdProj.id);
+await assert.rejects(async () => await projService.findOne(createdProj.id), /not found/, 'Deleted project must no longer exist');
+
+// 26C: GroupsService CRUD
+const grpService = new GroupsService(testStorage, mockDbService as any);
+const createdGrp = await grpService.create({
+  name: 'Livestock Health Survey',
+  nameBn: 'গবাদিপশু স্বাস্থ্য তথ্য',
+  category: 'custom',
+  color: '#8b5cf6',
+  questions: [
+    {
+      question: 'Vaccination completed?',
+      question_bn: 'টিকা দেওয়া হয়েছে কি?',
+      answer_type: 'select_one',
+      mandatory: true,
+    },
+  ],
+});
+assert.strictEqual(createdGrp.name, 'Livestock Health Survey');
+assert.strictEqual(createdGrp.questions.length, 1);
+
+// Clean up test group
+await grpService.delete(createdGrp.id);
+
+// 26D: CompilerService Dynamic KYC Compilation & Diagnostics
+const compilerService = new CompilerService();
+const compiledKyc = compilerService.compile({
+  nodes: [
+    {
+      id: 'q-nest-1',
+      type: 'question',
+      position: { x: 100, y: 100 },
+      data: { question_id: 201, question: 'Farmer Annual Income', answer_type: 'integer', group: 1 },
+    },
+    {
+      id: 'q-nest-2',
+      type: 'question',
+      position: { x: 100, y: 250 },
+      data: { question_id: 202, question: 'Income Source', answer_type: 'dropdown', group: 1 },
+    },
+  ],
+  edges: [
+    {
+      id: 'e-201-202',
+      source: 'q-nest-1',
+      target: 'q-nest-2',
+      label: '> 50000',
+    },
+  ],
+  groupMeta: {
+    groupNumber: 1,
+    totalGroups: 2,
+    hasNextGroup: true,
+    instruction: 'Income assessment section',
+    groupJumps: [],
+  },
+});
+
+assert.strictEqual(compiledKyc.total_groups, 2);
+assert.strictEqual(compiledKyc.data.length, 2);
+assert.strictEqual(compiledKyc.data[1].question_id, 202);
+assert.deepStrictEqual(compiledKyc.data[1].depends_on, [201]);
+assert.ok(compiledKyc.data[1].validation?.['201']);
+assert.strictEqual(compiledKyc.data[1].validation['201'].validation, '> 50000');
+
+// Diagnostics validation
+const nestDiagnostics = compilerService.validate({
+  nodes: [
+    { id: 'start-1', type: 'start' },
+    { id: 'q-1', type: 'question', data: { question: 'Q1' } },
+  ],
+  edges: [{ id: 'e1', source: 'start-1', target: 'q-1' }],
+});
+assert.strictEqual(nestDiagnostics.summary.totalNodes, 2);
+assert.strictEqual(nestDiagnostics.summary.totalQuestions, 1);
+
+console.log('   ✅ NestJS Backend Server Services (Projects, Groups, Compiler & Storage) operating with 100% precision.');
+
+console.log('\n🎉 ALL TESTS PASSED SUCCESSFULLY! (26/26 test suites passed)\n');
 

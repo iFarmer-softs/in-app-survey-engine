@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import type { Node, Edge } from '@xyflow/react';
 import type { FlowchartProject, FlowchartVersion } from '../types/project';
 import type { GroupMeta } from '../utils/schemaCompiler';
@@ -13,6 +13,7 @@ import {
   restoreProjectVersion,
   ensureProjectVersions,
 } from '../utils/projectStorage';
+import { apiClient } from '../services/api';
 
 export function useProjectManager() {
   const [projects, setProjects] = useState<FlowchartProject[]>(() =>
@@ -21,15 +22,62 @@ export function useProjectManager() {
   const [activeProjectId, setActiveProjectIdState] = useState<string>(() =>
     getActiveProjectId(projects)
   );
+  const [isServerConnected, setIsServerConnected] = useState<boolean>(false);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+
+  // Check NestJS Server connectivity & load remote projects on mount
+  useEffect(() => {
+    let isMounted = true;
+
+    async function checkAndSync() {
+      try {
+        const isHealthy = await apiClient.checkHealth();
+        if (!isMounted) return;
+        setIsServerConnected(isHealthy);
+
+        if (isHealthy) {
+          const remoteProjects = await apiClient.getProjects();
+          if (isMounted && remoteProjects && remoteProjects.length > 0) {
+            setProjects(remoteProjects);
+            saveAllProjects(remoteProjects);
+          }
+        }
+      } catch {
+        if (isMounted) {
+          setIsServerConnected(false);
+        }
+      }
+    }
+
+    checkAndSync();
+    const interval = setInterval(checkAndSync, 15000); // Check every 15s
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, []);
 
   const activeProject = useMemo(() => {
     const found = projects.find((p) => p.id === activeProjectId) || projects[0];
     return found ? ensureProjectVersions(found) : found;
   }, [projects, activeProjectId]);
 
-  const refreshProjects = useCallback(() => {
+  const refreshProjects = useCallback(async () => {
+    if (isServerConnected) {
+      try {
+        const remote = await apiClient.getProjects();
+        if (remote && remote.length > 0) {
+          setProjects(remote);
+          saveAllProjects(remote);
+          return;
+        }
+      } catch (err) {
+        console.warn('Failed to refresh from NestJS server, falling back to local storage', err);
+      }
+    }
     setProjects(loadAllProjects());
-  }, []);
+  }, [isServerConnected]);
 
   const handleSelectProject = useCallback(
     (id: string, onLoaded?: (target: FlowchartProject) => void) => {
@@ -45,7 +93,7 @@ export function useProjectManager() {
   );
 
   const handleCreateNewProject = useCallback(
-    (
+    async (
       title: string,
       titleBn: string,
       description: string,
@@ -60,12 +108,28 @@ export function useProjectManager() {
       setActiveProjectIdState(newProj.id);
       persistActiveProjectId(newProj.id);
       onLoaded?.(newProj);
+
+      if (isServerConnected) {
+        try {
+          await apiClient.createProject({
+            title: newProj.title,
+            titleBn: newProj.titleBn,
+            description: newProj.description,
+            totalGroups: newProj.groupMeta?.totalGroups || 1,
+            nodes: newProj.nodes,
+            edges: newProj.edges,
+            groupMeta: newProj.groupMeta,
+          });
+        } catch (err) {
+          console.error('Failed to create project on NestJS server:', err);
+        }
+      }
     },
-    [projects]
+    [projects, isServerConnected]
   );
 
   const handleDuplicateProject = useCallback(
-    (id: string) => {
+    async (id: string) => {
       const source = projects.find((p) => p.id === id);
       if (!source) return;
 
@@ -73,12 +137,20 @@ export function useProjectManager() {
       const updated = [cloned, ...projects];
       setProjects(updated);
       saveAllProjects(updated);
+
+      if (isServerConnected) {
+        try {
+          await apiClient.duplicateProject(id);
+        } catch (err) {
+          console.error('Failed to duplicate project on NestJS server:', err);
+        }
+      }
     },
-    [projects]
+    [projects, isServerConnected]
   );
 
   const handleDeleteProject = useCallback(
-    (id: string, onSelectFallback?: (nextId: string) => void) => {
+    async (id: string, onSelectFallback?: (nextId: string) => void) => {
       if (projects.length <= 1) {
         alert('You must keep at least one flowchart in your workspace.');
         return;
@@ -94,8 +166,16 @@ export function useProjectManager() {
           onSelectFallback?.(next.id);
         }
       }
+
+      if (isServerConnected) {
+        try {
+          await apiClient.deleteProject(id);
+        } catch (err) {
+          console.error('Failed to delete project on NestJS server:', err);
+        }
+      }
     },
-    [projects, activeProjectId]
+    [projects, activeProjectId, isServerConnected]
   );
 
   const syncActiveProject = useCallback(
@@ -116,8 +196,25 @@ export function useProjectManager() {
         return p;
       });
       saveAllProjects(updated);
+
+      // Asynchronously sync to NestJS server in background
+      if (isServerConnected && activeProject.id) {
+        setIsSyncing(true);
+        apiClient
+          .updateProject(activeProject.id, {
+            nodes,
+            edges,
+            groupMeta,
+          })
+          .catch((err) => {
+            console.warn('Background NestJS project sync warning:', err);
+          })
+          .finally(() => {
+            setIsSyncing(false);
+          });
+      }
     },
-    [activeProject]
+    [activeProject, isServerConnected]
   );
 
   const handleCreateVersionSnapshot = useCallback(
@@ -148,13 +245,31 @@ export function useProjectManager() {
 
       setProjects(updatedList);
       saveAllProjects(updatedList);
+
+      if (isServerConnected) {
+        apiClient
+          .createVersion(activeProject.id, {
+            version: options.version,
+            title: options.title,
+            description: options.description,
+            isPublished: options.isPublished,
+            createdBy: options.createdBy,
+            nodes: currentNodes || activeProject.nodes,
+            edges: currentEdges || activeProject.edges,
+            groupMeta: currentMeta || activeProject.groupMeta,
+          })
+          .catch((err) => {
+            console.error('Failed to save version to NestJS server:', err);
+          });
+      }
+
       return newVersion;
     },
-    [activeProject, projects]
+    [activeProject, projects, isServerConnected]
   );
 
   const handleRestoreVersion = useCallback(
-    (
+    async (
       versionId: string,
       onRestored?: (restoredProject: FlowchartProject) => void
     ) => {
@@ -168,8 +283,16 @@ export function useProjectManager() {
       setProjects(updatedList);
       saveAllProjects(updatedList);
       onRestored?.(restored);
+
+      if (isServerConnected) {
+        try {
+          await apiClient.restoreVersion(activeProject.id, versionId);
+        } catch (err) {
+          console.error('Failed to restore version on NestJS server:', err);
+        }
+      }
     },
-    [activeProject, projects]
+    [activeProject, projects, isServerConnected]
   );
 
   return {
@@ -185,5 +308,7 @@ export function useProjectManager() {
     syncActiveProject,
     handleCreateVersionSnapshot,
     handleRestoreVersion,
+    isServerConnected,
+    isSyncing,
   };
 }

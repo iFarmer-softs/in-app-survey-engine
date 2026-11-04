@@ -1,0 +1,134 @@
+[
+  {
+    "id": "grp-kyc-basic",
+    "groupId": 1,
+    "name": "Farmer Identity & KYC",
+    "nameBn": "কৃষকের পরিচয় ও কেওয়াইসি (KYC)",
+    "description": "Core farmer biometric, identity, and contact verification questions.",
+    "category": "kyc",
+    "color": "#0284c7",
+    "createdAt": "2026-11-04T12:46:47.766Z",
+    "updatedAt": "2026-11-04T12:46:47.766Z",
+    "questions": [
+      {
+        "question": "Farmer Full Name",
+        "question_bn": "কৃষকের পূর্ণ নাম",
+        "answer_type": "string",
+        "mandatory": true,
+        "placeholder": "জাতীয় পরিচয়পত্র অনুযায়ী নাম লিখুন",
+        "hint": "NID অনুযায়ী সঠিক বানান লিখুন"
+      },
+      {
+        "question": "Mobile Phone Number",
+        "question_bn": "মোবাইল ফোন নম্বর",
+        "answer_type": "phone",
+        "mandatory": true,
+        "placeholder": "০১৭১XXXXXXX",
+        "hint": "১১ ডিজিটের সক্রিয় নম্বর লিখুন"
+      },
+      {
+        "question": "National ID (NID) Number",
+        "question_bn": "জাতীয় পরিচয়পত্র নম্বর (NID)",
+        "answer_type": "string",
+        "mandatory": true,
+        "placeholder": "১০ বা ১৭ সংখ্যার নম্বর"
+      },
+      {
+        "question": "Farmer Profile Photo",
+        "question_bn": "কৃষকের ছবি",
+        "answer_type": "image",
+        "mandatory": false,
+        "hint": "ক্যামেরা দিয়ে সরাসরি ছবি তুলুন"
+      }
+    ]
+  },
+  {
+    "id": "grp-land-cultivation",
+    "groupId": 2,
+    "name": "Land & Cultivation Assessment",
+    "nameBn": "আবাদি জমি ও চাষাবাদ তথ্য",
+    "description": "Landholding size, ownership structure, and plot details.",
+    "category": "land",
+    "color": "#10b981",
+    "createdAt": "2026-11-04T12:46:47.766Z",
+    "updatedAt": "2026-11-04T12:46:47.766Z",
+    "questions": [
+      {
+        "question": "Do you own cultivating land?",
+        "question_bn": "আপনার কি নিজস্ব আবাদি জমি আছে?",
+        "answer_type": "select_one",
+        "mandatory": true,
+        "options": "হ্যাঁ (Yes), না (No)"
+      },
+      {
+        "question": "Total Land Size (Decimals)",
+        "question_bn": "মোট আবাদযোগ্য জমির পরিমাণ (শতাংশ)",
+        "answer_type": "integer",
+        "mandatory": true,
+        "placeholder": "যেমন: ৫০",
+        "hint": "শতাংশে মোট পরিমাণ লিখুন"
+      },
+      {
+        "question": "Land Ownership Type",
+        "question_bn": "জমির মালিকানার ধরন",
+        "answer_type": "dropdown",
+        "mandatory": true,
+        "options": "নিজস্ব, বর্গা, লিজকৃত, যৌথ মালিকানা"
+      }
+    ]
+  },
+  {
+    "id": "grp-crop-production",
+    "groupId": 3,
+    "name": "Crop & Production Details",
+    "nameBn": "ফসল উৎপাদন ও মৌসুম তথ্য",
+    "description": "Crop variety, harvest forecast, and cultivation cycle.",
+    "category": "crop",
+    "color": "#f59e0b",
+    "createdAt": "2026-11-04T12:46:47.766Z",
+    "updatedAt": "2026-11-04T12:46:47.766Z",
+    "questions": [
+      {
+        "question": "Primary Crop Variety",
+        "question_bn": "প্রধান ফসলের ধরন",
+        "answer_type": "dropdown",
+        "mandatory": true,
+        "options": "আমন ধান, বোরো ধান, ভুট্টা, আলু, পেঁয়াজ, সবজি, মাছ চাষ"
+      },
+      {
+        "question": "Expected Yield (Maund)",
+        "question_bn": "প্রত্যাশিত ফলন (মণ)",
+        "answer_type": "float",
+        "mandatory": true,
+        "placeholder": "যেমন: ৮০.৫"
+      }
+    ]
+  },
+  {
+    "id": "grp-cattle-dairy",
+    "groupId": 4,
+    "name": "Livestock & Dairy Assets",
+    "nameBn": "গবাদিপশু ও ডেইরি তথ্য",
+    "description": "Cattle headcount, breed information, and daily milk production.",
+    "category": "custom",
+    "color": "#8b5cf6",
+    "createdAt": "2026-11-04T12:46:47.766Z",
+    "updatedAt": "2026-11-04T12:46:47.766Z",
+    "questions": [
+      {
+        "question": "Number of Dairy Cows",
+        "question_bn": "দুধেল গরুর সংখ্যা",
+        "answer_type": "integer",
+        "mandatory": true,
+        "placeholder": "যেমন: ৪"
+      },
+      {
+        "question": "Daily Milk Production (Liters)",
+        "question_bn": "দৈনিক দুধের উৎপাদন (লিটার)",
+        "answer_type": "float",
+        "mandatory": false,
+        "placeholder": "যেমন: ১৫.০"
+      }
+    ]
+  }
+]

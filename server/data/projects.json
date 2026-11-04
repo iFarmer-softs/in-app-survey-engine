@@ -1,0 +1,184 @@
+[
+  {
+    "id": "proj-sofol-loan-kyc-v2",
+    "title": "Sofol Dynamic KYC - Farmer Loan V2",
+    "titleBn": "সফল ডায়নামিক কেওয়াইসি - কৃষক ঋণ যাচাই",
+    "description": "Comprehensive farmer KYC workflow with land ownership branching, farm income, crop categorization, and group transitions.",
+    "status": "published",
+    "currentVersion": "2.0.0",
+    "publishedVersionId": "ver-sofol-2-0-0",
+    "createdAt": "2026-10-21T12:46:47.766Z",
+    "updatedAt": "2026-11-04T12:46:47.766Z",
+    "groupMeta": {
+      "groupNumber": 1,
+      "totalGroups": 3,
+      "hasNextGroup": true,
+      "instruction": "Fill in farmer details and verify land ownership documentation.",
+      "groupJumps": [
+        {
+          "group_id": "2",
+          "group_title": "Farm Production & Soil"
+        },
+        {
+          "group_id": "3",
+          "group_title": "Disbursement & Guarantor"
+        }
+      ]
+    },
+    "nodes": [
+      {
+        "id": "start-1",
+        "type": "start",
+        "position": {
+          "x": 300,
+          "y": 50
+        },
+        "data": {
+          "label": "Start Survey",
+          "labelBn": "জরিপ শুরু"
+        }
+      },
+      {
+        "id": "q-101",
+        "type": "question",
+        "position": {
+          "x": 260,
+          "y": 160
+        },
+        "data": {
+          "question_id": 101,
+          "question": "Farmer Full Name",
+          "question_bn": "কৃষকের পূর্ণ নাম",
+          "answer_type": "string",
+          "mandatory": true,
+          "group": 1
+        }
+      },
+      {
+        "id": "dec-1",
+        "type": "decision",
+        "position": {
+          "x": 280,
+          "y": 280
+        },
+        "data": {
+          "label": "Do you own cultivating land?",
+          "condition": "Yes / No",
+          "target_question_id": 101
+        }
+      },
+      {
+        "id": "q-102",
+        "type": "question",
+        "position": {
+          "x": 120,
+          "y": 420
+        },
+        "data": {
+          "question_id": 102,
+          "question": "Total Land Size (Decimals)",
+          "question_bn": "মোট আবাদযোগ্য জমির পরিমাণ (শতাংশ)",
+          "answer_type": "integer",
+          "mandatory": true,
+          "group": 1
+        }
+      },
+      {
+        "id": "q-103",
+        "type": "question",
+        "position": {
+          "x": 440,
+          "y": 420
+        },
+        "data": {
+          "question_id": 103,
+          "question": "Land Lease Duration (Years)",
+          "question_bn": "লিজের মেয়াদ (বছর)",
+          "answer_type": "integer",
+          "mandatory": true,
+          "group": 1
+        }
+      },
+      {
+        "id": "end-1",
+        "type": "end",
+        "position": {
+          "x": 300,
+          "y": 560
+        },
+        "data": {
+          "label": "Submit Group 1",
+          "labelBn": "জমা দিন"
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-start-q101",
+        "source": "start-1",
+        "target": "q-101",
+        "type": "customFlowchart"
+      },
+      {
+        "id": "e-q101-dec1",
+        "source": "q-101",
+        "target": "dec-1",
+        "type": "customFlowchart"
+      },
+      {
+        "id": "e-dec1-q102",
+        "source": "dec-1",
+        "target": "q-102",
+        "sourceHandle": "left",
+        "targetHandle": "top",
+        "label": "Yes",
+        "type": "customFlowchart"
+      },
+      {
+        "id": "e-dec1-q103",
+        "source": "dec-1",
+        "target": "q-103",
+        "sourceHandle": "right",
+        "targetHandle": "top",
+        "label": "No",
+        "type": "customFlowchart"
+      },
+      {
+        "id": "e-q102-end",
+        "source": "q-102",
+        "target": "end-1",
+        "type": "customFlowchart"
+      },
+      {
+        "id": "e-q103-end",
+        "source": "q-103",
+        "target": "end-1",
+        "type": "customFlowchart"
+      }
+    ],
+    "versions": [
+      {
+        "id": "ver-sofol-2-0-0",
+        "version": "2.0.0",
+        "title": "V2 Production Release with Branching",
+        "description": "Comprehensive farmer KYC workflow with land ownership branching.",
+        "status": "published",
+        "createdAt": "2026-11-01T12:46:47.766Z",
+        "createdBy": "iFarmer Credit Team",
+        "nodeCount": 6,
+        "edgeCount": 6,
+        "questionCount": 3,
+        "groupCount": 1,
+        "nodes": [],
+        "edges": [],
+        "groupMeta": {
+          "groupNumber": 1,
+          "totalGroups": 3,
+          "hasNextGroup": true,
+          "instruction": "Fill in farmer details and verify land ownership documentation.",
+          "groupJumps": []
+        }
+      }
+    ]
+  }
+]

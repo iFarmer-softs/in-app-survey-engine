@@ -27,6 +27,7 @@ interface FlowchartListViewProps {
   onDuplicateProject: (id: string) => void;
   onDeleteProject: (id: string) => void;
   onOpenVersionHistory?: (project: FlowchartProject) => void;
+  isServerConnected?: boolean;
 }
 
 export const FlowchartListView: React.FC<FlowchartListViewProps> = ({
@@ -37,6 +38,7 @@ export const FlowchartListView: React.FC<FlowchartListViewProps> = ({
   onDuplicateProject,
   onDeleteProject,
   onOpenVersionHistory,
+  isServerConnected = false,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'published' | 'draft'>('all');
@@ -101,9 +103,56 @@ export const FlowchartListView: React.FC<FlowchartListViewProps> = ({
       {/* Dashboard Header Banner */}
       <div className="dashboard-header-banner">
         <div className="dashboard-title-area">
-          <div className="dashboard-badge">
-            <FolderKanban size={16} className="text-emerald" />
-            <span>ADMIN WORKSPACE</span>
+          <div className="dashboard-badge" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+              <FolderKanban size={16} className="text-emerald" />
+              <span>ADMIN WORKSPACE</span>
+            </span>
+            <span style={{ opacity: 0.4 }}>•</span>
+            {isServerConnected ? (
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  color: '#10b981',
+                  fontWeight: 600,
+                  fontSize: '11px',
+                }}
+              >
+                <span
+                  style={{
+                    width: '6px',
+                    height: '6px',
+                    borderRadius: '50%',
+                    backgroundColor: '#10b981',
+                    boxShadow: '0 0 6px rgba(16, 185, 129, 0.6)',
+                  }}
+                />
+                NestJS Backend Connected
+              </span>
+            ) : (
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  color: '#f59e0b',
+                  fontWeight: 600,
+                  fontSize: '11px',
+                }}
+              >
+                <span
+                  style={{
+                    width: '6px',
+                    height: '6px',
+                    borderRadius: '50%',
+                    backgroundColor: '#f59e0b',
+                  }}
+                />
+                Local Mode (NestJS Offline)
+              </span>
+            )}
           </div>
           <h1 className="dashboard-main-title">Survey Flowcharts Directory</h1>
           <p className="dashboard-subtitle">

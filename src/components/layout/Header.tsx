@@ -49,6 +49,7 @@ interface HeaderProps {
   isPathTracingEnabled?: boolean;
   onTogglePathTracing?: () => void;
   onAddGroupArea?: () => void;
+  isServerConnected?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -78,6 +79,7 @@ export const Header: React.FC<HeaderProps> = ({
   isPathTracingEnabled = true,
   onTogglePathTracing,
   onAddGroupArea,
+  isServerConnected = false,
 }) => {
   const [isVersionMenuOpen, setIsVersionMenuOpen] = useState(false);
   const [isToolsMenuOpen, setIsToolsMenuOpen] = useState(false);
@@ -240,6 +242,66 @@ export const Header: React.FC<HeaderProps> = ({
                 </div>
               )}
             </div>
+
+            {/* NestJS Server Connectivity Status Pill */}
+            {isServerConnected ? (
+              <div
+                className="header-server-status-pill connected"
+                title="Connected to NestJS Backend Server (http://localhost:3000/api)"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  fontSize: '11px',
+                  padding: '3px 8px',
+                  borderRadius: '9999px',
+                  backgroundColor: '#ecfdf5',
+                  color: '#059669',
+                  border: '1px solid #a7f3d0',
+                  fontWeight: 600,
+                  marginLeft: '4px',
+                }}
+              >
+                <span
+                  style={{
+                    width: '6px',
+                    height: '6px',
+                    borderRadius: '50%',
+                    backgroundColor: '#10b981',
+                    boxShadow: '0 0 6px rgba(16, 185, 129, 0.6)',
+                  }}
+                />
+                <span>NestJS API</span>
+              </div>
+            ) : (
+              <div
+                className="header-server-status-pill offline"
+                title="NestJS Backend Offline (Using Local Storage Cache)"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  fontSize: '11px',
+                  padding: '3px 8px',
+                  borderRadius: '9999px',
+                  backgroundColor: '#fef3c7',
+                  color: '#b45309',
+                  border: '1px solid #fde68a',
+                  fontWeight: 600,
+                  marginLeft: '4px',
+                }}
+              >
+                <span
+                  style={{
+                    width: '6px',
+                    height: '6px',
+                    borderRadius: '50%',
+                    backgroundColor: '#f59e0b',
+                  }}
+                />
+                <span>Local Mode</span>
+              </div>
+            )}
           </div>
         </div>
       </div>

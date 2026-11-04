@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { MarkerType } from '@xyflow/react';
 import type { Node, Edge } from '@xyflow/react';
 import type {
@@ -15,6 +15,7 @@ import {
   deleteQuestionGroup,
   DEFAULT_QUESTION_GROUPS,
 } from '../utils/groupStorage';
+import { apiClient } from '../services/api';
 
 export interface GroupDesignSession {
   groupId?: string;
@@ -63,18 +64,57 @@ export function useGroupStudio({
   const [groupDesignSession, setGroupDesignSession] =
     useState<GroupDesignSession | null>(null);
 
-  const refreshGroups = useCallback(() => {
+  // Sync groups with NestJS server on mount
+  useEffect(() => {
+    let isMounted = true;
+    async function syncGroupsWithServer() {
+      try {
+        const isOnline = await apiClient.checkHealth();
+        if (isOnline && isMounted) {
+          const remoteGroups = await apiClient.getGroups();
+          if (remoteGroups && remoteGroups.length > 0 && isMounted) {
+            setGroups(remoteGroups);
+            saveAllGroups(remoteGroups);
+          }
+        }
+      } catch {
+        // gracefully fall back to local storage
+      }
+    }
+    syncGroupsWithServer();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const refreshGroups = useCallback(async () => {
+    try {
+      if (apiClient.isOnline()) {
+        const remote = await apiClient.getGroups();
+        if (remote && remote.length > 0) {
+          setGroups(remote);
+          saveAllGroups(remote);
+          return;
+        }
+      }
+    } catch {}
     setGroups(loadAllGroups());
   }, []);
 
   const handleDeleteGroup = useCallback((groupId: string) => {
     const updated = deleteQuestionGroup(groupId);
     setGroups(updated);
+    if (apiClient.isOnline()) {
+      apiClient.deleteGroup(groupId).catch(console.error);
+    }
   }, []);
 
   const handleResetDefaultGroups = useCallback(() => {
     saveAllGroups(DEFAULT_QUESTION_GROUPS);
     setGroups(DEFAULT_QUESTION_GROUPS);
+    if (apiClient.isOnline()) {
+      apiClient.resetGroups().catch(console.error);
+    }
   }, []);
 
   // Group Template Studio: Start designing a brand new group on canvas
@@ -265,8 +305,19 @@ export function useGroupStudio({
         questions: questionTemplates,
         ...(groupDesignSession.numericGroupId ? { groupId: groupDesignSession.numericGroupId } : {}),
       });
+      if (apiClient.isOnline()) {
+        apiClient.updateGroup(groupDesignSession.groupId, {
+          name: groupDesignSession.name,
+          nameBn: groupDesignSession.nameBn,
+          description: groupDesignSession.description,
+          category: groupDesignSession.category,
+          color: groupDesignSession.color,
+          questions: questionTemplates,
+          ...(groupDesignSession.numericGroupId ? { groupId: groupDesignSession.numericGroupId } : {}),
+        }).catch(console.error);
+      }
     } else {
-      createNewQuestionGroup(
+      const created = createNewQuestionGroup(
         groupDesignSession.name,
         groupDesignSession.nameBn,
         groupDesignSession.description,
@@ -275,6 +326,9 @@ export function useGroupStudio({
         questionTemplates,
         groupDesignSession.numericGroupId
       );
+      if (apiClient.isOnline()) {
+        apiClient.createGroup(created).catch(console.error);
+      }
     }
 
     setGroups(loadAllGroups());

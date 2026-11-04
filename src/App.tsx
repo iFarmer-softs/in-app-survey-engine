@@ -238,6 +238,7 @@ const FlowEditor: React.FC = () => {
     syncActiveProject,
     handleCreateVersionSnapshot,
     handleRestoreVersion,
+    isServerConnected,
   } = useProjectManager();
 
   // 2. React Flow canvas nodes and edges state
@@ -2427,6 +2428,7 @@ const FlowEditor: React.FC = () => {
           <FlowchartListView
             projects={projects}
             activeProjectId={activeProjectId}
+            isServerConnected={isServerConnected}
             onOpenProject={handleSelectProject}
             onCreateNew={() => setIsCreateModalOpen(true)}
             onDuplicateProject={handleDuplicateProject}
@@ -2510,6 +2512,7 @@ const FlowEditor: React.FC = () => {
                 isPathTracingEnabled={isPathTracingEnabled}
                 onTogglePathTracing={togglePathTracing}
                 onAddGroupArea={handleCreateNewGroupArea}
+                isServerConnected={isServerConnected}
               />
             )}
 
