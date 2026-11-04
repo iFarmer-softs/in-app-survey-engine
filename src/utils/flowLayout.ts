@@ -348,3 +348,148 @@ export function distributeNodesVertical(nodes: Node[]): Node[] {
     return n;
   });
 }
+
+export interface FrameRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/**
+ * Checks whether two frames intersect, taking into account a minimum gutter/gap.
+ */
+export function checkFramesOverlap(
+  rectA: FrameRect,
+  rectB: FrameRect,
+  gap: number = 24
+): boolean {
+  return (
+    rectA.x < rectB.x + rectB.w + gap &&
+    rectA.x + rectA.w + gap > rectB.x &&
+    rectA.y < rectB.y + rectB.h + gap &&
+    rectA.y + rectA.h + gap > rectB.y
+  );
+}
+
+/**
+ * Clamps a proposed frame position so it never collides or overlaps with any other frame on the canvas,
+ * allowing smooth 1D sliding along free axes when bumping into adjacent frames.
+ */
+export function resolveFrameCollision(
+  currentX: number,
+  currentY: number,
+  targetX: number,
+  targetY: number,
+  frameW: number,
+  frameH: number,
+  otherFrames: FrameRect[],
+  gap: number = 24
+): { x: number; y: number } {
+  if (otherFrames.length === 0) {
+    return { x: targetX, y: targetY };
+  }
+
+  let resolvedX = targetX;
+  let resolvedY = targetY;
+
+  const dx = targetX - currentX;
+  const dy = targetY - currentY;
+
+  // 1. Try moving along X while keeping Y at currentY
+  for (const other of otherFrames) {
+    if (checkFramesOverlap({ x: resolvedX, y: currentY, w: frameW, h: frameH }, other, gap)) {
+      if (dx > 0) {
+        resolvedX = Math.min(resolvedX, other.x - frameW - gap);
+      } else if (dx < 0) {
+        resolvedX = Math.max(resolvedX, other.x + other.w + gap);
+      } else {
+        resolvedX = currentX;
+      }
+    }
+  }
+
+  // 2. Try moving along Y with the resolved X position
+  for (const other of otherFrames) {
+    if (checkFramesOverlap({ x: resolvedX, y: resolvedY, w: frameW, h: frameH }, other, gap)) {
+      if (dy > 0) {
+        resolvedY = Math.min(resolvedY, other.y - frameH - gap);
+      } else if (dy < 0) {
+        resolvedY = Math.max(resolvedY, other.y + other.h + gap);
+      } else {
+        resolvedY = currentY;
+      }
+    }
+  }
+
+  // 3. Fallback collision safety check
+  for (const other of otherFrames) {
+    if (checkFramesOverlap({ x: resolvedX, y: resolvedY, w: frameW, h: frameH }, other, gap)) {
+      return { x: currentX, y: currentY };
+    }
+  }
+
+  return { x: resolvedX, y: resolvedY };
+}
+
+/**
+ * Finds the nearest non-overlapping position for a frame when dropped on the canvas,
+ * prioritizing the smallest displacement distance to the 4 sides of colliding frames.
+ */
+export function findNearestNonOverlappingPosition(
+  droppedX: number,
+  droppedY: number,
+  frameW: number,
+  frameH: number,
+  otherFrames: FrameRect[],
+  gap: number = 30
+): { x: number; y: number } {
+  const currentRect: FrameRect = { x: droppedX, y: droppedY, w: frameW, h: frameH };
+
+  // 1. If no overlap with any other frame, it is safely in free space
+  const overlappingFrames = otherFrames.filter((other) =>
+    checkFramesOverlap(currentRect, other, gap)
+  );
+  if (overlappingFrames.length === 0) {
+    return { x: droppedX, y: droppedY };
+  }
+
+  // 2. Generate candidate positions nudged around all 4 sides of colliding frames
+  const candidates: Array<{ x: number; y: number }> = [];
+
+  for (const other of overlappingFrames) {
+    // Primary cardinal candidates
+    candidates.push({ x: other.x + other.w + gap, y: droppedY }); // Right
+    candidates.push({ x: other.x - frameW - gap, y: droppedY }); // Left
+    candidates.push({ x: droppedX, y: other.y + other.h + gap }); // Below
+    candidates.push({ x: droppedX, y: other.y - frameH - gap }); // Above
+
+    // Corner aligned candidates
+    candidates.push({ x: other.x + other.w + gap, y: other.y });
+    candidates.push({ x: other.x - frameW - gap, y: other.y });
+    candidates.push({ x: other.x, y: other.y + other.h + gap });
+    candidates.push({ x: other.x, y: other.y - frameH - gap });
+  }
+
+  // 3. Filter candidates that do not collide with ANY other frame
+  const validCandidates = candidates.filter((cand) => {
+    // Avoid pushing into negative coordinates off-canvas
+    if (cand.x < 30 || cand.y < 30) return false;
+    const testRect: FrameRect = { x: cand.x, y: cand.y, w: frameW, h: frameH };
+    return otherFrames.every((other) => !checkFramesOverlap(testRect, other, gap));
+  });
+
+  // 4. If valid candidates exist, pick the candidate with minimum Euclidean displacement
+  if (validCandidates.length > 0) {
+    validCandidates.sort((a, b) => {
+      const distA = Math.hypot(a.x - droppedX, a.y - droppedY);
+      const distB = Math.hypot(b.x - droppedX, b.y - droppedY);
+      return distA - distB;
+    });
+    return validCandidates[0];
+  }
+
+  // 5. Fallback: Nudge to the right of the rightmost frame
+  const maxRight = Math.max(...otherFrames.map((f) => f.x + f.w));
+  return { x: maxRight + gap, y: Math.max(droppedY, 50) };
+}

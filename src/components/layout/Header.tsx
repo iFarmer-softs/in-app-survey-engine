@@ -15,6 +15,10 @@ import {
   Rocket,
   ChevronDown,
   SlidersHorizontal,
+  Undo2,
+  Redo2,
+  GitFork,
+  Crop,
 } from 'lucide-react';
 import type { GroupMeta } from '../../utils/schemaCompiler';
 
@@ -33,13 +37,18 @@ interface HeaderProps {
   diagnosticsCount: number;
   diagnosticsErrors: number;
   onOpenDiagnostics: () => void;
-  edgeRouting: 'smoothstep' | 'bezier' | 'straight';
-  onChangeEdgeRouting: (routing: 'smoothstep' | 'bezier' | 'straight') => void;
   onAlignHorizontal: () => void;
   onAlignVertical: () => void;
   onOpenVersionHistory?: () => void;
   onOpenCreateSnapshot?: () => void;
   onPublishVersion?: () => void;
+  canUndo?: boolean;
+  canRedo?: boolean;
+  onUndo?: () => void;
+  onRedo?: () => void;
+  isPathTracingEnabled?: boolean;
+  onTogglePathTracing?: () => void;
+  onAddGroupArea?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -57,13 +66,18 @@ export const Header: React.FC<HeaderProps> = ({
   diagnosticsCount,
   diagnosticsErrors,
   onOpenDiagnostics,
-  edgeRouting,
-  onChangeEdgeRouting,
   onAlignHorizontal,
   onAlignVertical,
   onOpenVersionHistory,
   onOpenCreateSnapshot,
   onPublishVersion,
+  canUndo = false,
+  canRedo = false,
+  onUndo,
+  onRedo,
+  isPathTracingEnabled = true,
+  onTogglePathTracing,
+  onAddGroupArea,
 }) => {
   const [isVersionMenuOpen, setIsVersionMenuOpen] = useState(false);
   const [isToolsMenuOpen, setIsToolsMenuOpen] = useState(false);
@@ -275,6 +289,55 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* 3. Right: Clean Consolidated Action Group */}
       <div className="header-actions">
+        {/* Undo / Redo Segmented Buttons */}
+        {(onUndo || onRedo) && (
+          <div className="header-history-btn-group">
+            <button
+              type="button"
+              className="btn btn-icon btn-history-action"
+              onClick={onUndo}
+              disabled={!canUndo}
+              title="Undo (Ctrl+Z / Cmd+Z)"
+            >
+              <Undo2 size={14} />
+            </button>
+            <button
+              type="button"
+              className="btn btn-icon btn-history-action"
+              onClick={onRedo}
+              disabled={!canRedo}
+              title="Redo (Ctrl+Y / Cmd+Shift+Z)"
+            >
+              <Redo2 size={14} />
+            </button>
+          </div>
+        )}
+
+        {/* Dependency Path Tracing Quick Toggle */}
+        {onTogglePathTracing && (
+          <button
+            type="button"
+            className={`btn btn-icon ${isPathTracingEnabled ? 'btn-active-cyan' : 'btn-secondary'}`}
+            onClick={onTogglePathTracing}
+            title={
+              isPathTracingEnabled
+                ? 'Dependency Path Tracing (ON): Highlight upstream & downstream flows. Click to turn OFF'
+                : 'Dependency Path Tracing (OFF): Click to turn ON'
+            }
+            style={
+              isPathTracingEnabled
+                ? {
+                    borderColor: 'rgba(6, 182, 212, 0.5)',
+                    color: '#22d3ee',
+                    background: 'rgba(6, 182, 212, 0.12)',
+                  }
+                : undefined
+            }
+          >
+            <GitFork size={14} />
+          </button>
+        )}
+
         {/* Consolidated Canvas Tools & Layout Dropdown */}
         <div className="header-tools-dropdown-container" ref={toolsDropdownRef}>
           <button
@@ -310,6 +373,23 @@ export const Header: React.FC<HeaderProps> = ({
                 </div>
               </button>
 
+              {onAddGroupArea && (
+                <button
+                  type="button"
+                  className="tools-menu-item"
+                  onClick={() => {
+                    setIsToolsMenuOpen(false);
+                    onAddGroupArea();
+                  }}
+                >
+                  <Crop size={14} className="text-cyan-400" />
+                  <div className="tools-item-text">
+                    <span className="tools-title">Add Group Area</span>
+                    <span className="tools-sub">Create a new bounded section</span>
+                  </div>
+                </button>
+              )}
+
               <div className="tools-align-row">
                 <button
                   type="button"
@@ -337,41 +417,53 @@ export const Header: React.FC<HeaderProps> = ({
 
               <div className="menu-divider" />
 
-              {/* Section 2: Edge Line Style */}
-              <div className="tools-section-title">Connector Style</div>
-              <div className="tools-routing-options">
-                <button
-                  type="button"
-                  className={`routing-pill-btn ${
-                    edgeRouting === 'smoothstep' ? 'is-active' : ''
-                  }`}
-                  onClick={() => onChangeEdgeRouting('smoothstep')}
-                >
-                  Orthogonal
-                </button>
-                <button
-                  type="button"
-                  className={`routing-pill-btn ${
-                    edgeRouting === 'bezier' ? 'is-active' : ''
-                  }`}
-                  onClick={() => onChangeEdgeRouting('bezier')}
-                >
-                  Curved
-                </button>
-                <button
-                  type="button"
-                  className={`routing-pill-btn ${
-                    edgeRouting === 'straight' ? 'is-active' : ''
-                  }`}
-                  onClick={() => onChangeEdgeRouting('straight')}
-                >
-                  Straight
-                </button>
-              </div>
+              {/* Section 2: Visual Inspection */}
+              <div className="tools-section-title">Visual Inspection</div>
+              <button
+                type="button"
+                className={`tools-menu-item ${isPathTracingEnabled ? 'is-active' : ''}`}
+                onClick={() => {
+                  onTogglePathTracing?.();
+                }}
+              >
+                <GitFork
+                  size={14}
+                  className={isPathTracingEnabled ? 'text-cyan-400' : ''}
+                />
+                <div className="tools-item-text">
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      width: '100%',
+                    }}
+                  >
+                    <span className="tools-title">Dependency Tracing</span>
+                    <span
+                      style={{
+                        fontSize: '9px',
+                        fontWeight: 700,
+                        padding: '1px 5px',
+                        borderRadius: '4px',
+                        background: isPathTracingEnabled
+                          ? 'rgba(6, 182, 212, 0.2)'
+                          : 'rgba(100, 116, 139, 0.2)',
+                        color: isPathTracingEnabled ? '#22d3ee' : '#94a3b8',
+                      }}
+                    >
+                      {isPathTracingEnabled ? 'ON' : 'OFF'}
+                    </span>
+                  </div>
+                  <span className="tools-sub">
+                    Highlight ancestors & dependents
+                  </span>
+                </div>
+              </button>
 
               <div className="menu-divider" />
 
-              {/* Section 3: Reset Canvas */}
+              {/* Section 4: Reset Canvas */}
               <button
                 type="button"
                 className="tools-menu-item item-danger"

@@ -11,16 +11,25 @@ import {
   useReactFlow,
   MarkerType,
 } from '@xyflow/react';
-import type { Edge, Node } from '@xyflow/react';
+import type { Edge, Node, EdgeChange, NodeChange, Connection } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { Layers, Sparkles, PanelLeftOpen, PanelRightOpen, Crop } from 'lucide-react';
+import {
+  Layers,
+  Sparkles,
+  PanelLeftOpen,
+  PanelRightOpen,
+  Crop,
+  GitFork,
+  X,
+  Plus,
+} from 'lucide-react';
 
 import { Header } from './components/layout/Header';
 import { GroupTemplateHeader } from './components/layout/GroupTemplateHeader';
 import { AdminLeftSidebar } from './components/layout/AdminLeftSidebar';
 import { FlowchartSymbolsPanel } from './components/layout/FlowchartSymbolsPanel';
 import { InputTypeViewsPanel } from './components/layout/InputTypeViewsPanel';
-import { GroupWorkshopCanvas, type WorkshopBridge } from './components/canvas/GroupWorkshopCanvas';
+import { FigmaToolbar, type CanvasToolMode } from './components/canvas/FigmaToolbar';
 import { FlowchartListView } from './components/dashboard/FlowchartListView';
 import { QuestionGroupListView } from './components/groups/QuestionGroupListView';
 import { CreateFlowchartModal } from './components/modals/CreateFlowchartModal';
@@ -62,8 +71,16 @@ import {
   calculateHierarchicalLayout,
   alignNodesHorizontal,
   alignNodesVertical,
+  checkFramesOverlap,
+  findNearestNonOverlappingPosition,
 } from './utils/flowLayout';
 import { validateSurveyFlow } from './utils/flowValidator';
+import {
+  calculateDependencyTrace,
+  getTraceNodeRole,
+  getTraceEdgeRole,
+  getNodeTraceLabel,
+} from './utils/dependencyTracing';
 
 import { useProjectManager } from './hooks/useProjectManager';
 import { useGroupStudio } from './hooks/useGroupStudio';
@@ -71,6 +88,7 @@ import { useGroupContainers } from './hooks/useGroupContainers';
 import { useFlowCanvasConnections } from './hooks/useFlowCanvasConnections';
 import { useSidebarResizer } from './hooks/useSidebarResizer';
 import { useTheme } from './hooks/useTheme';
+import { useCanvasHistory } from './hooks/useCanvasHistory';
 
 const baseNodeTypes = {
   question: QuestionNode,
@@ -85,7 +103,13 @@ const baseNodeTypes = {
 };
 
 const edgeTypes = {
+  default: CustomFlowchartEdge,
   surveyEdge: CustomFlowchartEdge,
+  custom: CustomFlowchartEdge,
+  smoothstep: CustomFlowchartEdge,
+  step: CustomFlowchartEdge,
+  straight: CustomFlowchartEdge,
+  bezier: CustomFlowchartEdge,
 };
 
 const FlowEditor: React.FC = () => {
@@ -108,13 +132,26 @@ const FlowEditor: React.FC = () => {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
 
-  // Workshop Selection & Bridge State
-  const [selectedSource, setSelectedSource] = useState<'main' | 'workshop'>('main');
-  const [workshopSelectedNodeId, setWorkshopSelectedNodeId] = useState<string | null>(null);
-  const [workshopSelectedEdgeId, setWorkshopSelectedEdgeId] = useState<string | null>(null);
-  const [workshopNodes, setWorkshopNodes] = useState<Node[]>([]);
-  const [workshopEdges, setWorkshopEdges] = useState<Edge[]>([]);
-  const workshopBridgeRef = useRef<WorkshopBridge | null>(null);
+  // Visual Inspection: Dependency Path Tracing state
+  const [isPathTracingEnabled, setIsPathTracingEnabled] = useState(true);
+  const togglePathTracing = useCallback(() => {
+    setIsPathTracingEnabled((prev) => !prev);
+  }, []);
+
+  // Figma-style Canvas Tool Mode: 'select' (V) | 'hand' (H) | 'drawArea' (F)
+  const [activeToolMode, setActiveToolMode] = useState<CanvasToolMode>('select');
+  const [isSpacePressed, setIsSpacePressed] = useState(false);
+  const isDrawAreaMode = activeToolMode === 'drawArea';
+  const isHandMode = activeToolMode === 'hand' || isSpacePressed;
+
+  const [drawStartPos, setDrawStartPos] = useState<{
+    client: { x: number; y: number };
+    relative: { x: number; y: number };
+  } | null>(null);
+  const [drawCurrentPos, setDrawCurrentPos] = useState<{
+    client: { x: number; y: number };
+    relative: { x: number; y: number };
+  } | null>(null);
 
   // Sidebar expand / collapse states with persistent localStorage
   const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState<boolean>(() => {
@@ -155,28 +192,16 @@ const FlowEditor: React.FC = () => {
     });
   }, []);
 
-  // Draggable sidebar & bottom dock resizer hook (Antigravity Style)
+  // Draggable sidebar resizer hook (Antigravity Style)
   const {
     leftWidth,
     rightWidth,
-    bottomHeight,
     resizingSide,
     startResizingLeft,
     startResizingRight,
-    startResizingBottom,
     resetLeftWidth,
     resetRightWidth,
-    resetBottomHeight,
   } = useSidebarResizer();
-
-  const [isBottomDockOpen, setIsBottomDockOpen] = useState(true);
-  const toggleBottomDock = useCallback(() => {
-    setIsBottomDockOpen((prev) => {
-      const next = !prev;
-      setTimeout(() => window.dispatchEvent(new Event('resize')), 250);
-      return next;
-    });
-  }, []);
 
   // Dark / Light / System Theme hook
   const { theme, resolvedTheme, setTheme, cycleTheme } = useTheme();
@@ -228,6 +253,59 @@ const FlowEditor: React.FC = () => {
     }
   );
 
+  // In-memory Canvas Undo / Redo system with drag coalescing
+  const {
+    canUndo,
+    canRedo,
+    recordSnapshot,
+    handleUndo,
+    handleRedo,
+    clearHistory,
+    onNodeDragStart,
+    onNodeDragStop,
+  } = useCanvasHistory({
+    onApplySnapshot: (snap) => {
+      setNodes(snap.nodes);
+      setEdges(snap.edges);
+      setGroupMeta(snap.groupMeta);
+      setSelectedNodeId(null);
+      setSelectedEdgeId(null);
+    },
+  });
+
+  const triggerUndo = useCallback(() => {
+    handleUndo(nodes, edges, groupMeta);
+  }, [handleUndo, nodes, edges, groupMeta]);
+
+  const triggerRedo = useCallback(() => {
+    handleRedo(nodes, edges, groupMeta);
+  }, [handleRedo, nodes, edges, groupMeta]);
+
+  // Global Undo / Redo keyboard listener (Cmd/Ctrl + Z, Cmd/Ctrl + Shift + Z, Cmd/Ctrl + Y)
+  useEffect(() => {
+    const handleUndoRedoKeys = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (
+        ['INPUT', 'TEXTAREA', 'SELECT'].includes(target?.tagName) ||
+        target?.isContentEditable
+      ) {
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        triggerUndo();
+      } else if (
+        ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'z') ||
+        ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'y')
+      ) {
+        e.preventDefault();
+        triggerRedo();
+      }
+    };
+    window.addEventListener('keydown', handleUndoRedoKeys);
+    return () => window.removeEventListener('keydown', handleUndoRedoKeys);
+  }, [triggerUndo, triggerRedo]);
+
   // 3. Group template studio hook
   const {
     groups,
@@ -257,11 +335,11 @@ const FlowEditor: React.FC = () => {
 
   // 4. Group container collapse, ungroup & sync hook
   const {
-    handleNodesChange,
-    handleToggleGroupCollapse,
-    handleUngroup,
-    handleDeleteGroupContainer,
-    handleInsertGroupIntoCanvas,
+    handleNodesChange: handleGroupNodesChange,
+    handleToggleGroupCollapse: baseToggleGroupCollapse,
+    handleUngroup: baseUngroup,
+    handleDeleteGroupContainer: baseDeleteGroupContainer,
+    handleInsertGroupIntoCanvas: baseInsertGroupIntoCanvas,
   } = useGroupContainers({
     nodes,
     edges,
@@ -273,18 +351,176 @@ const FlowEditor: React.FC = () => {
     setCenter,
   });
 
+  const handleToggleGroupCollapse = useCallback(
+    (id: string) => {
+      recordSnapshot(nodes, edges, groupMeta);
+      baseToggleGroupCollapse(id);
+    },
+    [baseToggleGroupCollapse, recordSnapshot, nodes, edges, groupMeta]
+  );
+
+  const handleUngroup = useCallback(
+    (id: string) => {
+      recordSnapshot(nodes, edges, groupMeta);
+      baseUngroup(id);
+    },
+    [baseUngroup, recordSnapshot, nodes, edges, groupMeta]
+  );
+
+  const handleDeleteGroupContainer = useCallback(
+    (id: string) => {
+      recordSnapshot(nodes, edges, groupMeta);
+      baseDeleteGroupContainer(id);
+    },
+    [baseDeleteGroupContainer, recordSnapshot, nodes, edges, groupMeta]
+  );
+
+  const handleInsertGroupIntoCanvas = useCallback(
+    (group: ReusableQuestionGroup, position?: { x: number; y: number }) => {
+      recordSnapshot(nodes, edges, groupMeta);
+      baseInsertGroupIntoCanvas(group, position);
+    },
+    [baseInsertGroupIntoCanvas, recordSnapshot, nodes, edges, groupMeta]
+  );
+
+  const handleNodesChange = useCallback(
+    (changes: NodeChange[]) => {
+      if (changes.some((c) => c.type === 'remove')) {
+        recordSnapshot(nodes, edges, groupMeta);
+      }
+      handleGroupNodesChange(changes);
+    },
+    [handleGroupNodesChange, recordSnapshot, nodes, edges, groupMeta]
+  );
+
+  const handleEdgesChange = useCallback(
+    (changes: EdgeChange[]) => {
+      if (changes.some((c) => c.type === 'remove')) {
+        recordSnapshot(nodes, edges, groupMeta);
+      }
+      onEdgesChange(changes);
+    },
+    [onEdgesChange, recordSnapshot, nodes, edges, groupMeta]
+  );
+
   // 5. Connections & routing hook
   const {
     warningAlertData,
     setWarningAlertData,
     edgeRouting,
-    handleChangeEdgeRouting,
-    onConnect,
+    onConnect: baseOnConnect,
+    onReconnect: baseOnReconnect,
   } = useFlowCanvasConnections({
     nodes,
     edges,
     setEdges,
   });
+
+  const onConnect = useCallback(
+    (params: Connection) => {
+      recordSnapshot(nodes, edges, groupMeta);
+      baseOnConnect(params);
+    },
+    [baseOnConnect, recordSnapshot, nodes, edges, groupMeta]
+  );
+
+  const onReconnect = useCallback(
+    (oldEdge: Edge, newConnection: Connection) => {
+      recordSnapshot(nodes, edges, groupMeta);
+      baseOnReconnect(oldEdge, newConnection);
+    },
+    [baseOnReconnect, recordSnapshot, nodes, edges, groupMeta]
+  );
+
+  // Live drag updates and Undo/Redo capture when edge line is dragged/resized
+  useEffect(() => {
+    const handleEdgeLiveDrag = (event: Event) => {
+      const customEvt = event as CustomEvent<{
+        edgeId: string;
+        centerX?: number;
+        centerY?: number;
+        curvature?: number;
+      }>;
+      const detail = customEvt.detail;
+      if (!detail || !detail.edgeId) return;
+
+      setEdges((eds) =>
+        eds.map((edge) => {
+          if (edge.id === detail.edgeId) {
+            return {
+              ...edge,
+              data: {
+                ...(edge.data || {}),
+                ...(detail.centerX !== undefined ? { centerX: detail.centerX } : {}),
+                ...(detail.centerY !== undefined ? { centerY: detail.centerY } : {}),
+                ...(detail.curvature !== undefined ? { curvature: detail.curvature } : {}),
+              },
+            };
+          }
+          return edge;
+        })
+      );
+    };
+
+    const handleEdgeBendChange = (event: Event) => {
+      const customEvt = event as CustomEvent<{
+        edgeId: string;
+        centerX?: number;
+        centerY?: number;
+        curvature?: number;
+        reset?: boolean;
+      }>;
+      const detail = customEvt.detail;
+      if (!detail || !detail.edgeId) {
+        recordSnapshot(nodes, edges, groupMeta);
+        return;
+      }
+
+      recordSnapshot(nodes, edges, groupMeta);
+      setEdges((eds) =>
+        eds.map((edge) => {
+          if (edge.id === detail.edgeId) {
+            if (detail.reset) {
+              const { centerX, centerY, offset, curvature, ...restData } = (edge.data || {}) as any;
+              return {
+                ...edge,
+                data: restData,
+              };
+            }
+            return {
+              ...edge,
+              data: {
+                ...(edge.data || {}),
+                ...(detail.centerX !== undefined ? { centerX: detail.centerX } : {}),
+                ...(detail.centerY !== undefined ? { centerY: detail.centerY } : {}),
+                ...(detail.curvature !== undefined ? { curvature: detail.curvature } : {}),
+              },
+            };
+          }
+          return edge;
+        })
+      );
+    };
+
+    const handleEdgeDelete = (event: Event) => {
+      const customEvt = event as CustomEvent<{ edgeId: string }>;
+      const edgeId = customEvt.detail?.edgeId;
+      if (!edgeId) return;
+
+      recordSnapshot(nodes, edges, groupMeta);
+      setEdges((eds) => eds.filter((e) => e.id !== edgeId));
+      setSelectedEdgeId((current) => (current === edgeId ? null : current));
+    };
+
+    window.addEventListener('canvas-edge-live-drag', handleEdgeLiveDrag);
+    window.addEventListener('canvas-edge-bend-changed', handleEdgeBendChange);
+    window.addEventListener('canvas-edge-delete', handleEdgeDelete);
+    return () => {
+      window.removeEventListener('canvas-edge-live-drag', handleEdgeLiveDrag);
+      window.removeEventListener('canvas-edge-bend-changed', handleEdgeBendChange);
+      window.removeEventListener('canvas-edge-delete', handleEdgeDelete);
+    };
+  }, [nodes, edges, groupMeta, recordSnapshot, setEdges, setSelectedEdgeId]);
 
   // Real-time flow health diagnostics
   const diagnostics = useMemo(() => {
@@ -305,6 +541,7 @@ const FlowEditor: React.FC = () => {
   const handleSelectProject = useCallback(
     (id: string) => {
       selectProjectById(id, (target) => {
+        clearHistory();
         setNodes(target.nodes);
         setEdges(target.edges);
         setGroupMeta(target.groupMeta);
@@ -314,7 +551,7 @@ const FlowEditor: React.FC = () => {
         setTimeout(() => fitView({ padding: 0.2 }), 50);
       });
     },
-    [selectProjectById, setNodes, setEdges, fitView]
+    [selectProjectById, clearHistory, setNodes, setEdges, fitView]
   );
 
   // Create new blank flowchart
@@ -326,6 +563,7 @@ const FlowEditor: React.FC = () => {
       totalGroups: number
     ) => {
       createProjectAction(title, titleBn, description, totalGroups, (newProj) => {
+        clearHistory();
         setNodes(newProj.nodes);
         setEdges(newProj.edges);
         setGroupMeta(newProj.groupMeta);
@@ -335,7 +573,7 @@ const FlowEditor: React.FC = () => {
         setTimeout(() => fitView({ padding: 0.2 }), 50);
       });
     },
-    [createProjectAction, setNodes, setEdges, fitView]
+    [createProjectAction, clearHistory, setNodes, setEdges, fitView]
   );
 
   // Version Control Handlers
@@ -354,6 +592,7 @@ const FlowEditor: React.FC = () => {
 
   const handleExecuteRestoreSnapshot = useCallback(
     (versionId: string) => {
+      recordSnapshot(nodes, edges, groupMeta);
       handleRestoreVersion(versionId, (restored) => {
         setNodes(restored.nodes);
         setEdges(restored.edges);
@@ -361,7 +600,7 @@ const FlowEditor: React.FC = () => {
         setTimeout(() => fitView({ padding: 0.2, duration: 400 }), 150);
       });
     },
-    [handleRestoreVersion, setNodes, setEdges, fitView]
+    [recordSnapshot, nodes, edges, groupMeta, handleRestoreVersion, setNodes, setEdges, fitView]
   );
 
   const handleOpenMobilePreviewFromVersion = useCallback(
@@ -442,6 +681,7 @@ const FlowEditor: React.FC = () => {
   // Instant Wrap Selection in Group Frame directly on canvas (Marquee & Cmd/Ctrl+G)
   const handleWrapSelectionInFrame = useCallback(() => {
     if (selectedQuestionNodes.length === 0) return;
+    recordSnapshot(nodes, edges, groupMeta);
 
     let minX = Infinity;
     let minY = Infinity;
@@ -504,57 +744,130 @@ const FlowEditor: React.FC = () => {
     });
 
     setSelectedNodeId(newFrameId);
-  }, [selectedQuestionNodes, groupMeta.groupNumber, setNodes]);
+  }, [selectedQuestionNodes, groupMeta, nodes, edges, recordSnapshot, setNodes]);
 
-  // Global hotkey: Cmd/Ctrl + G to wrap selected questions into a Group Frame
+  // Global Figma-style Hotkeys: V (Select), H (Hand), F (Draw Area), Space (Hold for Hand), Cmd+G (Wrap)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
-      if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+      if (tag === 'input' || tag === 'textarea' || tag === 'select' || (e.target as HTMLElement)?.isContentEditable) return;
 
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'g') {
         e.preventDefault();
         handleWrapSelectionInFrame();
+      } else if (!e.metaKey && !e.ctrlKey && !e.shiftKey) {
+        if (e.key.toLowerCase() === 'v') {
+          e.preventDefault();
+          setActiveToolMode('select');
+          setDrawStartPos(null);
+          setDrawCurrentPos(null);
+        } else if (e.key.toLowerCase() === 'h') {
+          e.preventDefault();
+          setActiveToolMode('hand');
+          setDrawStartPos(null);
+          setDrawCurrentPos(null);
+        } else if (e.key.toLowerCase() === 'f') {
+          e.preventDefault();
+          setActiveToolMode('drawArea');
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          setActiveToolMode('select');
+          setDrawStartPos(null);
+          setDrawCurrentPos(null);
+        } else if (e.code === 'Space' && !isSpacePressed) {
+          e.preventDefault();
+          setIsSpacePressed(true);
+        }
       }
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleWrapSelectionInFrame]);
 
-  // Selected entities across Main Flowchart and Group Workshop canvases
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        setIsSpacePressed(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [handleWrapSelectionInFrame, isSpacePressed]);
+
+  // Selected entities across Flowchart Canvas
   const activeSelectedNode = useMemo(() => {
-    if (selectedSource === 'workshop') {
-      return workshopNodes.find((n) => n.id === workshopSelectedNodeId) || null;
-    }
     return nodes.find((n) => n.id === selectedNodeId) || null;
-  }, [selectedSource, workshopNodes, workshopSelectedNodeId, nodes, selectedNodeId]);
+  }, [nodes, selectedNodeId]);
 
   const activeSelectedEdge = useMemo(() => {
-    if (selectedSource === 'workshop') {
-      return workshopEdges.find((e) => e.id === workshopSelectedEdgeId) || null;
-    }
     return edges.find((e) => e.id === selectedEdgeId) || null;
-  }, [selectedSource, workshopEdges, workshopSelectedEdgeId, edges, selectedEdgeId]);
+  }, [edges, selectedEdgeId]);
 
-  const activeNodes = selectedSource === 'workshop' ? workshopNodes : nodes;
-  const activeEdges = selectedSource === 'workshop' ? workshopEdges : edges;
+  const activeNodes = nodes;
+  const activeEdges = edges;
+
+  // Dependency Path Tracing calculation for canvas highlighting
+  const activeTrace = useMemo(() => {
+    if (!isPathTracingEnabled || !selectedNodeId) return null;
+    return calculateDependencyTrace(nodes, edges, selectedNodeId);
+  }, [isPathTracingEnabled, selectedNodeId, nodes, edges]);
+
+  const activeTraceTargetName = useMemo(() => {
+    if (!activeTrace) return '';
+    const node = nodes.find((n) => n.id === activeTrace.selectedNodeId);
+    return node ? getNodeTraceLabel(node) : activeTrace.selectedNodeId;
+  }, [activeTrace, nodes]);
+
+  // Derived display nodes with highlight/dim classes without mutating base nodes state
+  const displayNodes = useMemo(() => {
+    if (!activeTrace) return nodes;
+    return nodes.map((node) => {
+      const role = getTraceNodeRole(node.id, node.type, activeTrace);
+      if (role === 'normal') return node;
+      const traceClass =
+        role === 'selected'
+          ? 'trace-node-selected'
+          : role === 'ancestor'
+          ? 'trace-node-ancestor'
+          : role === 'descendant'
+          ? 'trace-node-descendant'
+          : 'trace-node-dimmed';
+
+      const existingClass = (node.className || '').trim();
+      return {
+        ...node,
+        className: existingClass ? `${existingClass} ${traceClass}` : traceClass,
+      };
+    });
+  }, [nodes, activeTrace]);
+
+  // Derived display edges with traceRole without mutating base edges state
+  const displayEdges = useMemo(() => {
+    return edges.map((edge) => {
+      const role = activeTrace ? getTraceEdgeRole(edge.id, activeTrace) : undefined;
+      return {
+        ...edge,
+        type: edge.type || 'surveyEdge',
+        reconnectable: false,
+        data: {
+          ...(edge.data || {}),
+          traceRole: role,
+        },
+      };
+    });
+  }, [edges, activeTrace]);
 
   // Selection handlers: auto-open right inspector when an item is selected on Main Canvas
   const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
-    setSelectedSource('main');
     setSelectedNodeId(node.id);
     setSelectedEdgeId(null);
-    setWorkshopSelectedNodeId(null);
-    setWorkshopSelectedEdgeId(null);
     setIsRightSidebarOpen(true);
   }, []);
 
   const onEdgeClick = useCallback((_: React.MouseEvent, edge: Edge) => {
-    setSelectedSource('main');
     setSelectedEdgeId(edge.id);
     setSelectedNodeId(null);
-    setWorkshopSelectedNodeId(null);
-    setWorkshopSelectedEdgeId(null);
     setIsRightSidebarOpen(true);
   }, []);
 
@@ -563,32 +876,509 @@ const FlowEditor: React.FC = () => {
     setSelectedEdgeId(null);
   }, []);
 
-  // Selection handlers: auto-open right inspector when an item is selected on Group Workshop Canvas
-  const handleWorkshopSelectNode = useCallback((node: Node | null) => {
-    if (node) {
-      setSelectedSource('workshop');
-      setWorkshopSelectedNodeId(node.id);
-      setWorkshopSelectedEdgeId(null);
-      setSelectedNodeId(null);
-      setSelectedEdgeId(null);
-      setIsRightSidebarOpen(true);
-    } else {
-      setWorkshopSelectedNodeId(null);
-    }
+  // Instant Creation of a Group Area (Group Frame)
+  const handleCreateNewGroupArea = useCallback(
+    (targetPos?: { x: number; y: number }) => {
+      const existingFrames = nodes.filter(
+        (n) => n.type === 'groupFrame' || n.type === 'groupContainer'
+      );
+      const existingGroupNumbers = existingFrames
+        .map((f) => (f.data as any)?.numericGroupId || parseInt((f.data as any)?.groupId) || 1)
+        .filter((g) => !isNaN(g) && g > 0);
+      const nextGroupNumber =
+        existingGroupNumbers.length > 0 ? Math.max(...existingGroupNumbers) + 1 : 1;
+
+      const frameId = `grp-frame-${Date.now().toString().slice(-4)}-${Math.random().toString(36).slice(2, 5)}`;
+      const GROUP_PALETTE = ['#0284c7', '#8b5cf6', '#10b981', '#f59e0b', '#ec4899', '#06b6d4'];
+      const frameColor = GROUP_PALETTE[(nextGroupNumber - 1) % GROUP_PALETTE.length];
+
+      const lastFrame = existingFrames[existingFrames.length - 1];
+      let resolvedPos =
+        targetPos ||
+        (lastFrame
+          ? { x: lastFrame.position.x + 500, y: lastFrame.position.y }
+          : { x: 300, y: 150 });
+
+      // Strict Non-Overlap Enforcement: Nudge new frame to the right until guaranteed non-overlapping
+      while (
+        existingFrames.some((frame) => {
+          const fW =
+            (frame.style?.width ? parseInt(String(frame.style.width), 10) : 0) ||
+            frame.measured?.width ||
+            440;
+          const fH =
+            (frame.style?.height ? parseInt(String(frame.style.height), 10) : 0) ||
+            frame.measured?.height ||
+            480;
+          return checkFramesOverlap(
+            { x: resolvedPos.x, y: resolvedPos.y, w: 440, h: 480 },
+            { x: frame.position.x, y: frame.position.y, w: fW, h: fH },
+            24
+          );
+        })
+      ) {
+        resolvedPos = { x: resolvedPos.x + 500, y: resolvedPos.y };
+      }
+
+      const newFrame: Node = {
+        id: frameId,
+        type: 'groupFrame',
+        position: resolvedPos,
+        zIndex: 0,
+        style: { width: 440, height: 480 },
+        data: {
+          groupId: frameId,
+          numericGroupId: nextGroupNumber,
+          title: `Group Area ${nextGroupNumber}`,
+          titleBn: `গ্রুপ এলাকা ${nextGroupNumber}`,
+          category: 'custom',
+          color: frameColor,
+          questionIds: [],
+          questionCount: 0,
+          expandedHeight: 480,
+        },
+      };
+
+      recordSnapshot(nodes, edges, groupMeta);
+      setNodes((nds) => nds.concat(newFrame));
+      setSelectedNodeId(frameId);
+      setGroupMeta((prev) => ({
+        ...prev,
+        totalGroups: Math.max(prev.totalGroups, nextGroupNumber),
+      }));
+    },
+    [nodes, edges, groupMeta, recordSnapshot, setNodes, setSelectedNodeId, setGroupMeta]
+  );
+
+  // Figma-style Canvas Mouse Drawing Handlers for Group Area
+  const handleDrawMouseDown = useCallback((e: React.MouseEvent) => {
+    if (e.button !== 0) return; // Left mouse button only
+    const rect = reactFlowWrapper.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    const relative = {
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
+    };
+    const client = {
+      x: e.clientX,
+      y: e.clientY,
+    };
+
+    setDrawStartPos({ client, relative });
+    setDrawCurrentPos({ client, relative });
   }, []);
 
-  const handleWorkshopSelectEdge = useCallback((edge: Edge | null) => {
-    if (edge) {
-      setSelectedSource('workshop');
-      setWorkshopSelectedEdgeId(edge.id);
-      setWorkshopSelectedNodeId(null);
-      setSelectedNodeId(null);
-      setSelectedEdgeId(null);
-      setIsRightSidebarOpen(true);
-    } else {
-      setWorkshopSelectedEdgeId(null);
-    }
-  }, []);
+  const handleDrawMouseMove = useCallback(
+    (e: React.MouseEvent) => {
+      if (!drawStartPos) return;
+      const rect = reactFlowWrapper.current?.getBoundingClientRect();
+      if (!rect) return;
+
+      const relative = {
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top,
+      };
+      const client = {
+        x: e.clientX,
+        y: e.clientY,
+      };
+
+      setDrawCurrentPos({ client, relative });
+    },
+    [drawStartPos]
+  );
+
+  const handleDrawMouseUp = useCallback(
+    (e: React.MouseEvent) => {
+      if (!drawStartPos) {
+        setActiveToolMode('select');
+        return;
+      }
+
+      const startClient = drawStartPos.client;
+      const endClient = { x: e.clientX, y: e.clientY };
+
+      const minClientX = Math.min(startClient.x, endClient.x);
+      const maxClientX = Math.max(startClient.x, endClient.x);
+      const minClientY = Math.min(startClient.y, endClient.y);
+      const maxClientY = Math.max(startClient.y, endClient.y);
+
+      const screenWidth = maxClientX - minClientX;
+      const screenHeight = maxClientY - minClientY;
+
+      // Convert screen corners to canvas flow space
+      const flowTopLeft = screenToFlowPosition({ x: minClientX, y: minClientY });
+      const flowBottomRight = screenToFlowPosition({ x: maxClientX, y: maxClientY });
+
+      let flowX = flowTopLeft.x;
+      let flowY = flowTopLeft.y;
+      let flowWidth = Math.abs(flowBottomRight.x - flowTopLeft.x);
+      let flowHeight = Math.abs(flowBottomRight.y - flowTopLeft.y);
+
+      // If user merely clicked without dragging (< 25px), generate default spacious frame
+      if (screenWidth < 25 && screenHeight < 25) {
+        flowWidth = 440;
+        flowHeight = 480;
+      } else {
+        flowWidth = Math.max(flowWidth, 340);
+        flowHeight = Math.max(flowHeight, 220);
+      }
+
+      const existingFrames = nodes.filter(
+        (n) => n.type === 'groupFrame' || n.type === 'groupContainer'
+      );
+      const existingGroupNumbers = existingFrames
+        .map((f) => (f.data as any)?.numericGroupId || parseInt((f.data as any)?.groupId) || 1)
+        .filter((g) => !isNaN(g) && g > 0);
+      const nextGroupNumber =
+        existingGroupNumbers.length > 0 ? Math.max(...existingGroupNumbers) + 1 : 1;
+
+      const GROUP_PALETTE = ['#0284c7', '#8b5cf6', '#10b981', '#f59e0b', '#ec4899', '#06b6d4'];
+      const frameColor = GROUP_PALETTE[(nextGroupNumber - 1) % GROUP_PALETTE.length];
+      const frameId = `grp-frame-${Date.now().toString().slice(-4)}-${Math.random().toString(36).slice(2, 5)}`;
+
+      // Active existing container IDs on canvas
+      const activeContainerIds = new Set(existingFrames.map((f) => f.id));
+
+      // Detect non-frame question or logic nodes enclosed inside the drawn rectangle.
+      // CRITICAL: NEVER steal nodes that already belong to an active existing container!
+      const enclosedNodeIds: string[] = [];
+      const nonFrameNodes = nodes.filter(
+        (n) => n.type !== 'groupFrame' && n.type !== 'groupContainer'
+      );
+
+      nonFrameNodes.forEach((node) => {
+        const currentContainerId = (node.data as any)?.containerId;
+        // If node is already bound to an active container, protect it from being stolen
+        if (currentContainerId && activeContainerIds.has(currentContainerId)) {
+          return;
+        }
+
+        const nodeW = node.measured?.width || 270;
+        const nodeH = node.measured?.height || 180;
+        const nodeCenterX = node.position.x + nodeW / 2;
+        const nodeCenterY = node.position.y + nodeH / 2;
+
+        const isInside =
+          (node.position.x >= flowX &&
+            node.position.x <= flowX + flowWidth &&
+            node.position.y >= flowY &&
+            node.position.y <= flowY + flowHeight) ||
+          (nodeCenterX >= flowX &&
+            nodeCenterX <= flowX + flowWidth &&
+            nodeCenterY >= flowY &&
+            nodeCenterY <= flowY + flowHeight);
+
+        if (isInside) {
+          enclosedNodeIds.push(node.id);
+        }
+      });
+
+      // Check if the user mistakenly drew this rectangle over an existing container
+      let collidedFrame: Node | null = null;
+      for (const frame of existingFrames) {
+        const fX = frame.position.x;
+        const fY = frame.position.y;
+        const fW =
+          (frame.style?.width ? parseInt(String(frame.style.width), 10) : 0) ||
+          frame.measured?.width ||
+          440;
+        const fH =
+          (frame.style?.height ? parseInt(String(frame.style.height), 10) : 0) ||
+          frame.measured?.height ||
+          480;
+
+        const xOverlap = Math.max(0, Math.min(flowX + flowWidth, fX + fW) - Math.max(flowX, fX));
+        const yOverlap = Math.max(0, Math.min(flowY + flowHeight, fY + fH) - Math.max(flowY, fY));
+        const overlapArea = xOverlap * yOverlap;
+
+        // Strict Non-Overlap Enforcement: Check if drawn box intersects with any existing frame
+        if (overlapArea > 0) {
+          collidedFrame = frame;
+          break;
+        }
+      }
+
+      // If drawn rectangle collides or overlaps with ANY existing container:
+      // STRICT NON-OVERLAP ENFORCEMENT: Never allow creating an overlapping group frame!
+      if (collidedFrame) {
+        setSelectedNodeId(collidedFrame.id);
+        setActiveToolMode('select');
+        setDrawStartPos(null);
+        setDrawCurrentPos(null);
+        return;
+      }
+
+      const newFrame: Node = {
+        id: frameId,
+        type: 'groupFrame',
+        position: { x: Math.round(flowX), y: Math.round(flowY) },
+        zIndex: 0,
+        style: { width: Math.round(flowWidth), height: Math.round(flowHeight) },
+        data: {
+          groupId: frameId,
+          numericGroupId: nextGroupNumber,
+          title: `Group Area ${nextGroupNumber}`,
+          titleBn: `গ্রুপ এলাকা ${nextGroupNumber}`,
+          category: 'custom',
+          color: frameColor,
+          questionIds: enclosedNodeIds,
+          questionCount: enclosedNodeIds.length,
+          expandedHeight: Math.round(flowHeight),
+        },
+      };
+
+      recordSnapshot(nodes, edges, groupMeta);
+
+      setNodes((currentNodes) => {
+        const updated = currentNodes.map((n) => {
+          if (enclosedNodeIds.includes(n.id)) {
+            return {
+              ...n,
+              data: {
+                ...n.data,
+                containerId: frameId,
+                group: nextGroupNumber,
+              },
+            };
+          }
+          return n;
+        });
+        return [newFrame, ...updated];
+      });
+
+      setSelectedNodeId(frameId);
+      setGroupMeta((prev) => ({
+        ...prev,
+        totalGroups: Math.max(prev.totalGroups, nextGroupNumber),
+      }));
+
+      setActiveToolMode('select');
+      setDrawStartPos(null);
+      setDrawCurrentPos(null);
+    },
+    [
+      drawStartPos,
+      nodes,
+      edges,
+      groupMeta,
+      recordSnapshot,
+      screenToFlowPosition,
+      setNodes,
+      setSelectedNodeId,
+      setGroupMeta,
+    ]
+  );
+
+  // Drag stop handler: handles Smart Non-Overlap Auto-Nudge for groups and Auto-Reparenting for symbols
+  const handleNodeDragStop = useCallback(
+    (_event: any, draggedNode: Node, draggedNodesList?: Node[]) => {
+      onNodeDragStop(nodes);
+
+      if (!draggedNode) return;
+
+      // Case A: Group Frame / Container was dragged
+      // Free transit was allowed during drag; on drop, if overlapping another frame, auto-nudge to nearest clear spot!
+      if (draggedNode.type === 'groupFrame' || draggedNode.type === 'groupContainer') {
+        const otherFrames = nodes
+          .filter(
+            (n) => (n.type === 'groupFrame' || n.type === 'groupContainer') && n.id !== draggedNode.id
+          )
+          .map((other) => ({
+            x: other.position.x,
+            y: other.position.y,
+            w:
+              (other.style?.width ? parseInt(String(other.style.width), 10) : 0) ||
+              (other.data as any)?.width ||
+              other.measured?.width ||
+              440,
+            h:
+              (other.style?.height ? parseInt(String(other.style.height), 10) : 0) ||
+              (other.data as any)?.height ||
+              other.measured?.height ||
+              480,
+          }));
+
+        if (otherFrames.length === 0) return;
+
+        const frameW =
+          (draggedNode.style?.width ? parseInt(String(draggedNode.style.width), 10) : 0) ||
+          (draggedNode.data as any)?.width ||
+          draggedNode.measured?.width ||
+          440;
+        const frameH =
+          (draggedNode.style?.height ? parseInt(String(draggedNode.style.height), 10) : 0) ||
+          (draggedNode.data as any)?.height ||
+          draggedNode.measured?.height ||
+          480;
+
+        const nearestClearPos = findNearestNonOverlappingPosition(
+          draggedNode.position.x,
+          draggedNode.position.y,
+          frameW,
+          frameH,
+          otherFrames,
+          30
+        );
+
+        const nudgeDx = nearestClearPos.x - draggedNode.position.x;
+        const nudgeDy = nearestClearPos.y - draggedNode.position.y;
+
+        // If it was overlapping and needs to be nudged to clear space
+        if (Math.abs(nudgeDx) > 1 || Math.abs(nudgeDy) > 1) {
+          const childIdSet = new Set<string>();
+          const explicitChildIds: string[] = (draggedNode.data as any)?.questionIds || [];
+          explicitChildIds.forEach((cid) => childIdSet.add(cid));
+          nodes.forEach((n) => {
+            if (n.id !== draggedNode.id && (n.data as any)?.containerId === draggedNode.id) {
+              childIdSet.add(n.id);
+            }
+          });
+
+          recordSnapshot(nodes, edges, groupMeta);
+
+          setNodes((currentNodes) =>
+            currentNodes.map((n) => {
+              if (n.id === draggedNode.id) {
+                return {
+                  ...n,
+                  position: nearestClearPos,
+                };
+              }
+              if (childIdSet.has(n.id)) {
+                return {
+                  ...n,
+                  position: {
+                    x: Math.round(n.position.x + nudgeDx),
+                    y: Math.round(n.position.y + nudgeDy),
+                  },
+                };
+              }
+              return n;
+            })
+          );
+        }
+        return;
+      }
+
+      const activeList =
+        draggedNodesList && draggedNodesList.length > 0
+          ? draggedNodesList.filter((n) => n.type !== 'groupFrame' && n.type !== 'groupContainer')
+          : [draggedNode];
+
+      const existingContainers = nodes.filter(
+        (n) => n.type === 'groupFrame' || n.type === 'groupContainer'
+      );
+
+      if (existingContainers.length === 0) return;
+
+      let hasReparented = false;
+      const reparentMap = new Map<string, Node>();
+
+      for (const node of activeList) {
+        const nodeW = node.measured?.width || (node.type === 'question' ? 270 : 180);
+        const nodeH = node.measured?.height || (node.type === 'question' ? 200 : 100);
+        const nodeCenterX = node.position.x + nodeW / 2;
+        const nodeCenterY = node.position.y + nodeH / 2;
+
+        const target = existingContainers.find((frame) => {
+          const fX = frame.position.x;
+          const fY = frame.position.y;
+          const fW =
+            (frame.style?.width ? parseInt(String(frame.style.width), 10) : 0) ||
+            frame.measured?.width ||
+            440;
+          const fH =
+            (frame.style?.height ? parseInt(String(frame.style.height), 10) : 0) ||
+            frame.measured?.height ||
+            480;
+
+          return (
+            nodeCenterX >= fX &&
+            nodeCenterX <= fX + fW &&
+            nodeCenterY >= fY &&
+            nodeCenterY <= fY + fH
+          );
+        });
+
+        const currentContainerId = (node.data as any)?.containerId;
+        // Only reparent if dropped inside a DIFFERENT existing container
+        if (target && target.id !== currentContainerId) {
+          reparentMap.set(node.id, target);
+          hasReparented = true;
+        }
+      }
+
+      if (!hasReparented) return;
+
+      recordSnapshot(nodes, edges, groupMeta);
+
+      setNodes((currentNodes) => {
+        return currentNodes.map((n) => {
+          if (reparentMap.has(n.id)) {
+            const targetContainer = reparentMap.get(n.id)!;
+            const targetData = targetContainer.data as any;
+            const targetGroupNum =
+              targetData?.numericGroupId || parseInt(targetData?.groupId) || 1;
+            const targetColor = targetData?.color;
+
+            return {
+              ...n,
+              data: {
+                ...n.data,
+                containerId: targetContainer.id,
+                group: targetGroupNum,
+                ...(n.type === 'question' && targetColor ? { customColor: targetColor } : {}),
+              },
+            };
+          }
+
+          if (n.type === 'groupFrame' || n.type === 'groupContainer') {
+            const currentQIds: string[] = (n.data as any)?.questionIds || [];
+            let updatedQIds = [...currentQIds];
+            let modified = false;
+
+            // Remove any nodes that left this container
+            for (const [nodeId, targetContainer] of reparentMap.entries()) {
+              if (targetContainer.id !== n.id && updatedQIds.includes(nodeId)) {
+                updatedQIds = updatedQIds.filter((id) => id !== nodeId);
+                modified = true;
+              }
+            }
+
+            // Add any nodes that joined this container
+            for (const [nodeId, targetContainer] of reparentMap.entries()) {
+              if (targetContainer.id === n.id && !updatedQIds.includes(nodeId)) {
+                updatedQIds.push(nodeId);
+                modified = true;
+              }
+            }
+
+            if (modified) {
+              const currentHeight =
+                (n.style?.height ? parseInt(String(n.style.height), 10) : 0) || 220;
+              const neededHeight = Math.max(currentHeight, updatedQIds.length * 220 + 120);
+
+              return {
+                ...n,
+                style: n.type === 'groupFrame' ? { ...n.style, height: neededHeight } : n.style,
+                data: {
+                  ...n.data,
+                  questionIds: updatedQIds,
+                  questionCount: updatedQIds.length,
+                  expandedHeight: neededHeight,
+                },
+              };
+            }
+          }
+
+          return n;
+        });
+      });
+    },
+    [nodes, edges, groupMeta, onNodeDragStop, recordSnapshot, setNodes]
+  );
 
   // Drag-and-drop drop handler
   const onDragOver = useCallback((event: React.DragEvent) => {
@@ -715,6 +1505,103 @@ const FlowEditor: React.FC = () => {
         );
       });
 
+      // Strict Group Area Enforcement (Option 1):
+      // If dropped outside any Group Area, auto-instantiate a new Group Area so no node is ever orphaned!
+      if (!targetContainer && nodeType !== 'groupFrame') {
+        const existingFrames = nodes.filter(
+          (n) => n.type === 'groupFrame' || n.type === 'groupContainer'
+        );
+        const existingGroupNumbers = existingFrames
+          .map((f) => (f.data as any)?.numericGroupId || parseInt((f.data as any)?.groupId) || 1)
+          .filter((g) => !isNaN(g) && g > 0);
+        const nextGroupNumber =
+          existingGroupNumbers.length > 0 ? Math.max(...existingGroupNumbers) + 1 : 1;
+
+        const newFrameId = `grp-frame-${Date.now().toString().slice(-4)}-${Math.random().toString(36).slice(2, 5)}`;
+        const GROUP_PALETTE = ['#0284c7', '#8b5cf6', '#10b981', '#f59e0b', '#ec4899', '#06b6d4'];
+        const frameColor = GROUP_PALETTE[(nextGroupNumber - 1) % GROUP_PALETTE.length];
+
+        const frameX = Math.round(position.x - 85);
+        const frameY = Math.round(position.y - 60);
+
+        const newFrameNode: Node = {
+          id: newFrameId,
+          type: 'groupFrame',
+          position: { x: frameX, y: frameY },
+          zIndex: 0,
+          style: { width: 440, height: 480 },
+          data: {
+            groupId: newFrameId,
+            numericGroupId: nextGroupNumber,
+            title: `Group Area ${nextGroupNumber}`,
+            titleBn: `গ্রুপ এলাকা ${nextGroupNumber}`,
+            category: 'custom',
+            color: frameColor,
+            questionIds: [newNodeId],
+            questionCount: 1,
+            expandedHeight: 480,
+          },
+        };
+
+        const itemX = frameX + 85;
+        const itemY = frameY + 60;
+
+        if (nodeType === 'question') {
+          nodeData = {
+            question_id: newQId,
+            group: nextGroupNumber,
+            containerId: newFrameId,
+            customColor: frameColor,
+            question: name || 'New Question',
+            question_bn: nameBn || name || 'নতুন প্রশ্ন',
+            answer_type: answerType || 'string',
+            mandatory: true,
+            editable: true,
+            placeholder: '',
+            hint: '',
+            options: options || '',
+          };
+        } else if (nodeType === 'decision') {
+          nodeData = {
+            label: 'Condition Check',
+            conditionType: 'match',
+            comparisonValue: 'Yes',
+            containerId: newFrameId,
+            group: nextGroupNumber,
+          };
+        } else if (nodeType === 'groupJump') {
+          nodeData = {
+            targetGroupId: nextGroupNumber + 1,
+            targetGroupTitle: `Group ${nextGroupNumber + 1}`,
+            containerId: newFrameId,
+            group: nextGroupNumber,
+          };
+        } else {
+          nodeData = {
+            label: name || nodeType.toUpperCase(),
+            containerId: newFrameId,
+            group: nextGroupNumber,
+          };
+        }
+
+        const newNode: Node = {
+          id: newNodeId,
+          type: nodeType,
+          position: { x: itemX, y: itemY },
+          zIndex: 10,
+          data: nodeData,
+        };
+
+        recordSnapshot(nodes, edges, groupMeta);
+        setNodes((nds) => nds.concat(newFrameNode, newNode));
+        setSelectedNodeId(newNodeId);
+        setGroupMeta((prev) => ({
+          ...prev,
+          totalGroups: Math.max(prev.totalGroups, nextGroupNumber),
+        }));
+        return;
+      }
+
       if (nodeType === 'question') {
         const cData = targetContainer?.data as any;
         nodeData = {
@@ -748,27 +1635,48 @@ const FlowEditor: React.FC = () => {
           label: 'Condition Check',
           conditionType: 'match',
           comparisonValue: 'Yes',
+          containerId: targetContainer?.id,
+          group: (targetContainer?.data as any)?.numericGroupId || groupMeta.groupNumber,
         };
       } else if (nodeType === 'groupJump') {
         nodeData = {
           targetGroupId: groupMeta.groupNumber + 1,
           targetGroupTitle: `Group ${groupMeta.groupNumber + 1}`,
+          containerId: targetContainer?.id,
+          group: (targetContainer?.data as any)?.numericGroupId || groupMeta.groupNumber,
         };
       } else {
         nodeData = {
           label: name || nodeType.toUpperCase(),
+          containerId: targetContainer?.id,
+          group: (targetContainer?.data as any)?.numericGroupId || groupMeta.groupNumber,
         };
       }
 
       // If dropped inside a container or frame, place it cleanly inside
       let nodePos = position;
-      if (targetContainer && nodeType === 'question') {
-        const existingChildIds = (targetContainer.data as any)?.questionIds || [];
-        const xOffset = targetContainer.type === 'groupFrame' ? 85 : 35;
-        nodePos = {
-          x: targetContainer.position.x + xOffset,
-          y: targetContainer.position.y + 60 + existingChildIds.length * 200,
-        };
+      if (targetContainer) {
+        if (nodeType === 'question') {
+          const existingChildIds = (targetContainer.data as any)?.questionIds || [];
+          const xOffset = targetContainer.type === 'groupFrame' ? 85 : 35;
+          nodePos = {
+            x: targetContainer.position.x + xOffset,
+            y: targetContainer.position.y + 60 + existingChildIds.length * 200,
+          };
+        } else {
+          // Clamp symbol position so it stays comfortably inside the target frame
+          const frameWidth = Number(targetContainer.style?.width) || 440;
+          const frameHeight = Number(targetContainer.style?.height) || 480;
+          const clampedX = Math.max(
+            targetContainer.position.x + 20,
+            Math.min(position.x, targetContainer.position.x + frameWidth - 180)
+          );
+          const clampedY = Math.max(
+            targetContainer.position.y + 50,
+            Math.min(position.y, targetContainer.position.y + frameHeight - 120)
+          );
+          nodePos = { x: clampedX, y: clampedY };
+        }
       }
 
       const newNode: Node = {
@@ -780,16 +1688,18 @@ const FlowEditor: React.FC = () => {
         data: nodeData,
       };
 
+      recordSnapshot(nodes, edges, groupMeta);
+
       setNodes((nds) => {
         const nextNodes = nds.concat(newNode);
-        if (targetContainer && nodeType === 'question') {
+        if (targetContainer && nodeType !== 'groupFrame' && nodeType !== 'groupContainer') {
           return nextNodes.map((n) => {
             if (n.id === targetContainer.id) {
               const prevIds = (n.data as any).questionIds || [];
-              const updatedIds = [...prevIds, newNodeId];
+              const updatedIds = prevIds.includes(newNodeId) ? prevIds : [...prevIds, newNodeId];
               const newCount = updatedIds.length;
               const currentHeight = (n.style?.height ? parseInt(String(n.style.height), 10) : 0) || 220;
-              const neededHeight = Math.max(currentHeight, newCount * 220 + 120);
+              const neededHeight = nodeType === 'question' ? Math.max(currentHeight, newCount * 220 + 120) : currentHeight;
               return {
                 ...n,
                 style: n.type === 'groupFrame' ? { ...n.style, height: neededHeight } : n.style,
@@ -808,15 +1718,30 @@ const FlowEditor: React.FC = () => {
       });
       setSelectedNodeId(newNodeId);
     },
-    [nodes, screenToFlowPosition, setNodes, groupMeta.groupNumber, handleInsertGroupIntoCanvas]
+    [nodes, edges, groupMeta, recordSnapshot, screenToFlowPosition, setNodes, handleInsertGroupIntoCanvas]
   );
 
   // Click-to-add from Flowchart Symbols palette
   const handleAddSymbol = useCallback(
     (nodeType: FlowNodeType, name: string, nameBn: string) => {
-      const lastNode = nodes[nodes.length - 1];
-      const posX = lastNode ? lastNode.position.x : 300;
-      const posY = lastNode ? lastNode.position.y + 180 : 150;
+      if (nodeType === 'groupFrame') {
+        handleCreateNewGroupArea();
+        return;
+      }
+
+      const existingFrames = nodes.filter(
+        (n) => n.type === 'groupFrame' || n.type === 'groupContainer'
+      );
+      let targetFrame = existingFrames.find((f) => f.id === selectedNodeId);
+      if (!targetFrame && selectedNodeId) {
+        const sel = nodes.find((n) => n.id === selectedNodeId);
+        if (sel && (sel.data as any)?.containerId) {
+          targetFrame = existingFrames.find((f) => f.id === (sel.data as any).containerId);
+        }
+      }
+      if (!targetFrame && existingFrames.length > 0) {
+        targetFrame = existingFrames[existingFrames.length - 1];
+      }
 
       const currentHighestId = nodes.reduce((max, n) => {
         if (n.type === 'question' && (n.data as any)?.question_id) {
@@ -831,10 +1756,98 @@ const FlowEditor: React.FC = () => {
           ? `q-${newQId}`
           : `${nodeType}-${Date.now().toString().slice(-4)}`;
 
+      if (!targetFrame) {
+        // Auto-create Group Area 1 and nest the symbol inside
+        const newFrameId = `grp-frame-${Date.now().toString().slice(-4)}`;
+        const frameX = 300;
+        const frameY = 150;
+        const newFrameNode: Node = {
+          id: newFrameId,
+          type: 'groupFrame',
+          position: { x: frameX, y: frameY },
+          zIndex: 0,
+          style: { width: 440, height: 480 },
+          data: {
+            groupId: newFrameId,
+            numericGroupId: 1,
+            title: 'Group Area 1',
+            titleBn: 'গ্রুপ এলাকা ১',
+            category: 'custom',
+            color: '#0284c7',
+            questionIds: [newNodeId],
+            questionCount: 1,
+            expandedHeight: 480,
+          },
+        };
+
+        let nodeData: any = {};
+        if (nodeType === 'question') {
+          nodeData = {
+            question_id: newQId,
+            group: 1,
+            containerId: newFrameId,
+            customColor: '#0284c7',
+            question: name || 'New Question',
+            question_bn: nameBn || name || 'নতুন প্রশ্ন',
+            answer_type: 'string',
+            mandatory: true,
+            editable: true,
+            placeholder: '',
+            hint: '',
+            options: '',
+          };
+        } else if (nodeType === 'decision') {
+          nodeData = {
+            label: 'Condition Check',
+            conditionType: 'match',
+            comparisonValue: 'Yes',
+            containerId: newFrameId,
+            group: 1,
+          };
+        } else if (nodeType === 'groupJump') {
+          nodeData = {
+            targetGroupId: 2,
+            targetGroupTitle: 'Group 2',
+            containerId: newFrameId,
+            group: 1,
+          };
+        } else {
+          nodeData = {
+            label: name || nodeType.toUpperCase(),
+            containerId: newFrameId,
+            group: 1,
+          };
+        }
+
+        const newNode: Node = {
+          id: newNodeId,
+          type: nodeType,
+          position: { x: frameX + 85, y: frameY + 60 },
+          zIndex: 10,
+          data: nodeData,
+        };
+
+        recordSnapshot(nodes, edges, groupMeta);
+        setNodes((nds) => nds.concat(newFrameNode, newNode));
+        setSelectedNodeId(newNodeId);
+        return;
+      }
+
+      // If targetFrame exists, nest neatly inside it
+      const childIds = (targetFrame.data as any)?.questionIds || [];
+      const xOffset = targetFrame.type === 'groupFrame' ? 85 : 35;
+      const posX = targetFrame.position.x + xOffset;
+      const posY = targetFrame.position.y + 60 + childIds.length * 200;
+      const cData = targetFrame.data as any;
+      const numGrp = cData.numericGroupId || parseInt(cData.groupId) || groupMeta.groupNumber;
+
       let nodeData: any = {};
       if (nodeType === 'question') {
         nodeData = {
           question_id: newQId,
+          group: numGrp,
+          containerId: targetFrame.id,
+          customColor: cData.color,
           question: name || 'New Question',
           question_bn: nameBn || name || 'নতুন প্রশ্ন',
           answer_type: 'string',
@@ -844,32 +1857,26 @@ const FlowEditor: React.FC = () => {
           hint: '',
           options: '',
         };
-      } else if (nodeType === 'groupFrame') {
-        const nextGrpId = groupMeta.groupNumber + 1;
-        nodeData = {
-          groupId: `grp-frame-${Date.now().toString().slice(-4)}`,
-          numericGroupId: nextGrpId,
-          title: name || `Group Area ${nextGrpId}`,
-          titleBn: nameBn || `গ্রুপ এলাকা ${nextGrpId}`,
-          category: 'custom',
-          color: '#8b5cf6',
-          questionIds: [],
-          questionCount: 0,
-        };
       } else if (nodeType === 'decision') {
         nodeData = {
           label: 'Condition Check',
           conditionType: 'match',
           comparisonValue: 'Yes',
+          containerId: targetFrame.id,
+          group: numGrp,
         };
       } else if (nodeType === 'groupJump') {
         nodeData = {
-          targetGroupId: groupMeta.groupNumber + 1,
-          targetGroupTitle: `Group ${groupMeta.groupNumber + 1}`,
+          targetGroupId: numGrp + 1,
+          targetGroupTitle: `Group ${numGrp + 1}`,
+          containerId: targetFrame.id,
+          group: numGrp,
         };
       } else {
         nodeData = {
           label: name || nodeType.toUpperCase(),
+          containerId: targetFrame.id,
+          group: numGrp,
         };
       }
 
@@ -877,23 +1884,54 @@ const FlowEditor: React.FC = () => {
         id: newNodeId,
         type: nodeType,
         position: { x: posX, y: posY },
-        zIndex: nodeType === 'groupFrame' || nodeType === 'groupContainer' ? 0 : 10,
-        style: nodeType === 'groupFrame' ? { width: 440, height: 480 } : undefined,
+        zIndex: 10,
         data: nodeData,
       };
 
-      setNodes((nds) => nds.concat(newNode));
+      recordSnapshot(nodes, edges, groupMeta);
+      setNodes((nds) => {
+        const nextNodes = nds.concat(newNode);
+        return nextNodes.map((n) => {
+          if (n.id === targetFrame!.id) {
+            const updatedIds = [...childIds, newNodeId];
+            const newCount = updatedIds.length;
+            const currentHeight = (n.style?.height ? parseInt(String(n.style.height), 10) : 0) || 220;
+            const neededHeight = Math.max(currentHeight, newCount * 220 + 120);
+            return {
+              ...n,
+              style: n.type === 'groupFrame' ? { ...n.style, height: neededHeight } : n.style,
+              data: {
+                ...n.data,
+                questionIds: updatedIds,
+                questionCount: newCount,
+                expandedHeight: neededHeight,
+              },
+            };
+          }
+          return n;
+        });
+      });
       setSelectedNodeId(newNodeId);
     },
-    [nodes, groupMeta.groupNumber, setNodes]
+    [nodes, edges, groupMeta, recordSnapshot, setNodes, selectedNodeId, handleCreateNewGroupArea]
   );
 
   // Click-to-add from Input Type Views palette
   const handleAddQuestionFromWidget = useCallback(
     (answerType: AnswerType, name: string, nameBn: string, options?: string) => {
-      const lastNode = nodes[nodes.length - 1];
-      const posX = lastNode ? lastNode.position.x : 300;
-      const posY = lastNode ? lastNode.position.y + 180 : 150;
+      const existingFrames = nodes.filter(
+        (n) => n.type === 'groupFrame' || n.type === 'groupContainer'
+      );
+      let targetFrame = existingFrames.find((f) => f.id === selectedNodeId);
+      if (!targetFrame && selectedNodeId) {
+        const sel = nodes.find((n) => n.id === selectedNodeId);
+        if (sel && (sel.data as any)?.containerId) {
+          targetFrame = existingFrames.find((f) => f.id === (sel.data as any).containerId);
+        }
+      }
+      if (!targetFrame && existingFrames.length > 0) {
+        targetFrame = existingFrames[existingFrames.length - 1];
+      }
 
       const currentHighestId = nodes.reduce((max, n) => {
         if (n.type === 'question' && (n.data as any)?.question_id) {
@@ -905,12 +1943,75 @@ const FlowEditor: React.FC = () => {
       const newQId = currentHighestId + 1;
       const newNodeId = `q-${newQId}`;
 
+      if (!targetFrame) {
+        // Auto-create Group Area 1 and nest the question inside
+        const newFrameId = `grp-frame-${Date.now().toString().slice(-4)}`;
+        const frameX = 300;
+        const frameY = 150;
+        const newFrameNode: Node = {
+          id: newFrameId,
+          type: 'groupFrame',
+          position: { x: frameX, y: frameY },
+          zIndex: 0,
+          style: { width: 440, height: 480 },
+          data: {
+            groupId: newFrameId,
+            numericGroupId: 1,
+            title: 'Group Area 1',
+            titleBn: 'গ্রুপ এলাকা ১',
+            category: 'custom',
+            color: '#0284c7',
+            questionIds: [newNodeId],
+            questionCount: 1,
+            expandedHeight: 480,
+          },
+        };
+
+        const newNode: Node = {
+          id: newNodeId,
+          type: 'question',
+          position: { x: frameX + 85, y: frameY + 60 },
+          zIndex: 10,
+          data: {
+            question_id: newQId,
+            group: 1,
+            containerId: newFrameId,
+            customColor: '#0284c7',
+            question: name || 'New Question',
+            question_bn: nameBn || name || 'নতুন প্রশ্ন',
+            answer_type: answerType,
+            mandatory: true,
+            editable: true,
+            placeholder: '',
+            hint: '',
+            options: options || '',
+          },
+        };
+
+        recordSnapshot(nodes, edges, groupMeta);
+        setNodes((nds) => nds.concat(newFrameNode, newNode));
+        setSelectedNodeId(newNodeId);
+        return;
+      }
+
+      // If targetFrame exists, nest cleanly inside it
+      const childIds = (targetFrame.data as any)?.questionIds || [];
+      const xOffset = targetFrame.type === 'groupFrame' ? 85 : 35;
+      const posX = targetFrame.position.x + xOffset;
+      const posY = targetFrame.position.y + 60 + childIds.length * 200;
+      const cData = targetFrame.data as any;
+      const numGrp = cData.numericGroupId || parseInt(cData.groupId) || groupMeta.groupNumber;
+
       const newNode: Node = {
         id: newNodeId,
         type: 'question',
         position: { x: posX, y: posY },
+        zIndex: 10,
         data: {
           question_id: newQId,
+          group: numGrp,
+          containerId: targetFrame.id,
+          customColor: cData.color,
           question: name || 'New Question',
           question_bn: nameBn || name || 'নতুন প্রশ্ন',
           answer_type: answerType,
@@ -922,15 +2023,38 @@ const FlowEditor: React.FC = () => {
         },
       };
 
-      setNodes((nds) => nds.concat(newNode));
+      recordSnapshot(nodes, edges, groupMeta);
+      setNodes((nds) => {
+        const nextNodes = nds.concat(newNode);
+        return nextNodes.map((n) => {
+          if (n.id === targetFrame!.id) {
+            const updatedIds = [...childIds, newNodeId];
+            const newCount = updatedIds.length;
+            const currentHeight = (n.style?.height ? parseInt(String(n.style.height), 10) : 0) || 220;
+            const neededHeight = Math.max(currentHeight, newCount * 220 + 120);
+            return {
+              ...n,
+              style: n.type === 'groupFrame' ? { ...n.style, height: neededHeight } : n.style,
+              data: {
+                ...n.data,
+                questionIds: updatedIds,
+                questionCount: newCount,
+                expandedHeight: neededHeight,
+              },
+            };
+          }
+          return n;
+        });
+      });
       setSelectedNodeId(newNodeId);
     },
-    [nodes, setNodes]
+    [nodes, edges, groupMeta, recordSnapshot, setNodes, selectedNodeId]
   );
 
   // Update Node Data
   const handleUpdateNodeData = useCallback(
     (nodeId: string, newData: any) => {
+      recordSnapshot(nodes, edges, groupMeta);
       setNodes((nds) =>
         nds.map((node) => {
           if (node.id === nodeId) {
@@ -946,12 +2070,13 @@ const FlowEditor: React.FC = () => {
         })
       );
     },
-    [setNodes]
+    [nodes, edges, groupMeta, recordSnapshot, setNodes]
   );
 
   // Update Edge Data
   const handleUpdateEdgeData = useCallback(
     (edgeId: string, newEdgeData: any) => {
+      recordSnapshot(nodes, edges, groupMeta);
       setEdges((eds) =>
         eds.map((edge) => {
           if (edge.id === edgeId) {
@@ -975,39 +2100,43 @@ const FlowEditor: React.FC = () => {
         })
       );
     },
-    [setEdges]
+    [nodes, edges, groupMeta, recordSnapshot, setEdges]
   );
 
   // Add Edge
   const handleAddEdge = useCallback(
     (newEdge: Edge) => {
+      recordSnapshot(nodes, edges, groupMeta);
       setEdges((eds) => [...eds, newEdge]);
     },
-    [setEdges]
+    [nodes, edges, groupMeta, recordSnapshot, setEdges]
   );
 
   // Delete Edge
   const handleDeleteEdge = useCallback(
     (edgeId: string) => {
+      recordSnapshot(nodes, edges, groupMeta);
       setEdges((eds) => eds.filter((e) => e.id !== edgeId));
     },
-    [setEdges]
+    [nodes, edges, groupMeta, recordSnapshot, setEdges]
   );
 
   // Update Group Meta
   const handleUpdateGroupMeta = useCallback(
     (newMeta: Partial<GroupMeta>) => {
+      recordSnapshot(nodes, edges, groupMeta);
       setGroupMeta((prev) => ({
         ...prev,
         ...newMeta,
       }));
     },
-    []
+    [nodes, edges, groupMeta, recordSnapshot]
   );
 
   // Delete Node (Cascades to all children if node is a Group Container or Group Frame)
   const handleDeleteNode = useCallback(
     (nodeId: string) => {
+      recordSnapshot(nodes, edges, groupMeta);
       const targetNode = nodes.find((n) => n.id === nodeId);
       const toDelete = new Set<string>([nodeId]);
 
@@ -1054,12 +2183,13 @@ const FlowEditor: React.FC = () => {
         setSelectedNodeId(null);
       }
     },
-    [nodes, selectedNodeId, setNodes, setEdges]
+    [nodes, edges, groupMeta, recordSnapshot, selectedNodeId, setNodes, setEdges]
   );
 
   // Duplicate Node
   const handleDuplicateNode = useCallback(
     (nodeId: string) => {
+      recordSnapshot(nodes, edges, groupMeta);
       const nodeToCopy = nodes.find((n) => n.id === nodeId);
       if (!nodeToCopy) return;
 
@@ -1095,73 +2225,20 @@ const FlowEditor: React.FC = () => {
       setNodes((nds) => nds.concat(clonedNode));
       setSelectedNodeId(newNodeId);
     },
-    [nodes, setNodes]
+    [nodes, edges, groupMeta, recordSnapshot, setNodes]
   );
 
-  // Active mutation dispatchers that automatically route to either Main Canvas or Group Workshop Canvas
-  const activeUpdateNodeData = useCallback(
-    (nodeId: string, newData: any) => {
-      if (selectedSource === 'workshop') {
-        workshopBridgeRef.current?.updateNodeData(nodeId, newData);
-      } else {
-        handleUpdateNodeData(nodeId, newData);
-      }
-    },
-    [selectedSource, handleUpdateNodeData]
-  );
-
-  const activeDeleteNode = useCallback(
-    (nodeId: string) => {
-      if (selectedSource === 'workshop') {
-        workshopBridgeRef.current?.deleteNode(nodeId);
-        setWorkshopSelectedNodeId(null);
-      } else {
-        handleDeleteNode(nodeId);
-      }
-    },
-    [selectedSource, handleDeleteNode]
-  );
-
-  const activeDuplicateNode = useCallback(
-    (nodeId: string) => {
-      if (selectedSource === 'workshop') {
-        const target = workshopNodes.find((n) => n.id === nodeId);
-        if (target) {
-          workshopBridgeRef.current?.duplicateNode(target);
-        }
-      } else {
-        handleDuplicateNode(nodeId);
-      }
-    },
-    [selectedSource, workshopNodes, handleDuplicateNode]
-  );
-
-  const activeUpdateEdgeData = useCallback(
-    (edgeId: string, newEdgeData: any) => {
-      if (selectedSource === 'workshop') {
-        workshopBridgeRef.current?.updateEdgeData(edgeId, newEdgeData);
-      } else {
-        handleUpdateEdgeData(edgeId, newEdgeData);
-      }
-    },
-    [selectedSource, handleUpdateEdgeData]
-  );
-
-  const activeDeleteEdge = useCallback(
-    (edgeId: string) => {
-      if (selectedSource === 'workshop') {
-        workshopBridgeRef.current?.deleteEdge(edgeId);
-        setWorkshopSelectedEdgeId(null);
-      } else {
-        handleDeleteEdge(edgeId);
-      }
-    },
-    [selectedSource, handleDeleteEdge]
-  );
+  // Active mutation dispatchers for Inspector panel
+  const activeUpdateNodeData = handleUpdateNodeData;
+  const activeDeleteNode = handleDeleteNode;
+  const activeDuplicateNode = handleDuplicateNode;
+  const activeUpdateEdgeData = handleUpdateEdgeData;
+  const activeDeleteEdge = handleDeleteEdge;
 
   // Auto-branch from option handle
   const handleAddNestedQuestion = useCallback(
     (parentNodeId: string, optionValue: string) => {
+      recordSnapshot(nodes, edges, groupMeta);
       const parentNode = nodes.find((n) => n.id === parentNodeId);
       if (!parentNode) return;
 
@@ -1225,24 +2302,27 @@ const FlowEditor: React.FC = () => {
       setEdges((eds) => eds.concat(newEdge));
       setSelectedNodeId(newNodeId);
     },
-    [nodes, edges, edgeRouting, setNodes, setEdges]
+    [nodes, edges, groupMeta, recordSnapshot, edgeRouting, setNodes, setEdges]
   );
 
   // Hierarchical DAG Auto-Layout
   const handleAutoLayout = useCallback(() => {
+    recordSnapshot(nodes, edges, groupMeta);
     const arrangedNodes = calculateHierarchicalLayout(nodes, edges);
     setNodes(arrangedNodes);
     setTimeout(() => fitView({ padding: 0.25, duration: 400 }), 60);
-  }, [nodes, edges, setNodes, fitView]);
+  }, [nodes, edges, groupMeta, recordSnapshot, setNodes, fitView]);
 
   // Align tools
   const handleAlignHorizontal = useCallback(() => {
+    recordSnapshot(nodes, edges, groupMeta);
     setNodes((nds) => alignNodesHorizontal(nds, selectedNodeId ? [selectedNodeId] : undefined));
-  }, [selectedNodeId, setNodes]);
+  }, [nodes, edges, groupMeta, recordSnapshot, selectedNodeId, setNodes]);
 
   const handleAlignVertical = useCallback(() => {
+    recordSnapshot(nodes, edges, groupMeta);
     setNodes((nds) => alignNodesVertical(nds, selectedNodeId ? [selectedNodeId] : undefined));
-  }, [selectedNodeId, setNodes]);
+  }, [nodes, edges, groupMeta, recordSnapshot, selectedNodeId, setNodes]);
 
   // Locate and focus diagnostic node on canvas
   const handleFocusDiagnosticNode = useCallback(
@@ -1267,6 +2347,7 @@ const FlowEditor: React.FC = () => {
         'Reset current flowchart to the default Sofol Dynamic KYC sample?'
       )
     ) {
+      recordSnapshot(nodes, edges, groupMeta);
       const parsed = parseSchemaToFlow(SAMPLE_INITIAL_SCHEMA);
       setNodes(parsed.nodes);
       setEdges(parsed.edges);
@@ -1275,7 +2356,7 @@ const FlowEditor: React.FC = () => {
       setSelectedEdgeId(null);
       setTimeout(() => fitView({ padding: 0.2 }), 50);
     }
-  }, [setNodes, setEdges, fitView]);
+  }, [nodes, edges, groupMeta, recordSnapshot, setNodes, setEdges, fitView]);
 
   // Compile current schema
   const currentCompiledSchema = useMemo(() => {
@@ -1285,6 +2366,7 @@ const FlowEditor: React.FC = () => {
   // Import JSON schema handler
   const handleImportSchema = useCallback(
     (schema: DynamicKycGroupResponse) => {
+      recordSnapshot(nodes, edges, groupMeta);
       const parsed = parseSchemaToFlow(schema);
       setNodes(parsed.nodes);
       setEdges(parsed.edges);
@@ -1313,7 +2395,7 @@ const FlowEditor: React.FC = () => {
 
       setTimeout(() => fitView({ padding: 0.2, duration: 400 }), 150);
     },
-    [setNodes, setEdges, fitView, activeProject, setProjects, setActiveView]
+    [nodes, edges, groupMeta, recordSnapshot, setNodes, setEdges, fitView, activeProject, setProjects, setActiveView]
   );
 
   return (
@@ -1380,6 +2462,10 @@ const FlowEditor: React.FC = () => {
                 onAutoLayout={handleAutoLayout}
                 onExit={handleExitGroupDesignSession}
                 onSave={handleSaveGroupDesignSession}
+                canUndo={canUndo}
+                canRedo={canRedo}
+                onUndo={triggerUndo}
+                onRedo={triggerRedo}
               />
             ) : (
               <Header
@@ -1403,8 +2489,6 @@ const FlowEditor: React.FC = () => {
                 diagnosticsCount={diagnostics.length}
                 diagnosticsErrors={diagnosticsErrors}
                 onOpenDiagnostics={() => setIsDiagnosticsModalOpen(true)}
-                edgeRouting={edgeRouting}
-                onChangeEdgeRouting={handleChangeEdgeRouting}
                 onAlignHorizontal={handleAlignHorizontal}
                 onAlignVertical={handleAlignVertical}
                 onOpenVersionHistory={() => {
@@ -1419,6 +2503,13 @@ const FlowEditor: React.FC = () => {
                   setIsInitialPublishMode(true);
                   setIsCreateVersionModalOpen(true);
                 }}
+                canUndo={canUndo}
+                canRedo={canRedo}
+                onUndo={triggerUndo}
+                onRedo={triggerRedo}
+                isPathTracingEnabled={isPathTracingEnabled}
+                onTogglePathTracing={togglePathTracing}
+                onAddGroupArea={handleCreateNewGroupArea}
               />
             )}
 
@@ -1528,12 +2619,140 @@ const FlowEditor: React.FC = () => {
                     </div>
                   )}
 
+                  {/* Floating Dependency Path Tracing Indicator */}
+                  {activeTrace && (
+                    <div className="floating-trace-indicator">
+                      <div className="trace-indicator-pill">
+                        <GitFork size={14} className="text-cyan-400" />
+                        <span className="trace-target-title">
+                          Tracing: <strong>{activeTraceTargetName}</strong>
+                        </span>
+                        <span className="trace-divider">•</span>
+                        <span
+                          className="trace-badge-cyan"
+                          title="Upstream Predecessors / Ancestors"
+                        >
+                          ↑ {activeTrace.ancestorNodeIds.size} Upstream
+                        </span>
+                        <span
+                          className="trace-badge-amber"
+                          title="Downstream Dependents / Successors"
+                        >
+                          ↓ {activeTrace.descendantNodeIds.size} Downstream
+                        </span>
+                        <button
+                          type="button"
+                          className="trace-clear-btn"
+                          onClick={() => setSelectedNodeId(null)}
+                          title="Clear Selection / Stop Tracing"
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Draw Area Active Mode Top Banner */}
+                  {isDrawAreaMode && (
+                    <div className="draw-area-banner animate-in">
+                      <div className="draw-area-banner-content">
+                        <Crop size={15} className="text-cyan-400 animate-pulse" />
+                        <span>
+                          <strong>Draw Group Area:</strong> Click and drag on canvas to define an area and enclose questions.
+                        </span>
+                        <span className="draw-area-banner-hint">Press <strong>Esc</strong> to cancel</span>
+                        <button
+                          type="button"
+                          className="draw-area-banner-cancel-btn"
+                          onClick={() => {
+                            setActiveToolMode('select');
+                            setDrawStartPos(null);
+                            setDrawCurrentPos(null);
+                          }}
+                        >
+                          Exit
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Interactive Figma-style Frame Draw Overlay */}
+                  {isDrawAreaMode && (
+                    <div
+                      className="draw-area-interaction-overlay"
+                      onMouseDown={handleDrawMouseDown}
+                      onMouseMove={handleDrawMouseMove}
+                      onMouseUp={handleDrawMouseUp}
+                    >
+                      {drawStartPos && drawCurrentPos && (
+                        <div
+                          className="draw-area-preview-box"
+                          style={{
+                            left: Math.min(drawStartPos.relative.x, drawCurrentPos.relative.x),
+                            top: Math.min(drawStartPos.relative.y, drawCurrentPos.relative.y),
+                            width: Math.abs(drawCurrentPos.relative.x - drawStartPos.relative.x),
+                            height: Math.abs(drawCurrentPos.relative.y - drawStartPos.relative.y),
+                          }}
+                        >
+                          <div className="draw-area-preview-badge">
+                            <Crop size={12} className="text-cyan-400" />
+                            <span>
+                              New Group Area ({Math.round(Math.abs(drawCurrentPos.relative.x - drawStartPos.relative.x))} × {Math.round(Math.abs(drawCurrentPos.relative.y - drawStartPos.relative.y))})
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Empty Canvas Starter Area Guide */}
+                  {!nodes.some((n) => n.type === 'groupFrame' || n.type === 'groupContainer') && (
+                    <div className="canvas-empty-area-guide">
+                      <div className="canvas-empty-area-card animate-in">
+                        <div className="canvas-empty-area-icon">
+                          <Crop size={24} className="text-cyan-400" />
+                        </div>
+                        <h3 className="canvas-empty-area-title">Group Area Required</h3>
+                        <p className="canvas-empty-area-desc">
+                          Every question and logic check belongs to a <strong>Group Area</strong>. Drag any question or symbol from the left sidebar to automatically start your first Group Area, or choose below.
+                        </p>
+                        <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginTop: '14px', flexWrap: 'wrap' }}>
+                          <button
+                            type="button"
+                            className="btn btn-primary btn-sm canvas-empty-area-btn"
+                            onClick={() => handleCreateNewGroupArea()}
+                          >
+                            <Plus size={14} />
+                            <span>Create Group Area</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm canvas-empty-area-btn"
+                            onClick={() => setActiveToolMode('drawArea')}
+                            title="Draw custom group boundary on canvas (F)"
+                          >
+                            <Crop size={14} className="text-cyan-400" />
+                            <span>Draw Area (F)</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   <ReactFlow
-                    nodes={nodes}
-                    edges={edges}
+                    nodes={displayNodes}
+                    edges={displayEdges}
                     onNodesChange={handleNodesChange}
-                    onEdgesChange={onEdgesChange}
+                    onEdgesChange={handleEdgesChange}
                     onConnect={onConnect}
+                    onReconnect={onReconnect}
+                    edgesReconnectable={false}
+                    panOnDrag={isHandMode ? true : [1, 2]}
+                    selectionOnDrag={!isHandMode && !isDrawAreaMode}
+                    nodesDraggable={!isHandMode && !isDrawAreaMode}
+                    elementsSelectable={!isHandMode && !isDrawAreaMode}
+                    onNodeDragStart={() => onNodeDragStart(nodes, edges, groupMeta)}
+                    onNodeDragStop={handleNodeDragStop}
                     onDrop={onDrop}
                     onDragOver={onDragOver}
                     onNodeClick={onNodeClick}
@@ -1552,7 +2771,9 @@ const FlowEditor: React.FC = () => {
                     fitView
                     deleteKeyCode={['Backspace', 'Delete']}
                     elevateNodesOnSelect={false}
-                    className="survey-flow-canvas"
+                    className={`survey-flow-canvas ${
+                      isHandMode ? 'is-tool-hand' : isDrawAreaMode ? 'is-tool-draw' : ''
+                    }`}
                   >
                     <Controls className="flow-controls" />
                     <MiniMap
@@ -1575,37 +2796,19 @@ const FlowEditor: React.FC = () => {
                       color={resolvedTheme === 'light' ? '#cbd5e1' : '#334155'}
                     />
                   </ReactFlow>
-                </main>
 
-                {/* Bottom Dock Resizer Handle (only when open) */}
-                {!groupDesignSession && isBottomDockOpen && (
-                  <div
-                    className={`bottom-dock-resizer ${resizingSide === 'bottom' ? 'is-active' : ''}`}
-                    onMouseDown={startResizingBottom}
-                    onDoubleClick={resetBottomHeight}
-                    title="Drag to resize Question Group Studio, double-click to reset"
-                  />
-                )}
-
-                {/* Bottom Group Creation Workshop Canvas (Independent Split-Screen Flow Canvas) */}
-                {!groupDesignSession && (
-                  <GroupWorkshopCanvas
-                    isOpen={isBottomDockOpen}
-                    height={bottomHeight}
-                    isResizing={resizingSide === 'bottom'}
-                    onToggleOpen={toggleBottomDock}
-                    onDeployGroupToSurvey={(grp) => handleInsertGroupIntoCanvas(grp)}
-                    onSaveToLibrary={() => refreshGroups()}
-                    theme={resolvedTheme}
-                    onSelectNode={handleWorkshopSelectNode}
-                    onSelectEdge={handleWorkshopSelectEdge}
-                    onWorkshopNodesChange={setWorkshopNodes}
-                    onWorkshopEdgesChange={setWorkshopEdges}
-                    onRegisterBridge={(bridge) => {
-                      workshopBridgeRef.current = bridge;
+                  {/* Figma-style Bottom Floating Toolbar Dock */}
+                  <FigmaToolbar
+                    activeMode={activeToolMode}
+                    onSelectMode={(mode) => {
+                      setActiveToolMode(mode);
+                      if (mode !== 'drawArea') {
+                        setDrawStartPos(null);
+                        setDrawCurrentPos(null);
+                      }
                     }}
                   />
-                )}
+                </main>
               </div>
 
               {/* Right Resizer Splitter (Antigravity Style) */}
@@ -1639,6 +2842,7 @@ const FlowEditor: React.FC = () => {
                 onAddQuestion={handleAddQuestionFromWidget}
                 onAddEdge={handleAddEdge}
                 onDeleteEdge={activeDeleteEdge}
+                onFocusNode={handleFocusDiagnosticNode}
               />
             </div>
           </div>

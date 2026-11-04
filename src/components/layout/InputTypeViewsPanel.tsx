@@ -36,6 +36,8 @@ import {
   Network,
   Database,
   Link2,
+  GitFork,
+  Layers,
 } from 'lucide-react';
 import type {
   AnswerType,
@@ -46,6 +48,10 @@ import type {
 import type { ReusableQuestionGroup } from '../../types/group';
 import type { GroupMeta } from '../../utils/schemaCompiler';
 import { resolveNodeGroupId } from '../../utils/flowValidator';
+import {
+  calculateDependencyTrace,
+  getNodeTraceLabel,
+} from '../../utils/dependencyTracing';
 
 interface InputTypeItem {
   type: AnswerType;
@@ -188,6 +194,7 @@ interface InputTypeViewsPanelProps {
   ) => void;
   onAddEdge?: (edge: Edge) => void;
   onDeleteEdge?: (edgeId: string) => void;
+  onFocusNode?: (nodeId: string) => void;
 }
 
 export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
@@ -210,6 +217,7 @@ export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
   onAddQuestion,
   onAddEdge,
   onDeleteEdge,
+  onFocusNode,
 }) => {
   // Store active tab and track selection transitions during render
   const [tab, setTab] = useState<'widgets' | 'inspector'>(
@@ -376,71 +384,107 @@ export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
       {activeTab === 'inspector' && (
         <div className="inspector-content">
           {/* If Edge Selected */}
-          {selectedEdge && (
-            <div className="edge-inspector-block">
-              <div className="edge-connection-badge">
-                <span className="edge-node-badge">{selectedEdge.source}</span>
-                <ArrowRight size={14} className="text-muted" />
-                <span className="edge-node-badge">{selectedEdge.target}</span>
-              </div>
+          {selectedEdge && (() => {
+            const edgeData = (selectedEdge.data as any) || {};
 
-              <div className="form-group">
-                <label className="form-label">Validation Rule Type</label>
-                <select
-                  className="form-select"
-                  value={(selectedEdge.data as any)?.validationType || 'match'}
-                  onChange={(e) => {
-                    const newType = e.target.value as ValidationType;
-                    const triggerVal = (selectedEdge.data as any)?.triggerValue || '';
-                    let label = 'Depends On';
-                    if (newType === 'match') label = `IF == "${triggerVal}"`;
-                    else if (newType === 'greater') label = `IF > ${triggerVal}`;
-                    else if (newType === 'less') label = `IF < ${triggerVal}`;
-                    onUpdateEdgeData(selectedEdge.id, {
-                      validationType: newType,
-                      triggerValue: triggerVal,
-                      label,
-                    });
-                  }}
-                >
-                  <option value="match">Match Value (equals string)</option>
-                  <option value="greater">Greater Than (&gt; number)</option>
-                  <option value="less">Less Than (&lt; number)</option>
-                </select>
-              </div>
+            return (
+              <div className="edge-inspector-block">
+                <div className="flex-between">
+                  <span className="text-secondary font-mono text-xs">
+                    Link: {selectedEdge.source} ➔ {selectedEdge.target}
+                  </span>
+                  {onDeleteEdge && (
+                    <button
+                      className="icon-action-btn text-danger"
+                      onClick={() => onDeleteEdge(selectedEdge.id)}
+                      title="Delete Link"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
+                </div>
 
-              <div className="form-group">
-                <label className="form-label">Target Answer Value</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={(selectedEdge.data as any)?.triggerValue ?? ''}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    const valType = (selectedEdge.data as any)?.validationType || 'match';
-                    let label = 'Depends On';
-                    if (valType === 'match') label = `IF == "${val}"`;
-                    else if (valType === 'greater') label = `IF > ${val}`;
-                    else if (valType === 'less') label = `IF < ${val}`;
-                    onUpdateEdgeData(selectedEdge.id, {
-                      triggerValue: val,
-                      label,
-                    });
-                  }}
-                  placeholder="e.g. হ্যাঁ (Yes) or 50000"
-                />
-              </div>
+                {/* Connection Endpoints */}
+                <div className="edge-connection-badge">
+                  <div className="edge-endpoint-desc">
+                    <span className="edge-node-badge">{selectedEdge.source}</span>
+                    <span className="edge-handle-tag">
+                      {selectedEdge.sourceHandle || 'source'}
+                    </span>
+                  </div>
+                  <ArrowRight size={14} className="text-muted" />
+                  <div className="edge-endpoint-desc">
+                    <span className="edge-node-badge">{selectedEdge.target}</span>
+                    <span className="edge-handle-tag">
+                      {selectedEdge.targetHandle || 'target'}
+                    </span>
+                  </div>
+                </div>
 
-              <div className="rule-preview-card">
-                <div className="preview-title">Generated Logic:</div>
-                <div className="preview-rule-code">
-                  {(selectedEdge.data as any)?.validationType === 'match'
-                    ? `validation: { "${(selectedEdge.data as any)?.triggerValue}": true }`
-                    : `validation: ${(selectedEdge.data as any)?.triggerValue} (${(selectedEdge.data as any)?.validationType})`}
+                <div className="edge-reconnect-hint">
+                  💡 <strong>Tip:</strong> Drag line endpoints on canvas to re-anchor to any of the 8 ports.
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Validation Rule Type</label>
+                  <select
+                    className="form-select"
+                    value={edgeData.validationType || 'match'}
+                    onChange={(e) => {
+                      const newType = e.target.value as ValidationType;
+                      const triggerVal = edgeData.triggerValue || '';
+                      let label = 'Depends On';
+                      if (newType === 'match') label = `IF == "${triggerVal}"`;
+                      else if (newType === 'greater') label = `IF > ${triggerVal}`;
+                      else if (newType === 'less') label = `IF < ${triggerVal}`;
+                      onUpdateEdgeData(selectedEdge.id, {
+                        ...edgeData,
+                        validationType: newType,
+                        triggerValue: triggerVal,
+                        label,
+                      });
+                    }}
+                  >
+                    <option value="match">Match Value (equals string)</option>
+                    <option value="greater">Greater Than (&gt; number)</option>
+                    <option value="less">Less Than (&lt; number)</option>
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Target Answer Value</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={edgeData.triggerValue ?? ''}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      const valType = edgeData.validationType || 'match';
+                      let label = 'Depends On';
+                      if (valType === 'match') label = `IF == "${val}"`;
+                      else if (valType === 'greater') label = `IF > ${val}`;
+                      else if (valType === 'less') label = `IF < ${val}`;
+                      onUpdateEdgeData(selectedEdge.id, {
+                        ...edgeData,
+                        triggerValue: val,
+                        label,
+                      });
+                    }}
+                    placeholder="e.g. হ্যাঁ (Yes) or 50000"
+                  />
+                </div>
+
+                <div className="rule-preview-card">
+                  <div className="preview-title">Generated Logic:</div>
+                  <div className="preview-rule-code">
+                    {edgeData.validationType === 'match'
+                      ? `validation: { "${edgeData.triggerValue}": true }`
+                      : `validation: ${edgeData.triggerValue} (${edgeData.validationType})`}
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* If Question Node Selected */}
           {selectedNode && selectedNode.type === 'question' && (
@@ -1232,6 +1276,28 @@ export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
                 </button>
               </div>
 
+              {/* Parent Group Membership Indicator */}
+              {(() => {
+                const containerId = (selectedNode.data as any)?.containerId;
+                const parentFrame = containerId ? nodes.find((n) => n.id === containerId) : null;
+                const groupNum = (selectedNode.data as any)?.group || (parentFrame?.data as any)?.numericGroupId;
+                if (!parentFrame && !groupNum) return null;
+                const frameColor = (parentFrame?.data as any)?.color || '#f59e0b';
+                return (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '8px 0 12px 0', padding: '6px 10px', borderRadius: 6, background: `${frameColor}15`, border: `1px solid ${frameColor}35` }}>
+                    <Layers size={13} style={{ color: frameColor }} />
+                    <span style={{ fontSize: 11, fontWeight: 600, color: frameColor }}>
+                      Group #{groupNum || 1}
+                    </span>
+                    {parentFrame && (
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                        • {(parentFrame.data as any)?.titleBn || (parentFrame.data as any)?.title || 'Group Area'}
+                      </span>
+                    )}
+                  </div>
+                );
+              })()}
+
               <div className="form-group">
                 <label className="form-label">Condition Label</label>
                 <input
@@ -1357,6 +1423,28 @@ export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
                     <Trash2 size={14} />
                   </button>
                 </div>
+
+                {/* Parent Group Membership Indicator */}
+                {(() => {
+                  const containerId = (selectedNode.data as any)?.containerId;
+                  const parentFrame = containerId ? nodes.find((n) => n.id === containerId) : null;
+                  const groupNum = (selectedNode.data as any)?.group || (parentFrame?.data as any)?.numericGroupId;
+                  if (!parentFrame && !groupNum) return null;
+                  const frameColor = (parentFrame?.data as any)?.color || '#8b5cf6';
+                  return (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '8px 0 12px 0', padding: '6px 10px', borderRadius: 6, background: `${frameColor}15`, border: `1px solid ${frameColor}35` }}>
+                      <Layers size={13} style={{ color: frameColor }} />
+                      <span style={{ fontSize: 11, fontWeight: 600, color: frameColor }}>
+                        Group #{groupNum || 1}
+                      </span>
+                      {parentFrame && (
+                        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                          • {(parentFrame.data as any)?.titleBn || (parentFrame.data as any)?.title || 'Group Area'}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 <div className="form-group" style={{ marginTop: 12 }}>
                   <label className="form-label required-label">
@@ -1734,27 +1822,57 @@ export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
                   )}
                 </div>
 
-                {/* Child Questions Preview List */}
+                {/* Child Elements Preview List */}
                 {childQuestions.length > 0 && (
                   <div className="form-group" style={{ marginTop: 16 }}>
                     <div className="flex-between" style={{ marginBottom: 6 }}>
                       <label className="form-label" style={{ fontWeight: 600 }}>
-                        Group Questions ({childQuestions.length})
+                        Group Elements ({childQuestions.length})
                       </label>
-                      <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Sequential order</span>
+                      <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Contained items</span>
                     </div>
                     <div
                       style={{
                         display: 'flex',
                         flexDirection: 'column',
                         gap: 6,
-                        maxHeight: 180,
+                        maxHeight: 200,
                         overflowY: 'auto',
                         padding: 4,
                       }}
                     >
                       {childQuestions.map((cq, idx) => {
                         const qd = cq.data as any;
+                        let typeBadge = qd.answer_type || 'question';
+                        let labelText = `Q${qd.question_id || '?'}: ${qd.question_bn || qd.question || 'Untitled Question'}`;
+                        let badgeColor = activeColor;
+
+                        if (cq.type === 'decision') {
+                          typeBadge = 'DECISION';
+                          badgeColor = '#f59e0b';
+                          labelText = `Condition: ${qd.label || 'Decision'} (${qd.conditionType || 'match'}: ${qd.comparisonValue ?? 'Yes'})`;
+                        } else if (cq.type === 'groupJump') {
+                          typeBadge = 'JUMP';
+                          badgeColor = '#8b5cf6';
+                          labelText = `Jump to: ${qd.targetGroupTitle || 'Group Jump'}`;
+                        } else if (cq.type === 'start') {
+                          typeBadge = 'START';
+                          badgeColor = '#10b981';
+                          labelText = `Start: ${qd.label || 'Group Start Point'}`;
+                        } else if (cq.type === 'end') {
+                          typeBadge = 'END';
+                          badgeColor = '#ef4444';
+                          labelText = `End: ${qd.label || 'Group End / Submit'}`;
+                        } else if (cq.type === 'process') {
+                          typeBadge = 'PROCESS';
+                          badgeColor = '#6366f1';
+                          labelText = `Process: ${qd.label || 'Action Step'}`;
+                        } else if (cq.type === 'document') {
+                          typeBadge = 'DOCUMENT';
+                          badgeColor = '#06b6d4';
+                          labelText = `Output: ${qd.label || 'Document PDF'}`;
+                        }
+
                         return (
                           <div
                             key={cq.id}
@@ -1793,14 +1911,14 @@ export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
                                 fontWeight: 600,
                                 padding: '1px 5px',
                                 borderRadius: 4,
-                                background: `${activeColor}15`,
-                                color: activeColor,
-                                border: `1px solid ${activeColor}30`,
+                                background: `${badgeColor}15`,
+                                color: badgeColor,
+                                border: `1px solid ${badgeColor}30`,
                                 textTransform: 'uppercase',
                                 flexShrink: 0,
                               }}
                             >
-                              {qd.answer_type || 'string'}
+                              {typeBadge}
                             </span>
                             <span
                               className="bn-font"
@@ -1811,9 +1929,9 @@ export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
                                 color: 'var(--text-primary)',
                                 flex: 1,
                               }}
-                              title={qd.question_bn || qd.question}
+                              title={labelText}
                             >
-                              Q{qd.question_id}: {qd.question_bn || qd.question}
+                              {labelText}
                             </span>
                           </div>
                         );
@@ -1844,6 +1962,28 @@ export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
                   </button>
                 </div>
 
+                {/* Parent Group Membership Indicator */}
+                {(() => {
+                  const containerId = (selectedNode.data as any)?.containerId;
+                  const parentFrame = containerId ? nodes.find((n) => n.id === containerId) : null;
+                  const groupNum = (selectedNode.data as any)?.group || (parentFrame?.data as any)?.numericGroupId;
+                  if (!parentFrame && !groupNum) return null;
+                  const frameColor = (parentFrame?.data as any)?.color || '#6366f1';
+                  return (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '8px 0 12px 0', padding: '6px 10px', borderRadius: 6, background: `${frameColor}15`, border: `1px solid ${frameColor}35` }}>
+                      <Layers size={13} style={{ color: frameColor }} />
+                      <span style={{ fontSize: 11, fontWeight: 600, color: frameColor }}>
+                        Group #{groupNum || 1}
+                      </span>
+                      {parentFrame && (
+                        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                          • {(parentFrame.data as any)?.titleBn || (parentFrame.data as any)?.title || 'Group Area'}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })()}
+
                 <div className="form-group">
                   <label className="form-label">Label</label>
                   <input
@@ -1860,6 +2000,93 @@ export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
                 </div>
               </div>
             )}
+
+          {/* Dependency Path Tracing Section (for any inspectable node) */}
+          {selectedNode &&
+            selectedNode.type !== 'groupContainer' &&
+            selectedNode.type !== 'groupFrame' && (() => {
+              const trace = calculateDependencyTrace(nodes, edges, selectedNode.id);
+              if (!trace) return null;
+
+              const ancestors = trace.predecessorNodes;
+              const descendants = trace.successorNodes;
+
+              return (
+                <div className="dependency-trace-section">
+                  <div className="dependency-trace-header">
+                    <div className="dependency-trace-header-left">
+                      <GitFork size={14} className="text-cyan-400" />
+                      <span>Dependency Path Trace</span>
+                    </div>
+                    <span className="text-secondary font-mono text-xs">
+                      {ancestors.length} Up • {descendants.length} Down
+                    </span>
+                  </div>
+
+                  {ancestors.length === 0 && descendants.length === 0 ? (
+                    <div className="trace-empty-hint">
+                      Node is independent: no incoming prerequisites or outgoing dependents.
+                    </div>
+                  ) : (
+                    <>
+                      {/* Upstream Predecessors */}
+                      <div className="trace-group">
+                        <div className="trace-group-title text-cyan">
+                          <span>Upstream Predecessors ({ancestors.length})</span>
+                        </div>
+                        {ancestors.length === 0 ? (
+                          <div className="trace-empty-hint">None (Entry root or isolated)</div>
+                        ) : (
+                          <div className="trace-pill-list">
+                            {ancestors.map((node) => (
+                              <button
+                                key={node.id}
+                                type="button"
+                                className="trace-node-pill pill-cyan"
+                                onClick={() => onFocusNode?.(node.id)}
+                                title={`Focus and center ${getNodeTraceLabel(node)} on canvas`}
+                              >
+                                <span className="pill-text font-mono">
+                                  {getNodeTraceLabel(node)}
+                                </span>
+                                <ArrowRight size={12} className="pill-arrow" />
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Downstream Dependents */}
+                      <div className="trace-group">
+                        <div className="trace-group-title text-amber">
+                          <span>Downstream Dependents ({descendants.length})</span>
+                        </div>
+                        {descendants.length === 0 ? (
+                          <div className="trace-empty-hint">None (Terminal node)</div>
+                        ) : (
+                          <div className="trace-pill-list">
+                            {descendants.map((node) => (
+                              <button
+                                key={node.id}
+                                type="button"
+                                className="trace-node-pill pill-amber"
+                                onClick={() => onFocusNode?.(node.id)}
+                                title={`Focus and center ${getNodeTraceLabel(node)} on canvas`}
+                              >
+                                <span className="pill-text font-mono">
+                                  {getNodeTraceLabel(node)}
+                                </span>
+                                <ArrowRight size={12} className="pill-arrow" />
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })()}
 
           {/* If Nothing Selected: Group Settings */}
           {!selectedNode && !selectedEdge && (

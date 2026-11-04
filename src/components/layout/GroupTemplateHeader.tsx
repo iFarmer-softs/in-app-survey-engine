@@ -6,6 +6,8 @@ import {
   TreePine,
   CheckCircle2,
   Tag,
+  Undo2,
+  Redo2,
 } from 'lucide-react';
 import type { GroupCategory } from '../../types/group';
 
@@ -27,6 +29,10 @@ interface GroupTemplateHeaderProps {
   onAutoLayout: () => void;
   onExit: () => void;
   onSave: () => void;
+  canUndo?: boolean;
+  canRedo?: boolean;
+  onUndo?: () => void;
+  onRedo?: () => void;
 }
 
 const CATEGORY_OPTIONS: { value: GroupCategory; label: string; color: string }[] = [
@@ -50,6 +56,10 @@ export const GroupTemplateHeader: React.FC<GroupTemplateHeaderProps> = ({
   onAutoLayout,
   onExit,
   onSave,
+  canUndo = false,
+  canRedo = false,
+  onUndo,
+  onRedo,
 }) => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [tempName, setTempName] = useState(name);
@@ -121,6 +131,30 @@ export const GroupTemplateHeader: React.FC<GroupTemplateHeaderProps> = ({
 
       {/* 3. Right: Consolidated Action Buttons */}
       <div className="header-actions">
+        {/* Undo / Redo Segmented Buttons */}
+        {(onUndo || onRedo) && (
+          <div className="header-history-btn-group">
+            <button
+              type="button"
+              className="btn btn-icon btn-history-action"
+              onClick={onUndo}
+              disabled={!canUndo}
+              title="Undo (Ctrl+Z / Cmd+Z)"
+            >
+              <Undo2 size={14} />
+            </button>
+            <button
+              type="button"
+              className="btn btn-icon btn-history-action"
+              onClick={onRedo}
+              disabled={!canRedo}
+              title="Redo (Ctrl+Y / Cmd+Shift+Z)"
+            >
+              <Redo2 size={14} />
+            </button>
+          </div>
+        )}
+
         <button
           type="button"
           className="btn btn-secondary"

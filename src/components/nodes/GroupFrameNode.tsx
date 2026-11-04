@@ -1,5 +1,5 @@
-import { memo } from 'react';
-import { Handle, Position, NodeResizer } from '@xyflow/react';
+import { memo, useCallback } from 'react';
+import { Handle, Position, NodeResizer, useReactFlow } from '@xyflow/react';
 import type { NodeProps } from '@xyflow/react';
 import { Layers, Sparkles, Trash } from 'lucide-react';
 import type { GroupCategory } from '../../types/group';
@@ -29,6 +29,45 @@ export const GroupFrameNode = memo(({ id, data, selected, onDeleteFrame }: Group
   const activeColor = isDropTarget ? '#10b981' : color;
   const childCount = nodeData.questionCount ?? nodeData.questionIds?.length ?? 0;
   const deleteHandler = onDeleteFrame || nodeData.onDeleteFrame;
+  const { getNodes } = useReactFlow();
+
+  // Strict Non-Overlap Enforcement: Stop resizing if expanding into any adjacent frame
+  const handleShouldResize = useCallback(
+    (_event: any, params: { x: number; y: number; width: number; height: number }) => {
+      const allNodes = getNodes();
+      const GAP = 20;
+      const otherFrames = allNodes.filter(
+        (n) => (n.type === 'groupFrame' || n.type === 'groupContainer') && n.id !== id
+      );
+
+      for (const other of otherFrames) {
+        const oX = other.position.x;
+        const oY = other.position.y;
+        const oW =
+          (other.style?.width ? parseInt(String(other.style.width), 10) : 0) ||
+          (other.data as any)?.width ||
+          other.measured?.width ||
+          440;
+        const oH =
+          (other.style?.height ? parseInt(String(other.style.height), 10) : 0) ||
+          (other.data as any)?.height ||
+          other.measured?.height ||
+          480;
+
+        const collides =
+          params.x < oX + oW + GAP &&
+          params.x + params.width + GAP > oX &&
+          params.y < oY + oH + GAP &&
+          params.y + params.height + GAP > oY;
+
+        if (collides) {
+          return false;
+        }
+      }
+      return true;
+    },
+    [getNodes, id]
+  );
 
   return (
     <div
@@ -46,6 +85,7 @@ export const GroupFrameNode = memo(({ id, data, selected, onDeleteFrame }: Group
           : selected
             ? `0 0 0 2px #10b981, 0 8px 24px -4px rgba(0,0,0,0.5)`
             : `0 4px 16px -2px rgba(0,0,0,0.3)`,
+        pointerEvents: 'none',
       }}
     >
       <NodeResizer
@@ -55,6 +95,7 @@ export const GroupFrameNode = memo(({ id, data, selected, onDeleteFrame }: Group
         color={selected ? '#10b981' : color}
         lineClassName="group-frame-resize-line"
         handleClassName="group-frame-resize-handle"
+        shouldResize={handleShouldResize}
       />
 
       {/* Frame Header Bar */}
@@ -63,6 +104,7 @@ export const GroupFrameNode = memo(({ id, data, selected, onDeleteFrame }: Group
         style={{
           borderBottomColor: `${activeColor}30`,
           backgroundColor: `${activeColor}15`,
+          pointerEvents: 'auto',
         }}
       >
         <div className="group-frame-header-left">
@@ -93,7 +135,7 @@ export const GroupFrameNode = memo(({ id, data, selected, onDeleteFrame }: Group
 
         <div className="group-frame-header-right nodrag">
           <span className="group-frame-count-badge">
-            {childCount} Question{childCount !== 1 ? 's' : ''} inside
+            {childCount} Item{childCount !== 1 ? 's' : ''} inside
           </span>
           {deleteHandler && (
             <button
@@ -137,14 +179,14 @@ export const GroupFrameNode = memo(({ id, data, selected, onDeleteFrame }: Group
         position={Position.Top}
         id="frame-in"
         className="flowchart-handle group-handle"
-        style={{ background: activeColor }}
+        style={{ background: activeColor, pointerEvents: 'auto' }}
       />
       <Handle
         type="source"
         position={Position.Bottom}
         id="frame-out"
         className="flowchart-handle group-handle"
-        style={{ background: activeColor }}
+        style={{ background: activeColor, pointerEvents: 'auto' }}
       />
     </div>
   );

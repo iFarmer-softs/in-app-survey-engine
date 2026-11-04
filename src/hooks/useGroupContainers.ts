@@ -70,17 +70,21 @@ export function useGroupContainers({
         } else if (change.type === 'position' && change.position) {
           const node = nodes.find((n) => n.id === change.id);
           if (node && (node.type === 'groupContainer' || node.type === 'groupFrame')) {
-            const childIds: string[] =
-              (node.data as any)?.questionIds ||
-              nodes
-                .filter((n) => (n.data as any)?.containerId === node.id)
-                .map((n) => n.id);
+            // Free movement during drag with lockstep child synchronisation (non-overlap resolved on release)
+            const childIdSet = new Set<string>();
+            const explicitChildIds: string[] = (node.data as any)?.questionIds || [];
+            explicitChildIds.forEach((cid) => childIdSet.add(cid));
+            nodes.forEach((n) => {
+              if (n.id !== node.id && (n.data as any)?.containerId === node.id) {
+                childIdSet.add(n.id);
+              }
+            });
 
-            if (childIds.length > 0) {
+            if (childIdSet.size > 0) {
               const dx = change.position.x - node.position.x;
               const dy = change.position.y - node.position.y;
               if (dx !== 0 || dy !== 0) {
-                childIds.forEach((childId) => {
+                childIdSet.forEach((childId) => {
                   const childNode = nodes.find((n) => n.id === childId);
                   if (childNode) {
                     extraChanges.push({

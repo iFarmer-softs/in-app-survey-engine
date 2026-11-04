@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { addEdge, MarkerType } from '@xyflow/react';
+import { addEdge, reconnectEdge, MarkerType } from '@xyflow/react';
 import type { Connection, Edge, Node } from '@xyflow/react';
 import type { WarningAlertData } from '../components/modals/WarningAlertModal';
 import { isBinaryRedundantBranch, resolveNodeGroupId } from '../utils/flowValidator';
@@ -166,12 +166,82 @@ export function useFlowCanvasConnections({
     [setEdges]
   );
 
+  const onReconnect = useCallback(
+    (oldEdge: Edge, newConnection: Connection) => {
+      if (!newConnection.source || !newConnection.target) return;
+
+      const sourceNode = nodes.find((n) => n.id === newConnection.source);
+      const targetNode = nodes.find((n) => n.id === newConnection.target);
+      const sourceGroup = resolveNodeGroupId(sourceNode, nodes, 1);
+      const targetGroup = resolveNodeGroupId(targetNode, nodes, 1);
+      const isCrossGroup =
+        sourceNode?.type !== 'groupJump' &&
+        targetNode?.type !== 'groupJump' &&
+        sourceGroup !== targetGroup;
+
+      let strokeColor = isCrossGroup ? '#8b5cf6' : '#10b981';
+      let edgeLabel = oldEdge.label as string | undefined;
+
+      if (newConnection.sourceHandle && newConnection.sourceHandle.startsWith('opt-')) {
+        const triggerVal = decodeURIComponent(newConnection.sourceHandle.replace('opt-', ''));
+        edgeLabel = `IF "${triggerVal}"`;
+        if (!isCrossGroup) strokeColor = '#f59e0b';
+      } else if (newConnection.sourceHandle === 'match') {
+        edgeLabel = 'MATCH';
+        if (!isCrossGroup) strokeColor = '#f59e0b';
+      } else if (newConnection.sourceHandle === 'else') {
+        edgeLabel = 'ELSE';
+        if (!isCrossGroup) strokeColor = '#ec4899';
+      }
+
+      if (isCrossGroup) {
+        edgeLabel = edgeLabel
+          ? `[G${sourceGroup}➔G${targetGroup}] ${edgeLabel}`
+          : `Cross-Group: G${sourceGroup} ➔ G${targetGroup}`;
+      }
+
+      setEdges((eds) =>
+        reconnectEdge(oldEdge, newConnection, eds, { shouldReplaceId: false }).map((e) => {
+          if (e.id === oldEdge.id) {
+            return {
+              ...e,
+              label: edgeLabel,
+              style: {
+                ...(e.style || {}),
+                stroke: strokeColor,
+                strokeDasharray: isCrossGroup || strokeColor === '#f59e0b' ? '5 5' : undefined,
+              },
+              markerEnd: {
+                ...(typeof e.markerEnd === 'object' && e.markerEnd !== null
+                  ? e.markerEnd
+                  : { type: MarkerType.ArrowClosed, width: 16, height: 16 }),
+                color: strokeColor,
+              },
+              data: {
+                ...(e.data || {}),
+                isCrossGroup,
+                sourceGroup: isCrossGroup ? sourceGroup : undefined,
+                targetGroup: isCrossGroup ? targetGroup : undefined,
+                // Reset custom bend coordinates when reconnected so the new path starts clean
+                centerX: undefined,
+                centerY: undefined,
+              },
+            };
+          }
+          return e;
+        })
+      );
+    },
+    [nodes, setEdges]
+  );
+
   return {
     warningAlertData,
     setWarningAlertData,
     edgeRouting,
     handleChangeEdgeRouting,
     onConnect,
+    onReconnect,
   };
 }
 

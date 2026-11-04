@@ -263,6 +263,40 @@ html, body, #root {
   gap: 8px;
 }
 
+/* History (Undo / Redo) Segmented Control */
+.header-history-btn-group {
+  display: inline-flex;
+  align-items: center;
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+  gap: 2px;
+}
+
+.btn-history-action {
+  padding: 4px 6px !important;
+  background: transparent !important;
+  border: none !important;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 3px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+}
+
+.btn-history-action:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: var(--bg-surface-hover) !important;
+}
+
+.btn-history-action:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
 /* Button System */
 .btn {
   display: inline-flex;
@@ -3436,6 +3470,172 @@ body.is-resizing-sidebar * {
   transform: scale(1.15);
 }
 
+/* Hide React Flow Default Edgeupdater Circles */
+.react-flow__edgeupdater {
+  display: none !important;
+}
+
+/* Interactive Direct Line Resizing on Canvas (Figma / Draw.io style) */
+.custom-edge-interactive-hit-path {
+  fill: none;
+  stroke: rgba(0, 0, 0, 0.001);
+  stroke-width: 24px;
+  stroke-linecap: round;
+  pointer-events: stroke;
+  transition: stroke 0.15s ease;
+}
+
+.custom-edge-interactive-hit-path:hover {
+  stroke: rgba(6, 182, 212, 0.15);
+}
+
+.custom-edge-interactive-hit-path.is-dragging {
+  stroke: rgba(6, 182, 212, 0.28);
+}
+
+/* Subtle guide highlight when hovered, selected, or actively resizing */
+.custom-edge-drag-guide {
+  pointer-events: none;
+  transition: stroke-width 0.15s ease, stroke-opacity 0.15s ease;
+}
+
+.custom-edge-badge-container.is-customized-path {
+  filter: drop-shadow(0 0 6px rgba(6, 182, 212, 0.35));
+}
+
+.custom-edge-default-handle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg-surface-elevated, #0f172a);
+  border: 1px solid var(--border-subtle);
+  border-radius: 20px;
+  padding: 2px 5px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  animation: fadeIn 0.15s ease-out;
+}
+
+/* Reset Bend Button on Edge Pills and Controls */
+.edge-reset-bend-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: #fbbf24;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  padding: 0;
+  margin-left: 2px;
+}
+
+.edge-reset-bend-btn:hover {
+  background: #f59e0b;
+  color: #0f172a;
+  transform: scale(1.15) rotate(-30deg);
+}
+
+/* Real-time Resizing Tooltip while moving line */
+.edge-resizing-tooltip {
+  position: absolute;
+  top: -24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg-surface-elevated, #0f172a);
+  border: 1px solid #06b6d4;
+  color: #22d3ee;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-family: monospace;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5), 0 0 8px rgba(6, 182, 212, 0.4);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  z-index: 50;
+}
+
+/* Inspector Edge Geometry Controls */
+.edge-endpoint-desc {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.edge-handle-tag {
+  font-size: 9px;
+  font-family: monospace;
+  color: var(--text-muted);
+  background: rgba(100, 116, 139, 0.15);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.edge-reconnect-hint {
+  font-size: 11px;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.08);
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  margin-top: 8px;
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+
+.edge-geometry-section {
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.edge-geometry-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.custom-bend-status-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  border-radius: var(--radius-sm);
+  margin-top: 4px;
+}
+
+.bend-status-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.bend-status-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #fbbf24;
+}
+
+.bend-status-coords {
+  color: var(--text-secondary);
+}
+
 /* Diagnostics Header Pill */
 .diagnostics-pill {
   cursor: pointer;
@@ -4951,6 +5151,7 @@ body.is-resizing-sidebar * {
   border: 2px solid var(--bg-surface) !important;
   border-radius: 50% !important;
   z-index: 10 !important;
+  pointer-events: auto !important;
 }
 
 .group-container-header {
@@ -6167,14 +6368,50 @@ body.is-resizing-sidebar * {
 
 .react-flow__node-groupFrame {
   z-index: 0 !important;
+  pointer-events: none !important;
+}
+
+.group-frame-boundary {
+  pointer-events: none !important;
+}
+
+.group-frame-header,
+.group-frame-header * {
+  pointer-events: auto !important;
+}
+
+.group-frame-resize-handle,
+.group-frame-resize-line,
+.group-frame-boundary .group-handle {
+  pointer-events: auto !important;
 }
 
 .react-flow__node-groupContainer {
   z-index: 1 !important;
 }
 
-.react-flow__node-question {
+.react-flow__node-question,
+.react-flow__node-decision,
+.react-flow__node-groupJump,
+.react-flow__node-start,
+.react-flow__node-end,
+.react-flow__node-process,
+.react-flow__node-document {
   z-index: 10 !important;
+}
+
+/* React Flow Edges and Labels Layering (Ensures edges inside groups are clickable & deletable) */
+.react-flow__edges {
+  z-index: 5 !important;
+}
+
+.react-flow__edgelabel-renderer {
+  z-index: 1000 !important;
+  pointer-events: none !important;
+}
+
+.react-flow__edgelabel-renderer > * {
+  pointer-events: all !important;
 }
 
 .group-frame-drop-guide.is-active {
@@ -7085,4 +7322,622 @@ body.is-resizing-sidebar * {
   min-height: 250px;
   color: var(--text-muted);
   gap: 10px;
+}
+
+/* ==========================================================================
+   DEPENDENCY PATH TRACING STYLES (Ancestors & Dependents)
+   ========================================================================== */
+
+/* Traced Node Highlights */
+.react-flow__node.trace-node-selected {
+  outline: 2px solid var(--emerald) !important;
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.5) !important;
+  z-index: 60 !important;
+}
+
+.react-flow__node.trace-node-ancestor {
+  border-color: #06b6d4 !important;
+  box-shadow: 0 0 18px rgba(6, 182, 212, 0.45) !important;
+  z-index: 50 !important;
+  position: relative;
+}
+
+.react-flow__node.trace-node-ancestor::after {
+  content: '↑ Upstream';
+  position: absolute;
+  top: -16px;
+  right: 10px;
+  background: #0891b2;
+  color: #ffffff;
+  font-size: 8.5px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+  z-index: 99;
+}
+
+.react-flow__node.trace-node-descendant {
+  border-color: #f59e0b !important;
+  box-shadow: 0 0 18px rgba(245, 158, 11, 0.45) !important;
+  z-index: 50 !important;
+  position: relative;
+}
+
+.react-flow__node.trace-node-descendant::after {
+  content: '↓ Dependent';
+  position: absolute;
+  top: -16px;
+  right: 10px;
+  background: #d97706;
+  color: #ffffff;
+  font-size: 8.5px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+  z-index: 99;
+}
+
+.react-flow__node.trace-node-dimmed {
+  opacity: 0.22 !important;
+  filter: grayscale(0.7) !important;
+  transition: opacity 0.25s ease, filter 0.25s ease;
+}
+
+.react-flow__node.trace-node-dimmed:hover {
+  opacity: 0.7 !important;
+  filter: grayscale(0.2) !important;
+}
+
+/* Edge Tracing Effects */
+.custom-flowchart-base-edge.is-dimmed {
+  opacity: 0.12 !important;
+  transition: opacity 0.25s ease;
+}
+
+.custom-edge-badge-container.is-dimmed {
+  opacity: 0.1 !important;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+
+.custom-flowchart-base-edge.is-traced {
+  filter: drop-shadow(0 0 6px currentColor);
+}
+
+.custom-edge-badge-container.is-traced {
+  box-shadow: 0 0 12px rgba(6, 182, 212, 0.45);
+  border-color: currentColor;
+}
+
+/* Floating Path Tracing Indicator Overlay on Canvas */
+.floating-trace-indicator {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  pointer-events: all;
+  animation: slideDownFade 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.trace-indicator-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 14px;
+  background: var(--bg-surface-elevated, rgba(15, 23, 42, 0.95));
+  border: 1px solid rgba(6, 182, 212, 0.4);
+  border-radius: 9999px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35), 0 0 16px rgba(6, 182, 212, 0.2);
+  backdrop-filter: blur(8px);
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.trace-target-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trace-target-title strong {
+  color: #38bdf8;
+}
+
+.trace-divider {
+  color: var(--border-default);
+  font-size: 10px;
+  opacity: 0.5;
+}
+
+.trace-badge-cyan {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  background: rgba(6, 182, 212, 0.15);
+  border: 1px solid rgba(6, 182, 212, 0.3);
+  color: #22d3ee;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.trace-badge-amber {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  color: #fbbf24;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.trace-clear-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  margin-left: 2px;
+  transition: all var(--transition-fast);
+}
+
+.trace-clear-btn:hover {
+  background: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+}
+
+/* Right Sidebar Dependency Trace Section */
+.dependency-trace-section {
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dependency-trace-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.dependency-trace-header-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.trace-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.trace-group-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.trace-group-title.text-cyan {
+  color: #22d3ee;
+}
+
+.trace-group-title.text-amber {
+  color: #fbbf24;
+}
+
+.trace-empty-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-style: italic;
+  padding: 4px 6px;
+  background: rgba(100, 116, 139, 0.08);
+  border-radius: var(--radius-sm);
+}
+
+.trace-pill-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.trace-node-pill {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 5px 8px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: left;
+  transition: all var(--transition-fast);
+  color: var(--text-secondary);
+  font-size: 11.5px;
+}
+
+.trace-node-pill:hover {
+  background: var(--bg-surface-hover);
+  color: var(--text-primary);
+  transform: translateX(2px);
+}
+
+.trace-node-pill.pill-cyan:hover {
+  border-color: rgba(6, 182, 212, 0.6);
+  box-shadow: 0 0 10px rgba(6, 182, 212, 0.2);
+}
+
+.trace-node-pill.pill-amber:hover {
+  border-color: rgba(245, 158, 11, 0.6);
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.2);
+}
+
+.trace-node-pill .pill-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.trace-node-pill .pill-arrow {
+  opacity: 0.4;
+  flex-shrink: 0;
+  margin-left: 6px;
+}
+
+.trace-node-pill:hover .pill-arrow {
+  opacity: 1;
+  color: currentColor;
+}
+
+/* Empty Canvas Group Area Required Guide */
+.canvas-empty-area-guide {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 20;
+  pointer-events: none;
+}
+
+.canvas-empty-area-card {
+  pointer-events: all;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  max-width: 380px;
+  padding: 24px 28px;
+  background: var(--bg-surface-elevated, #0f172a);
+  border: 1.5px dashed rgba(6, 182, 212, 0.4);
+  border-radius: var(--radius-lg, 12px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(12px);
+}
+
+.canvas-empty-area-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(6, 182, 212, 0.12);
+  border: 1px solid rgba(6, 182, 212, 0.3);
+  margin-bottom: 12px;
+}
+
+.canvas-empty-area-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 6px 0;
+}
+
+.canvas-empty-area-desc {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  margin: 0 0 16px 0;
+}
+
+.canvas-empty-area-desc strong {
+  color: #38bdf8;
+}
+
+.canvas-empty-area-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 16px;
+}
+
+
+/* ==========================================================================
+   Interactive Figma-style Draw Group Area Tool
+   ========================================================================== */
+
+/* Active Draw Area Mode Banner */
+.draw-area-banner {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
+  pointer-events: auto;
+}
+
+.draw-area-banner-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  border-radius: 9999px;
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid rgba(6, 182, 212, 0.5);
+  box-shadow: 0 4px 20px rgba(6, 182, 212, 0.25), 0 2px 8px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(8px);
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.draw-area-banner-content strong {
+  color: #22d3ee;
+}
+
+.draw-area-banner-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.08);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.draw-area-banner-hint strong {
+  color: #f1f5f9;
+}
+
+.draw-area-banner-cancel-btn {
+  background: transparent;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #f87171;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 10px;
+  border-radius: 9999px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.draw-area-banner-cancel-btn:hover {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: #ef4444;
+}
+
+/* Interactive Canvas Mouse Drawing Overlay */
+.draw-area-interaction-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  cursor: crosshair;
+  background: rgba(6, 182, 212, 0.02);
+  user-select: none;
+}
+
+/* Dragging Preview Bounding Box */
+.draw-area-preview-box {
+  position: absolute;
+  pointer-events: none;
+  border: 2px dashed #06b6d4;
+  background: rgba(6, 182, 212, 0.12);
+  border-radius: 8px;
+  box-shadow: 0 0 16px rgba(6, 182, 212, 0.35);
+  transition: none;
+}
+
+.draw-area-preview-badge {
+  position: absolute;
+  top: -26px;
+  left: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #0891b2;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 4px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  white-space: nowrap;
+}
+
+.btn-draw-area {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+
+/* ==========================================================================
+   Figma-Style Floating Bottom Canvas Toolbar
+   ========================================================================== */
+
+.figma-bottom-dock {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 55;
+  pointer-events: auto;
+}
+
+.figma-dock-pill {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  border-radius: 9999px;
+  background: var(--bg-surface-elevated, #0f172a);
+  border: 1px solid var(--border-default, rgba(255, 255, 255, 0.12));
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.figma-tool-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 9999px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-secondary, #94a3b8);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast, 0.15s ease);
+  user-select: none;
+}
+
+.figma-tool-btn:hover {
+  color: var(--text-primary, #f8fafc);
+  background: var(--bg-surface-hover, rgba(255, 255, 255, 0.06));
+}
+
+.figma-tool-btn.is-active {
+  color: #22d3ee;
+  background: rgba(6, 182, 212, 0.16);
+  border-color: rgba(6, 182, 212, 0.5);
+  box-shadow: 0 0 12px rgba(6, 182, 212, 0.25);
+  font-weight: 600;
+}
+
+.figma-tool-label {
+  font-size: 12px;
+  line-height: 1;
+}
+
+.figma-tool-key {
+  font-size: 10px;
+  font-weight: 700;
+  font-family: var(--font-mono, monospace);
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-muted, #64748b);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.figma-tool-btn.is-active .figma-tool-key {
+  background: rgba(6, 182, 212, 0.25);
+  color: #38bdf8;
+  border-color: rgba(6, 182, 212, 0.4);
+}
+
+.figma-dock-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--border-subtle, rgba(255, 255, 255, 0.1));
+  margin: 0 4px;
+}
+
+.figma-zoom-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.figma-zoom-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-secondary, #94a3b8);
+  cursor: pointer;
+  transition: all var(--transition-fast, 0.15s ease);
+}
+
+.figma-zoom-btn:hover {
+  background: var(--bg-surface-hover, rgba(255, 255, 255, 0.08));
+  color: var(--text-primary, #f8fafc);
+}
+
+.figma-zoom-percent-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted, #94a3b8);
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font-mono, monospace);
+  padding: 3px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all var(--transition-fast, 0.15s ease);
+}
+
+.figma-zoom-percent-btn:hover {
+  color: var(--text-primary, #f8fafc);
+  background: var(--bg-surface-hover, rgba(255, 255, 255, 0.08));
+}
+
+.figma-fit-btn {
+  margin-left: 2px;
+}
+
+/* Canvas Mode Cursor Classes */
+.survey-flow-canvas.is-tool-hand,
+.survey-flow-canvas.is-tool-hand .react-flow__pane {
+  cursor: grab !important;
+}
+
+.survey-flow-canvas.is-tool-hand:active,
+.survey-flow-canvas.is-tool-hand .react-flow__pane:active {
+  cursor: grabbing !important;
+}
+
+.survey-flow-canvas.is-tool-draw,
+.survey-flow-canvas.is-tool-draw .react-flow__pane {
+  cursor: crosshair !important;
 }
