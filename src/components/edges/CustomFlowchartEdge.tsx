@@ -332,18 +332,20 @@ export const CustomFlowchartEdge: React.FC<EdgeProps> = ({
   const dynamicSourceGroup = sourceNode ? resolveNodeGroupId(sourceNode, allNodes) : edgeData.sourceGroup;
   const dynamicTargetGroup = targetNode ? resolveNodeGroupId(targetNode, allNodes) : edgeData.targetGroup;
 
-  const isCrossGroup =
-    Boolean(edgeData.isCrossGroup) ||
-    Boolean(
-      sourceNode &&
-      targetNode &&
-      sourceNode.type !== 'groupJump' &&
-      targetNode.type !== 'groupJump' &&
-      dynamicSourceGroup !== dynamicTargetGroup
-    );
+  const isDifferentGroup = Boolean(
+    sourceNode &&
+    targetNode &&
+    sourceNode.type !== 'groupJump' &&
+    targetNode.type !== 'groupJump' &&
+    dynamicSourceGroup !== dynamicTargetGroup
+  );
 
-  const effectiveSourceGroup = edgeData.sourceGroup ?? dynamicSourceGroup;
-  const effectiveTargetGroup = edgeData.targetGroup ?? dynamicTargetGroup;
+  const isCrossGroup =
+    Boolean(edgeData.isCrossGroup && isDifferentGroup) ||
+    isDifferentGroup;
+
+  const effectiveSourceGroup = dynamicSourceGroup ?? edgeData.sourceGroup;
+  const effectiveTargetGroup = dynamicTargetGroup ?? edgeData.targetGroup;
 
   // Determine routing geometry
   const routing = edgeData.routingType || 'smoothstep';
@@ -390,7 +392,7 @@ export const CustomFlowchartEdge: React.FC<EdgeProps> = ({
   const isOptionHandle = Boolean(sourceHandleId && sourceHandleId.startsWith('opt-'));
 
   if (label && typeof label === 'string' && label.trim().length > 0) {
-    conditionText = label;
+    conditionText = isCrossGroup ? label : label.replace(/^\[G\d+➔G\d+\]\s*/, '');
   } else if (edgeData.triggerValue !== undefined && String(edgeData.triggerValue).length > 0) {
     if (edgeData.validationType === 'greater') {
       conditionText = `> ${edgeData.triggerValue}`;

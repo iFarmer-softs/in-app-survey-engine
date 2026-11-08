@@ -47,20 +47,8 @@ export class PostgresProjectsRepository {
     const id = `proj-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     const totalGroups = dto.totalGroups || 1;
 
-    const initialNodes = dto.nodes || [
-      {
-        id: 'start-node',
-        type: 'start',
-        position: { x: 300, y: 100 },
-        data: { label: 'Start Survey', labelBn: 'জরিপ শুরু' },
-      },
-      {
-        id: 'end-node',
-        type: 'end',
-        position: { x: 300, y: 350 },
-        data: { label: 'Submit Survey', labelBn: 'জরিপ জমা' },
-      },
-    ];
+    const initialNodes = dto.nodes || [];
+    const initialEdges = dto.edges || [];
 
     const initialMeta = dto.groupMeta || {
       groupNumber: 1,
@@ -137,11 +125,6 @@ export class PostgresProjectsRepository {
   }
 
   async delete(id: string): Promise<{ success: boolean; id: string }> {
-    const count = await this.projectRepo.count();
-    if (count <= 1) {
-      throw new BadRequestException('Cannot delete the last remaining project in PostgreSQL.');
-    }
-
     const deleteResult = await this.projectRepo.delete({ id });
     if (!deleteResult.affected) {
       throw new NotFoundException(`Project with ID "${id}" not found in PostgreSQL`);

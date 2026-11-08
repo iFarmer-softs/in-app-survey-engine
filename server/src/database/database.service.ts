@@ -32,7 +32,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       
       const ds = new DataSource({
         ...config,
-        connectTimeoutMS: 3000,
+        connectTimeoutMS: 10000,
       });
 
       await ds.initialize();

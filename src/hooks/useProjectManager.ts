@@ -151,11 +151,6 @@ export function useProjectManager() {
 
   const handleDeleteProject = useCallback(
     async (id: string, onSelectFallback?: (nextId: string) => void) => {
-      if (projects.length <= 1) {
-        alert('You must keep at least one flowchart in your workspace.');
-        return;
-      }
-
       const updated = projects.filter((p) => p.id !== id);
       setProjects(updated);
       saveAllProjects(updated);
@@ -163,7 +158,13 @@ export function useProjectManager() {
       if (activeProjectId === id) {
         const next = updated[0];
         if (next) {
+          setActiveProjectIdState(next.id);
+          persistActiveProjectId(next.id);
           onSelectFallback?.(next.id);
+        } else {
+          setActiveProjectIdState('');
+          persistActiveProjectId('');
+          onSelectFallback?.('');
         }
       }
 
@@ -179,7 +180,7 @@ export function useProjectManager() {
   );
 
   const syncActiveProject = useCallback(
-    (nodes: Node[], edges: Edge[], groupMeta: GroupMeta, skipSync: boolean) => {
+    async (nodes: Node[], edges: Edge[], groupMeta: GroupMeta, skipSync?: boolean) => {
       if (!activeProject || skipSync) return;
 
       const currentList = loadAllProjects();
@@ -200,18 +201,17 @@ export function useProjectManager() {
       // Asynchronously sync to NestJS server in background
       if (isServerConnected && activeProject.id) {
         setIsSyncing(true);
-        apiClient
-          .updateProject(activeProject.id, {
+        try {
+          await apiClient.updateProject(activeProject.id, {
             nodes,
             edges,
             groupMeta,
-          })
-          .catch((err) => {
-            console.warn('Background NestJS project sync warning:', err);
-          })
-          .finally(() => {
-            setIsSyncing(false);
           });
+        } catch (err) {
+          console.warn('Background NestJS project sync warning:', err);
+        } finally {
+          setIsSyncing(false);
+        }
       }
     },
     [activeProject, isServerConnected]

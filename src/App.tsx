@@ -239,6 +239,7 @@ const FlowEditor: React.FC = () => {
     handleCreateVersionSnapshot,
     handleRestoreVersion,
     isServerConnected,
+    isSyncing,
   } = useProjectManager();
 
   // 2. React Flow canvas nodes and edges state
@@ -306,6 +307,27 @@ const FlowEditor: React.FC = () => {
     window.addEventListener('keydown', handleUndoRedoKeys);
     return () => window.removeEventListener('keydown', handleUndoRedoKeys);
   }, [triggerUndo, triggerRedo]);
+
+  // Manual save state and trigger
+  const [justSaved, setJustSaved] = useState(false);
+  const handleManualSave = useCallback(async () => {
+    await syncActiveProject(nodes, edges, groupMeta, false);
+    setJustSaved(true);
+    setTimeout(() => {
+      setJustSaved(false);
+    }, 2000);
+  }, [nodes, edges, groupMeta, syncActiveProject]);
+
+  useEffect(() => {
+    const handleSaveKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        handleManualSave();
+      }
+    };
+    window.addEventListener('keydown', handleSaveKeyDown);
+    return () => window.removeEventListener('keydown', handleSaveKeyDown);
+  }, [handleManualSave]);
 
   // 3. Group template studio hook
   const {
@@ -830,10 +852,10 @@ const FlowEditor: React.FC = () => {
         role === 'selected'
           ? 'trace-node-selected'
           : role === 'ancestor'
-          ? 'trace-node-ancestor'
-          : role === 'descendant'
-          ? 'trace-node-descendant'
-          : 'trace-node-dimmed';
+            ? 'trace-node-ancestor'
+            : role === 'descendant'
+              ? 'trace-node-descendant'
+              : 'trace-node-dimmed';
 
       const existingClass = (node.className || '').trim();
       return {
@@ -1230,9 +1252,12 @@ const FlowEditor: React.FC = () => {
         if (Math.abs(nudgeDx) > 1 || Math.abs(nudgeDy) > 1) {
           const childIdSet = new Set<string>();
           const explicitChildIds: string[] = (draggedNode.data as any)?.questionIds || [];
-          explicitChildIds.forEach((cid) => childIdSet.add(cid));
           nodes.forEach((n) => {
-            if (n.id !== draggedNode.id && (n.data as any)?.containerId === draggedNode.id) {
+            if (n.id === draggedNode.id) return;
+            const nContainerId = (n.data as any)?.containerId;
+            if (nContainerId === draggedNode.id) {
+              childIdSet.add(n.id);
+            } else if (!nContainerId && explicitChildIds.includes(n.id)) {
               childIdSet.add(n.id);
             }
           });
@@ -1276,8 +1301,11 @@ const FlowEditor: React.FC = () => {
 
       let hasReparented = false;
       const reparentMap = new Map<string, Node>();
+      const deparentedNodeIds = new Set<string>();
+      const deparentedFromMap = new Map<string, string>();
 
       for (const node of activeList) {
+        const nodeInState = nodes.find((n) => n.id === node.id) || node;
         const nodeW = node.measured?.width || (node.type === 'question' ? 270 : 180);
         const nodeH = node.measured?.height || (node.type === 'question' ? 200 : 100);
         const nodeCenterX = node.position.x + nodeW / 2;
@@ -1288,35 +1316,196 @@ const FlowEditor: React.FC = () => {
           const fY = frame.position.y;
           const fW =
             (frame.style?.width ? parseInt(String(frame.style.width), 10) : 0) ||
+            (typeof frame.width === 'number' && frame.width > 0 ? frame.width : 0) ||
             frame.measured?.width ||
-            440;
+            (frame.data as any)?.width ||
+            (frame.type === 'groupContainer' ? 350 : 440);
           const fH =
             (frame.style?.height ? parseInt(String(frame.style.height), 10) : 0) ||
+            (typeof frame.height === 'number' && frame.height > 0 ? frame.height : 0) ||
             frame.measured?.height ||
-            480;
+            (frame.data as any)?.expandedHeight ||
+            (frame.data as any)?.height ||
+            (frame.type === 'groupContainer' ? 400 : 480);
 
           return (
-            nodeCenterX >= fX &&
-            nodeCenterX <= fX + fW &&
-            nodeCenterY >= fY &&
-            nodeCenterY <= fY + fH
+            (nodeCenterX >= fX &&
+              nodeCenterX <= fX + fW &&
+              nodeCenterY >= fY &&
+              nodeCenterY <= fY + fH) ||
+            (node.position.x >= fX - 15 &&
+              node.position.x + Math.min(nodeW, 80) <= fX + fW &&
+              node.position.y >= fY - 15 &&
+              node.position.y + Math.min(nodeH, 60) <= fY + fH)
           );
         });
 
-        const currentContainerId = (node.data as any)?.containerId;
-        // Only reparent if dropped inside a DIFFERENT existing container
-        if (target && target.id !== currentContainerId) {
+        // Resolve previous container authoritatively from node's current containerId, questionIds, or group
+        const currentContainerId =
+          (nodeInState.data as any)?.containerId ||
+          (node.data as any)?.containerId;
+
+        let prevContainer: Node | undefined = undefined;
+
+        if (currentContainerId) {
+          prevContainer = existingContainers.find((c) => c.id === currentContainerId);
+        }
+
+        if (!prevContainer) {
+          prevContainer = existingContainers.find((c) => {
+            const qIds: string[] = (c.data as any)?.questionIds || [];
+            return qIds.includes(node.id);
+          });
+        }
+
+        if (!prevContainer) {
+          const nodeGrp = (nodeInState.data as any)?.group || (node.data as any)?.group;
+          if (typeof nodeGrp === 'number' && nodeGrp > 0) {
+            prevContainer = existingContainers.find(
+              (c) => (c.data as any)?.numericGroupId === nodeGrp
+            );
+          }
+        }
+
+        // Case 1: Dropped inside a DIFFERENT container → reparent to new group
+        if (target && (!prevContainer || target.id !== prevContainer.id)) {
           reparentMap.set(node.id, target);
+          if (prevContainer) {
+            deparentedFromMap.set(node.id, prevContainer.id);
+          }
+          hasReparented = true;
+        }
+
+        // Case 2: Dragged OUT of a group container into the open canvas (no target frame)
+        // → deparent (remove from previous group) and sever all connections
+        if (!target && prevContainer) {
+          deparentedNodeIds.add(node.id);
+          deparentedFromMap.set(node.id, prevContainer.id);
           hasReparented = true;
         }
       }
 
       if (!hasReparented) return;
 
+      // Build unified set of all nodes that changed group membership (reparented OR deparented)
+      const reparentedNodeIds = new Set(reparentMap.keys());
+      const allMovedNodeIds = new Set([...reparentedNodeIds, ...deparentedNodeIds]);
+
+      const getNodeContainerId = (nodeId: string): string | undefined => {
+        // If reparented into a new group, return that group's id
+        if (reparentMap.has(nodeId)) {
+          return reparentMap.get(nodeId)!.id;
+        }
+        // If deparented (moved out to open canvas), return undefined (no group)
+        if (deparentedNodeIds.has(nodeId)) {
+          return undefined;
+        }
+        const n = nodes.find((item) => item.id === nodeId);
+        if (!n) return undefined;
+
+        if ((n.data as any)?.containerId) {
+          return (n.data as any).containerId;
+        }
+
+        const parentFrame = existingContainers.find((c) =>
+          ((c.data as any)?.questionIds || []).includes(n.id)
+        );
+        if (parentFrame) return parentFrame.id;
+
+        const nW = n.measured?.width || 200;
+        const nH = n.measured?.height || 150;
+        const cX = n.position.x + nW / 2;
+        const cY = n.position.y + nH / 2;
+        const spatialFrame = existingContainers.find((c) => {
+          const cX1 = c.position.x;
+          const cY1 = c.position.y;
+          const cW =
+            (c.style?.width ? parseInt(String(c.style.width), 10) : 0) ||
+            c.measured?.width ||
+            440;
+          const cH =
+            (c.style?.height ? parseInt(String(c.style.height), 10) : 0) ||
+            c.measured?.height ||
+            480;
+          return cX >= cX1 && cX <= cX1 + cW && cY >= cY1 && cY <= cY1 + cH;
+        });
+        return spatialFrame?.id;
+      };
+
+      // Clean Auto-Disconnect on Inter-Group Drop or Deparent
+      // Auto-sever any connections that tied the moved symbol(s) to their previous group
+      const edgesToKeep = edges.filter((e) => {
+        const isSourceMoved = allMovedNodeIds.has(e.source);
+        const isTargetMoved = allMovedNodeIds.has(e.target);
+
+        // If neither node changed group, keep the edge as-is
+        if (!isSourceMoved && !isTargetMoved) {
+          return true;
+        }
+
+        // If only one endpoint was moved (the other stayed):
+        // Auto-sever ALL connections to ensure a clean group transition
+        if (isSourceMoved !== isTargetMoved) {
+          return false;
+        }
+
+        // If both nodes were moved together in the same drag:
+        // Drop any cross-group edge, but keep internal connections if they ended up in the same container
+        if ((e.data as any)?.isCrossGroup) {
+          return false;
+        }
+
+        const sourceContainer = getNodeContainerId(e.source);
+        const targetContainer = getNodeContainerId(e.target);
+
+        // If both deparented to open canvas (both undefined), keep the edge between them
+        if (!sourceContainer && !targetContainer) {
+          return true;
+        }
+
+        return Boolean(
+          sourceContainer &&
+          targetContainer &&
+          sourceContainer === targetContainer
+        );
+      });
+
       recordSnapshot(nodes, edges, groupMeta);
 
+      if (edgesToKeep.length !== edges.length) {
+        const keepIds = new Set(edgesToKeep.map((e) => e.id));
+        setEdges((currentEdges) => currentEdges.filter((e) => keepIds.has(e.id)));
+      }
+
       setNodes((currentNodes) => {
-        return currentNodes.map((n) => {
+        const nextNodes = currentNodes.map((n) => {
+          // Handle deparented nodes: clear containerId and group data
+          if (deparentedNodeIds.has(n.id)) {
+            const updatedData = { ...n.data } as any;
+            delete updatedData.containerId;
+            delete updatedData.customColor;
+
+            if (n.type === 'question') {
+              if (Array.isArray(updatedData.depends_on)) {
+                updatedData.depends_on = undefined;
+              }
+              if (updatedData.validation) {
+                updatedData.validation = undefined;
+              }
+              if (Array.isArray(updatedData.cross_group_dependency)) {
+                updatedData.cross_group_dependency = undefined;
+              }
+            }
+
+            return {
+              ...n,
+              data: {
+                ...updatedData,
+                group: 1, // Reset to default group
+              },
+            };
+          }
+
           if (reparentMap.has(n.id)) {
             const targetContainer = reparentMap.get(n.id)!;
             const targetData = targetContainer.data as any;
@@ -1324,10 +1513,50 @@ const FlowEditor: React.FC = () => {
               targetData?.numericGroupId || parseInt(targetData?.groupId) || 1;
             const targetColor = targetData?.color;
 
+            // Clean up any depends_on, validation, or cross_group_dependency referencing questions outside targetContainer
+            const updatedData = { ...n.data };
+            if (n.type === 'question') {
+              const currentQData = n.data as any;
+              if (Array.isArray(currentQData.depends_on) && currentQData.depends_on.length > 0) {
+                const targetQIds = new Set(
+                  currentNodes
+                    .filter((item) => {
+                      if (item.id === n.id) return false;
+                      const contId = reparentMap.has(item.id)
+                        ? reparentMap.get(item.id)!.id
+                        : (item.data as any)?.containerId;
+                      return contId === targetContainer.id;
+                    })
+                    .map((item) => (item.data as any)?.question_id)
+                    .filter(Boolean)
+                );
+
+                const prunedDependsOn = currentQData.depends_on.filter((depId: number) =>
+                  targetQIds.has(depId)
+                );
+                updatedData.depends_on = prunedDependsOn.length > 0 ? prunedDependsOn : undefined;
+
+                if (currentQData.validation) {
+                  const prunedValidation: Record<string, any> = {};
+                  for (const [key, val] of Object.entries(currentQData.validation)) {
+                    if (targetQIds.has(Number(key))) {
+                      prunedValidation[key] = val;
+                    }
+                  }
+                  updatedData.validation =
+                    Object.keys(prunedValidation).length > 0 ? prunedValidation : undefined;
+                }
+              }
+
+              if (Array.isArray(currentQData.cross_group_dependency)) {
+                updatedData.cross_group_dependency = undefined;
+              }
+            }
+
             return {
               ...n,
               data: {
-                ...n.data,
+                ...updatedData,
                 containerId: targetContainer.id,
                 group: targetGroupNum,
                 ...(n.type === 'question' && targetColor ? { customColor: targetColor } : {}),
@@ -1340,9 +1569,17 @@ const FlowEditor: React.FC = () => {
             let updatedQIds = [...currentQIds];
             let modified = false;
 
-            // Remove any nodes that left this container
+            // Remove any nodes that left this container (reparented to another group)
             for (const [nodeId, targetContainer] of reparentMap.entries()) {
               if (targetContainer.id !== n.id && updatedQIds.includes(nodeId)) {
+                updatedQIds = updatedQIds.filter((id) => id !== nodeId);
+                modified = true;
+              }
+            }
+
+            // Remove any nodes that were deparented (dragged out to open canvas)
+            for (const nodeId of deparentedNodeIds) {
+              if (updatedQIds.includes(nodeId)) {
                 updatedQIds = updatedQIds.filter((id) => id !== nodeId);
                 modified = true;
               }
@@ -1376,9 +1613,11 @@ const FlowEditor: React.FC = () => {
 
           return n;
         });
+
+        return nextNodes;
       });
     },
-    [nodes, edges, groupMeta, onNodeDragStop, recordSnapshot, setNodes]
+    [nodes, edges, groupMeta, onNodeDragStop, recordSnapshot, setNodes, setEdges]
   );
 
   // Drag-and-drop drop handler
@@ -2341,6 +2580,24 @@ const FlowEditor: React.FC = () => {
     [nodes, setCenter]
   );
 
+  // Clear canvas handler: completely blank flowchart
+  const handleClearCanvas = useCallback(() => {
+    if (window.confirm('Clear all symbols and connections from this flowchart canvas?')) {
+      recordSnapshot(nodes, edges, groupMeta);
+      setNodes([]);
+      setEdges([]);
+      setGroupMeta({
+        totalGroups: 1,
+        groupNumber: 1,
+        hasNextGroup: false,
+        instruction: '',
+        groupJumps: [],
+      });
+      setSelectedNodeId(null);
+      setSelectedEdgeId(null);
+    }
+  }, [nodes, edges, groupMeta, recordSnapshot, setNodes, setEdges, setGroupMeta]);
+
   // Reset to sample initial schema
   const handleResetSample = useCallback(() => {
     if (
@@ -2409,6 +2666,16 @@ const FlowEditor: React.FC = () => {
             refreshProjects();
           } else if (view === 'groups') {
             refreshGroups();
+          } else if (view === 'editor') {
+            if (projects.length === 0) {
+              handleCreateNewProject(
+                'My Survey Flowchart',
+                '',
+                'Dynamic KYC and field assessment survey flowchart',
+                1
+              );
+              return;
+            }
           }
           setActiveView(view);
         }}
@@ -2432,7 +2699,20 @@ const FlowEditor: React.FC = () => {
             onOpenProject={handleSelectProject}
             onCreateNew={() => setIsCreateModalOpen(true)}
             onDuplicateProject={handleDuplicateProject}
-            onDeleteProject={(id) => handleDeleteProject(id, handleSelectProject)}
+            onDeleteProject={(id) => {
+              handleDeleteProject(id, (nextId) => {
+                if (nextId) {
+                  selectProjectById(nextId, (target) => {
+                    setNodes(target.nodes);
+                    setEdges(target.edges);
+                    setGroupMeta(target.groupMeta);
+                  });
+                } else {
+                  setNodes([]);
+                  setEdges([]);
+                }
+              });
+            }}
             onOpenVersionHistory={(proj) => {
               setVersionHistoryTargetProject(proj);
               setIsVersionHistoryModalOpen(true);
@@ -2481,6 +2761,7 @@ const FlowEditor: React.FC = () => {
                   setIsMobileModalOpen(true);
                 }}
                 onResetSample={handleResetSample}
+                onClearCanvas={handleClearCanvas}
                 onAutoLayout={handleAutoLayout}
                 onBackToList={() => {
                   refreshProjects();
@@ -2513,6 +2794,9 @@ const FlowEditor: React.FC = () => {
                 onTogglePathTracing={togglePathTracing}
                 onAddGroupArea={handleCreateNewGroupArea}
                 isServerConnected={isServerConnected}
+                onSave={handleManualSave}
+                isSaving={isSyncing}
+                isSaved={justSaved}
               />
             )}
 
@@ -2774,9 +3058,8 @@ const FlowEditor: React.FC = () => {
                     fitView
                     deleteKeyCode={['Backspace', 'Delete']}
                     elevateNodesOnSelect={false}
-                    className={`survey-flow-canvas ${
-                      isHandMode ? 'is-tool-hand' : isDrawAreaMode ? 'is-tool-draw' : ''
-                    }`}
+                    className={`survey-flow-canvas ${isHandMode ? 'is-tool-hand' : isDrawAreaMode ? 'is-tool-draw' : ''
+                      }`}
                   >
                     <Controls className="flow-controls" />
                     <MiniMap

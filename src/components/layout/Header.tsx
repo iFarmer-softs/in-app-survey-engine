@@ -19,6 +19,10 @@ import {
   Redo2,
   GitFork,
   Crop,
+  Trash2,
+  Save,
+  Check,
+  Loader2,
 } from 'lucide-react';
 import type { GroupMeta } from '../../utils/schemaCompiler';
 
@@ -30,6 +34,7 @@ interface HeaderProps {
   onOpenJsonModal: () => void;
   onOpenMobileModal: () => void;
   onResetSample: () => void;
+  onClearCanvas?: () => void;
   onAutoLayout: () => void;
   onBackToList?: () => void;
   nodeCount: number;
@@ -50,6 +55,9 @@ interface HeaderProps {
   onTogglePathTracing?: () => void;
   onAddGroupArea?: () => void;
   isServerConnected?: boolean;
+  onSave?: () => void;
+  isSaving?: boolean;
+  isSaved?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -60,6 +68,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenJsonModal,
   onOpenMobileModal,
   onResetSample,
+  onClearCanvas,
   onAutoLayout,
   onBackToList,
   nodeCount,
@@ -80,6 +89,9 @@ export const Header: React.FC<HeaderProps> = ({
   onTogglePathTracing,
   onAddGroupArea,
   isServerConnected = false,
+  onSave,
+  isSaving = false,
+  isSaved = false,
 }) => {
   const [isVersionMenuOpen, setIsVersionMenuOpen] = useState(false);
   const [isToolsMenuOpen, setIsToolsMenuOpen] = useState(false);
@@ -525,10 +537,25 @@ export const Header: React.FC<HeaderProps> = ({
 
               <div className="menu-divider" />
 
-              {/* Section 4: Reset Canvas */}
+              {/* Section 4: Clear Canvas / Blank Canvas */}
               <button
                 type="button"
                 className="tools-menu-item item-danger"
+                onClick={() => {
+                  setIsToolsMenuOpen(false);
+                  onClearCanvas?.();
+                }}
+              >
+                <Trash2 size={14} />
+                <div className="tools-item-text">
+                  <span className="tools-title">Clear Canvas (Blank)</span>
+                  <span className="tools-sub">Empty flowchart canvas</span>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                className="tools-menu-item"
                 onClick={() => {
                   setIsToolsMenuOpen(false);
                   onResetSample();
@@ -536,13 +563,41 @@ export const Header: React.FC<HeaderProps> = ({
               >
                 <RotateCcw size={14} />
                 <div className="tools-item-text">
-                  <span className="tools-title">Reset to Default Sample</span>
-                  <span className="tools-sub">Reload seed flowchart</span>
+                  <span className="tools-title">Load Sample KYC Flowchart</span>
+                  <span className="tools-sub">Preview reference KYC survey</span>
                 </div>
               </button>
             </div>
           )}
         </div>
+
+        {/* Primary Action 0: Save Flowchart */}
+        {onSave && (
+          <button
+            type="button"
+            className={`btn btn-save ${isSaved ? 'is-saved' : ''} ${isSaving ? 'is-saving' : ''}`}
+            onClick={onSave}
+            disabled={isSaving}
+            title="Save flowchart to local storage & cloud database (Ctrl+S / Cmd+S)"
+          >
+            {isSaving ? (
+              <>
+                <Loader2 size={15} className="animate-spin" />
+                <span>Saving...</span>
+              </>
+            ) : isSaved ? (
+              <>
+                <Check size={15} />
+                <span>Saved!</span>
+              </>
+            ) : (
+              <>
+                <Save size={15} />
+                <span>Save</span>
+              </>
+            )}
+          </button>
+        )}
 
         {/* Primary Action 1: Mobile Preview */}
         <button

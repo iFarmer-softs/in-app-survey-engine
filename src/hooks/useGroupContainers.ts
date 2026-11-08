@@ -40,21 +40,12 @@ export function useGroupContainers({
             const childIds: string[] = (node.data as any)?.questionIds || [];
             childIds.forEach((cid) => removedChildIds.add(cid));
 
-            const frameWidth = Number(node.style?.width) || (node.data as any)?.width || 440;
-            const frameHeight = Number(node.style?.height) || (node.data as any)?.height || 480;
-            const fx = node.position.x;
-            const fy = node.position.y;
-
             nodes.forEach((n) => {
               if (n.id !== node.id) {
-                if ((n.data as any)?.containerId === node.id) {
+                const nContainerId = (n.data as any)?.containerId;
+                if (nContainerId === node.id) {
                   removedChildIds.add(n.id);
-                } else if (
-                  n.position.x >= fx - 10 &&
-                  n.position.x <= fx + frameWidth + 10 &&
-                  n.position.y >= fy - 10 &&
-                  n.position.y <= fy + frameHeight + 10
-                ) {
+                } else if (!nContainerId && childIds.includes(n.id)) {
                   removedChildIds.add(n.id);
                 }
               }
@@ -73,9 +64,12 @@ export function useGroupContainers({
             // Free movement during drag with lockstep child synchronisation (non-overlap resolved on release)
             const childIdSet = new Set<string>();
             const explicitChildIds: string[] = (node.data as any)?.questionIds || [];
-            explicitChildIds.forEach((cid) => childIdSet.add(cid));
             nodes.forEach((n) => {
-              if (n.id !== node.id && (n.data as any)?.containerId === node.id) {
+              if (n.id === node.id) return;
+              const nContainerId = (n.data as any)?.containerId;
+              if (nContainerId === node.id) {
+                childIdSet.add(n.id);
+              } else if (!nContainerId && explicitChildIds.includes(n.id)) {
                 childIdSet.add(n.id);
               }
             });

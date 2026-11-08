@@ -1,10 +1,9 @@
 import type { Node, Edge } from '@xyflow/react';
 import type { FlowchartProject, FlowchartVersion } from '../types/project';
 import type { GroupMeta } from './schemaCompiler';
-import { SAMPLE_INITIAL_SCHEMA, parseSchemaToFlow } from './schemaCompiler';
 
-const STORAGE_KEY = 'ifarmer_survey_flowchart_projects_v1';
-const ACTIVE_PROJECT_KEY = 'ifarmer_survey_active_project_id_v1';
+const STORAGE_KEY = 'ifarmer_survey_flowchart_projects_v2';
+const ACTIVE_PROJECT_KEY = 'ifarmer_survey_active_project_id_v2';
 
 export function countQuestionsInNodes(nodes: Node[]): number {
   return nodes.filter((n) => n.type === 'question' || n.type === 'decision').length;
@@ -48,152 +47,54 @@ export function ensureProjectVersions(project: FlowchartProject): FlowchartProje
 }
 
 export function getInitialSeedProjects(): FlowchartProject[] {
-  const parsed = parseSchemaToFlow(SAMPLE_INITIAL_SCHEMA);
+  const newId = 'proj-blank-survey';
   const now = new Date().toISOString();
-  const threeDaysAgo = new Date(Date.now() - 86400000 * 3).toISOString();
 
-  const sofolV1Id = 'ver-sofol-1-0-0';
-  const sofolV2Id = 'ver-sofol-2-0-0';
-
-  const sofolProject: FlowchartProject = {
-    id: 'proj-sofol-loan-kyc-v2',
-    title: 'Sofol Dynamic KYC - Farmer Loan V2',
-    titleBn: 'সফল ডায়নামিক কেওয়াইসি - কৃষক ঋণ যাচাই',
-    description: 'Comprehensive farmer KYC workflow with land ownership branching, farm income, crop categorization, and group transitions.',
-    status: 'published',
-    currentVersion: '2.0.0',
-    publishedVersionId: sofolV2Id,
-    createdAt: new Date(Date.now() - 86400000 * 14).toISOString(),
-    updatedAt: now,
-    groupMeta: parsed.meta,
-    nodes: parsed.nodes,
-    edges: parsed.edges,
-    versions: [
-      {
-        id: sofolV2Id,
-        version: '2.0.0',
-        title: 'V2 Production Release with Group Transitions',
-        description: 'Added support for multi-group loan evaluation, cattle inventory validation, and crop categorization jumps.',
-        status: 'published',
-        createdAt: threeDaysAgo,
-        createdBy: 'iFarmer Credit Team',
-        nodeCount: parsed.nodes.length,
-        edgeCount: parsed.edges.length,
-        questionCount: countQuestionsInNodes(parsed.nodes),
-        groupCount: parsed.meta.totalGroups || 2,
-        nodes: JSON.parse(JSON.stringify(parsed.nodes)),
-        edges: JSON.parse(JSON.stringify(parsed.edges)),
-        groupMeta: JSON.parse(JSON.stringify(parsed.meta)),
-      },
-      {
-        id: sofolV1Id,
-        version: '1.0.0',
-        title: 'Initial Sofol KYC Baseline',
-        description: 'First version with basic single-group farmer profile and land ownership questions.',
-        status: 'archived',
-        createdAt: new Date(Date.now() - 86400000 * 14).toISOString(),
-        createdBy: 'System Architect',
-        nodeCount: Math.max(4, parsed.nodes.length - 4),
-        edgeCount: Math.max(3, parsed.edges.length - 4),
-        questionCount: Math.max(3, countQuestionsInNodes(parsed.nodes) - 3),
-        groupCount: 1,
-        nodes: JSON.parse(JSON.stringify(parsed.nodes.slice(0, 8))),
-        edges: JSON.parse(JSON.stringify(parsed.edges.slice(0, 7))),
-        groupMeta: { ...parsed.meta, totalGroups: 1, hasNextGroup: false },
-      },
-    ],
-  };
-
-  const creditNodes: Node[] = [
-    {
-      id: 'start-node',
-      type: 'start',
-      position: { x: 340, y: 50 },
-      data: { label: 'Group 1 Start' },
-    },
-    {
-      id: 'q-201',
-      type: 'question',
-      position: { x: 260, y: 170 },
-      data: {
-        question_id: 201,
-        question: 'Has prior microfinance loans?',
-        question_bn: 'পূর্বে কি কোনো ক্ষুদ্রঋণ নিয়েছেন?',
-        answer_type: 'select_one',
-        mandatory: true,
-        editable: true,
-        options: 'হ্যাঁ (Yes), না (No)',
-        placeholder: 'নির্বাচন করুন',
-        hint: 'পূর্বের ঋণের ইতিহাস যাচাই',
-      },
-    },
-    {
-      id: 'end-node',
-      type: 'end',
-      position: { x: 340, y: 380 },
-      data: { label: 'Next Group' },
-    },
-  ];
-
-  const creditEdges: Edge[] = [
-    {
-      id: 'e-start-201',
-      source: 'start-node',
-      target: 'q-201',
-      animated: true,
-      style: { stroke: '#10b981', strokeWidth: 2 },
-    },
-    {
-      id: 'e-201-end',
-      source: 'q-201',
-      sourceHandle: 'default-next',
-      target: 'end-node',
-      animated: true,
-      style: { stroke: '#64748b', strokeWidth: 2 },
-    },
-  ];
-
-  const creditMeta: GroupMeta = {
-    totalGroups: 2,
-    groupNumber: 1,
-    hasNextGroup: true,
-    instruction: 'কৃষকের ক্রেডিট স্কোর এবং জামানত তথ্য যাচাই করুন',
-    groupJumps: [{ group_id: '2', group_title: 'ক্রেডিট স্কোর শাখা' }],
-  };
-
-  const creditProject: FlowchartProject = {
-    id: 'proj-credit-score-assessment',
-    title: 'Modify Credit Score Assessment',
-    titleBn: 'ক্রেডিট স্কোর মূল্যায়ন সমীক্ষা',
-    description: 'Assessment survey for credit history checks, financial guarantor validation, and land mortgage verification.',
+  const blankProject: FlowchartProject = {
+    id: newId,
+    title: 'New Survey Flowchart',
+    titleBn: 'নতুন জরিপ ফ্লোচার্ট',
+    description: 'Blank flowchart canvas ready for survey creation.',
     status: 'draft',
-    currentVersion: '0.9.0',
-    createdAt: new Date(Date.now() - 86400000 * 7).toISOString(),
-    updatedAt: new Date(Date.now() - 86400000 * 2).toISOString(),
-    groupMeta: creditMeta,
-    nodes: creditNodes,
-    edges: creditEdges,
+    currentVersion: '0.1.0',
+    createdAt: now,
+    updatedAt: now,
+    groupMeta: {
+      totalGroups: 1,
+      groupNumber: 1,
+      hasNextGroup: false,
+      instruction: '',
+      groupJumps: [],
+    },
+    nodes: [],
+    edges: [],
     versions: [
       {
-        id: 'ver-credit-0-9-0',
-        version: '0.9.0',
-        title: 'Draft Credit History Checkpoint',
-        description: 'Initial draft flow with microfinance history node.',
+        id: `ver-init-${newId}`,
+        version: '0.1.0',
+        title: 'Initial Empty Canvas',
+        description: 'Blank starting canvas.',
         status: 'draft',
-        createdAt: new Date(Date.now() - 86400000 * 7).toISOString(),
-        createdBy: 'Risk Assessment Team',
-        nodeCount: creditNodes.length,
-        edgeCount: creditEdges.length,
-        questionCount: countQuestionsInNodes(creditNodes),
-        groupCount: 2,
-        nodes: JSON.parse(JSON.stringify(creditNodes)),
-        edges: JSON.parse(JSON.stringify(creditEdges)),
-        groupMeta: JSON.parse(JSON.stringify(creditMeta)),
+        createdAt: now,
+        createdBy: 'Survey Designer',
+        nodeCount: 0,
+        edgeCount: 0,
+        questionCount: 0,
+        groupCount: 1,
+        nodes: [],
+        edges: [],
+        groupMeta: {
+          totalGroups: 1,
+          groupNumber: 1,
+          hasNextGroup: false,
+          instruction: '',
+          groupJumps: [],
+        },
       },
     ],
   };
 
-  return [sofolProject, creditProject];
+  return [blankProject];
 }
 
 export function loadAllProjects(): FlowchartProject[] {
@@ -234,7 +135,7 @@ export function getActiveProjectId(projects: FlowchartProject[]): string {
   } catch {
     // fallback
   }
-  return projects[0]?.id || 'proj-sofol-loan-kyc-v2';
+  return projects[0]?.id || 'proj-blank-survey';
 }
 
 export function setActiveProjectId(id: string): void {
@@ -279,26 +180,14 @@ export function createBlankProject(
   const newId = `proj-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
   const now = new Date().toISOString();
 
-  const nodes: Node[] = [
-    {
-      id: 'start-node',
-      type: 'start',
-      position: { x: 350, y: 70 },
-      data: { label: 'Group 1 Start' },
-    },
-    {
-      id: 'end-node',
-      type: 'end',
-      position: { x: 350, y: 400 },
-      data: { label: 'Next Group / Submit' },
-    },
-  ];
+  const nodes: Node[] = [];
+  const edges: Edge[] = [];
 
   const groupMeta: GroupMeta = {
     totalGroups: Math.max(1, totalGroups),
     groupNumber: 1,
     hasNextGroup: totalGroups > 1,
-    instruction: 'সার্ভে প্রশ্নাবলী পূরণ করুন',
+    instruction: '',
     groupJumps: [],
   };
 
@@ -307,15 +196,15 @@ export function createBlankProject(
     id: initialVersionId,
     version: '0.1.0',
     title: 'Initial Project Creation',
-    description: 'Empty starting canvas with start/end terminals.',
+    description: 'Empty starting canvas.',
     status: 'draft',
     createdAt: now,
     createdBy: 'Survey Designer',
-    nodeCount: nodes.length,
+    nodeCount: 0,
     edgeCount: 0,
     questionCount: 0,
     groupCount: Math.max(1, totalGroups),
-    nodes: JSON.parse(JSON.stringify(nodes)),
+    nodes: [],
     edges: [],
     groupMeta: JSON.parse(JSON.stringify(groupMeta)),
   };
@@ -324,7 +213,7 @@ export function createBlankProject(
     id: newId,
     title: title.trim() || 'New Survey Flowchart',
     titleBn: titleBn?.trim() || title.trim() || 'নতুন সার্ভে ফ্লোচার্ট',
-    description: description?.trim() || 'Custom survey flow created from blank canvas.',
+    description: description?.trim() || 'Empty flowchart ready for design.',
     status: 'draft',
     currentVersion: '0.1.0',
     versions: [initialVersion],
@@ -332,7 +221,7 @@ export function createBlankProject(
     updatedAt: now,
     groupMeta,
     nodes,
-    edges: [],
+    edges,
   };
 
   return project;

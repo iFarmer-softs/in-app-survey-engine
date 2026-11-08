@@ -1,183 +1,488 @@
 [
   {
-    "id": "proj-sofol-loan-kyc-v2",
-    "title": "Sofol Dynamic KYC - Farmer Loan V2",
-    "titleBn": "সফল ডায়নামিক কেওয়াইসি - কৃষক ঋণ যাচাই",
-    "description": "Comprehensive farmer KYC workflow with land ownership branching, farm income, crop categorization, and group transitions.",
-    "status": "published",
-    "currentVersion": "2.0.0",
-    "publishedVersionId": "ver-sofol-2-0-0",
-    "createdAt": "2026-10-21T12:46:47.766Z",
-    "updatedAt": "2026-11-04T12:46:47.766Z",
-    "groupMeta": {
-      "groupNumber": 1,
-      "totalGroups": 3,
-      "hasNextGroup": true,
-      "instruction": "Fill in farmer details and verify land ownership documentation.",
-      "groupJumps": [
-        {
-          "group_id": "2",
-          "group_title": "Farm Production & Soil"
-        },
-        {
-          "group_id": "3",
-          "group_title": "Disbursement & Guarantor"
+    "id": "proj-1794133192857-qen30",
+    "title": "huhu",
+    "titleBn": "huhu",
+    "description": "Custom survey flow created from blank canvas.",
+    "status": "draft",
+    "currentVersion": "0.1.0",
+    "versions": [
+      {
+        "id": "ver-init-proj-1794133192857-qen30",
+        "version": "0.1.0",
+        "title": "Initial Draft Baseline",
+        "description": "Custom survey flow created from blank canvas.",
+        "status": "draft",
+        "createdAt": "2026-11-08T10:19:52.857Z",
+        "createdBy": "System / Author",
+        "nodeCount": 0,
+        "edgeCount": 0,
+        "questionCount": 0,
+        "groupCount": 1,
+        "nodes": [],
+        "edges": [],
+        "groupMeta": {
+          "totalGroups": 1,
+          "groupNumber": 1,
+          "hasNextGroup": false,
+          "instruction": "",
+          "groupJumps": []
         }
-      ]
+      }
+    ],
+    "createdAt": "2026-11-08T10:19:52.857Z",
+    "updatedAt": "2026-11-08T11:08:22.339Z",
+    "groupMeta": {
+      "totalGroups": 3,
+      "groupNumber": 1,
+      "hasNextGroup": false,
+      "instruction": "",
+      "groupJumps": []
     },
     "nodes": [
       {
-        "id": "start-1",
-        "type": "start",
+        "id": "grp-frame-9918-oi9",
+        "type": "groupFrame",
         "position": {
-          "x": 300,
-          "y": 50
+          "x": -636.9500569647499,
+          "y": -118
+        },
+        "zIndex": 0,
+        "style": {
+          "width": 797,
+          "height": 1220
         },
         "data": {
-          "label": "Start Survey",
-          "labelBn": "জরিপ শুরু"
-        }
+          "groupId": "grp-frame-9918-oi9",
+          "numericGroupId": 2,
+          "title": "Group Area 2",
+          "titleBn": "গ্রুপ এলাকা 2",
+          "category": "custom",
+          "color": "#8b5cf6",
+          "questionIds": [
+            "process-5860",
+            "q-102",
+            "decision-1495",
+            "decision-4148",
+            "q-103",
+            "process-2765"
+          ],
+          "questionCount": 6,
+          "expandedHeight": 1220
+        },
+        "measured": {
+          "width": 797,
+          "height": 1220
+        },
+        "selected": false,
+        "dragging": false
+      },
+      {
+        "id": "grp-frame-6258-jyo",
+        "type": "groupFrame",
+        "position": {
+          "x": -1389.2580388334995,
+          "y": -135.12541587720932
+        },
+        "zIndex": 0,
+        "style": {
+          "width": 440,
+          "height": 1660
+        },
+        "data": {
+          "groupId": "grp-frame-6258-jyo",
+          "numericGroupId": 1,
+          "title": "Group Area 1",
+          "titleBn": "গ্রুপ এলাকা 1",
+          "category": "custom",
+          "color": "#0284c7",
+          "questionIds": [
+            "q-101",
+            "decision-3921",
+            "decision-0828",
+            "decision-4594",
+            "decision-0972",
+            "groupJump-3493"
+          ],
+          "questionCount": 6,
+          "expandedHeight": 1660
+        },
+        "measured": {
+          "width": 633,
+          "height": 1220
+        },
+        "selected": false,
+        "dragging": false,
+        "width": 633,
+        "height": 1220,
+        "resizing": false
       },
       {
         "id": "q-101",
         "type": "question",
         "position": {
-          "x": 260,
-          "y": 160
+          "x": -1304.2580388334995,
+          "y": -75.12541587720915
         },
+        "zIndex": 10,
         "data": {
           "question_id": 101,
-          "question": "Farmer Full Name",
-          "question_bn": "কৃষকের পূর্ণ নাম",
+          "group": 1,
+          "containerId": "grp-frame-6258-jyo",
+          "customColor": "#0284c7",
+          "question": "Input / Question Data",
+          "question_bn": "ইনপুট / ডেটা প্রশ্ন (সামান্তরিক)",
           "answer_type": "string",
           "mandatory": true,
-          "group": 1
-        }
+          "editable": true,
+          "placeholder": "",
+          "hint": "",
+          "options": ""
+        },
+        "measured": {
+          "width": 270,
+          "height": 111
+        },
+        "dragging": true,
+        "selected": false
       },
       {
-        "id": "dec-1",
+        "id": "decision-0972",
         "type": "decision",
         "position": {
-          "x": 280,
-          "y": 280
+          "x": -1308.0779755038818,
+          "y": 213.35135591673895
         },
+        "zIndex": 10,
         "data": {
-          "label": "Do you own cultivating land?",
-          "condition": "Yes / No",
-          "target_question_id": 101
-        }
+          "label": "Condition Check",
+          "conditionType": "match",
+          "comparisonValue": "Yes",
+          "containerId": "grp-frame-6258-jyo",
+          "group": 1
+        },
+        "measured": {
+          "width": 220,
+          "height": 50
+        },
+        "selected": false,
+        "dragging": true
+      },
+      {
+        "id": "groupJump-3493",
+        "type": "groupJump",
+        "position": {
+          "x": -1204.4743252498015,
+          "y": 456.1666329602418
+        },
+        "zIndex": 10,
+        "data": {
+          "targetGroupId": 2,
+          "targetGroupTitle": "Group 2",
+          "containerId": "grp-frame-6258-jyo",
+          "group": 1
+        },
+        "measured": {
+          "width": 210,
+          "height": 51
+        },
+        "selected": false,
+        "dragging": true
+      },
+      {
+        "id": "process-5860",
+        "type": "process",
+        "position": {
+          "x": -392,
+          "y": 407
+        },
+        "zIndex": 10,
+        "data": {
+          "label": "Process / Calculation",
+          "containerId": "grp-frame-9918-oi9",
+          "group": 2
+        },
+        "measured": {
+          "width": 220,
+          "height": 52
+        },
+        "selected": false,
+        "dragging": true
       },
       {
         "id": "q-102",
         "type": "question",
         "position": {
-          "x": 120,
-          "y": 420
+          "x": -294,
+          "y": 16
         },
+        "zIndex": 10,
         "data": {
           "question_id": 102,
-          "question": "Total Land Size (Decimals)",
-          "question_bn": "মোট আবাদযোগ্য জমির পরিমাণ (শতাংশ)",
-          "answer_type": "integer",
+          "group": 2,
+          "containerId": "grp-frame-9918-oi9",
+          "customColor": "#8b5cf6",
+          "question": "Input / Question Data",
+          "question_bn": "ইনপুট / ডেটা প্রশ্ন (সামান্তরিক)",
+          "answer_type": "string",
           "mandatory": true,
+          "editable": true,
+          "placeholder": "",
+          "hint": "",
+          "options": ""
+        },
+        "measured": {
+          "width": 270,
+          "height": 111
+        },
+        "dragging": true,
+        "selected": false
+      },
+      {
+        "id": "decision-0828",
+        "type": "decision",
+        "position": {
+          "x": -1245.6709085911561,
+          "y": 720.5754478436943
+        },
+        "zIndex": 10,
+        "data": {
+          "label": "Condition Check",
+          "conditionType": "match",
+          "comparisonValue": "Yes",
+          "group": 1,
+          "containerId": "grp-frame-6258-jyo"
+        },
+        "measured": {
+          "width": 220,
+          "height": 50
+        },
+        "dragging": true,
+        "selected": false
+      },
+      {
+        "id": "decision-4594",
+        "type": "decision",
+        "position": {
+          "x": -1129.2580388334995,
+          "y": 587.7918462308284
+        },
+        "zIndex": 10,
+        "data": {
+          "label": "Condition Check",
+          "conditionType": "match",
+          "comparisonValue": "Yes",
+          "containerId": "grp-frame-6258-jyo",
           "group": 1
-        }
+        },
+        "measured": {
+          "width": 220,
+          "height": 50
+        },
+        "dragging": true,
+        "selected": false
+      },
+      {
+        "id": "grp-frame-1624-c6x",
+        "type": "groupFrame",
+        "position": {
+          "x": 233.04994303525007,
+          "y": -96
+        },
+        "zIndex": 0,
+        "style": {
+          "width": 440,
+          "height": 480
+        },
+        "data": {
+          "groupId": "grp-frame-1624-c6x",
+          "numericGroupId": 3,
+          "title": "Group Area 3",
+          "titleBn": "গ্রুপ এলাকা 3",
+          "category": "custom",
+          "color": "#10b981",
+          "questionIds": [
+            "process-1623"
+          ],
+          "questionCount": 1,
+          "expandedHeight": 480
+        },
+        "measured": {
+          "width": 776,
+          "height": 1192
+        },
+        "selected": true,
+        "dragging": false,
+        "width": 776,
+        "height": 1192,
+        "resizing": false
+      },
+      {
+        "id": "process-1623",
+        "type": "process",
+        "position": {
+          "x": 318,
+          "y": -36
+        },
+        "zIndex": 10,
+        "data": {
+          "label": "Process / Calculation",
+          "containerId": "grp-frame-1624-c6x",
+          "group": 3
+        },
+        "measured": {
+          "width": 220,
+          "height": 52
+        },
+        "dragging": true,
+        "selected": false
+      },
+      {
+        "id": "decision-1495",
+        "type": "decision",
+        "position": {
+          "x": -178.6393958054291,
+          "y": 542
+        },
+        "zIndex": 10,
+        "data": {
+          "label": "Condition Check",
+          "conditionType": "match",
+          "comparisonValue": "Yes",
+          "containerId": "grp-frame-9918-oi9",
+          "group": 2
+        },
+        "measured": {
+          "width": 220,
+          "height": 50
+        },
+        "dragging": true
+      },
+      {
+        "id": "decision-4148",
+        "type": "decision",
+        "position": {
+          "x": -448.6393958054291,
+          "y": 542
+        },
+        "zIndex": 10,
+        "data": {
+          "label": "Condition Check",
+          "conditionType": "match",
+          "comparisonValue": "Yes",
+          "containerId": "grp-frame-9918-oi9",
+          "group": 2
+        },
+        "measured": {
+          "width": 220,
+          "height": 50
+        },
+        "dragging": true
       },
       {
         "id": "q-103",
         "type": "question",
         "position": {
-          "x": 440,
-          "y": 420
+          "x": -551.9500569647499,
+          "y": 742
         },
+        "zIndex": 10,
         "data": {
           "question_id": 103,
-          "question": "Land Lease Duration (Years)",
-          "question_bn": "লিজের মেয়াদ (বছর)",
-          "answer_type": "integer",
+          "group": 2,
+          "containerId": "grp-frame-9918-oi9",
+          "customColor": "#8b5cf6",
+          "question": "Input / Question Data",
+          "question_bn": "ইনপুট / ডেটা প্রশ্ন (সামান্তরিক)",
+          "answer_type": "string",
           "mandatory": true,
-          "group": 1
-        }
+          "editable": true,
+          "placeholder": "",
+          "hint": "",
+          "options": ""
+        },
+        "measured": {
+          "width": 270,
+          "height": 111
+        },
+        "dragging": true
       },
       {
-        "id": "end-1",
-        "type": "end",
+        "id": "process-2765",
+        "type": "process",
         "position": {
-          "x": 300,
-          "y": 560
+          "x": -104.6393958054291,
+          "y": 960.283389267109
         },
+        "zIndex": 10,
         "data": {
-          "label": "Submit Group 1",
-          "labelBn": "জমা দিন"
-        }
+          "label": "Process / Calculation",
+          "containerId": "grp-frame-9918-oi9",
+          "group": 2
+        },
+        "measured": {
+          "width": 220,
+          "height": 52
+        },
+        "dragging": true
       }
     ],
     "edges": [
       {
-        "id": "e-start-q101",
-        "source": "start-1",
-        "target": "q-101",
-        "type": "customFlowchart"
+        "type": "surveyEdge",
+        "markerEnd": {
+          "type": "arrowclosed",
+          "width": 16,
+          "height": 16,
+          "color": "#10b981"
+        },
+        "source": "groupJump-3493",
+        "sourceHandle": "out-right",
+        "target": "process-5860",
+        "targetHandle": "in",
+        "animated": true,
+        "style": {
+          "stroke": "#10b981",
+          "strokeWidth": 2
+        },
+        "data": {
+          "validationType": "match",
+          "triggerValue": "",
+          "routingType": "smoothstep",
+          "isCrossGroup": false
+        },
+        "id": "xy-edge__groupJump-3493out-right-process-5860in",
+        "selected": false,
+        "reconnectable": false
       },
       {
-        "id": "e-q101-dec1",
+        "type": "surveyEdge",
+        "markerEnd": {
+          "type": "arrowclosed",
+          "width": 16,
+          "height": 16,
+          "color": "#8b5cf6"
+        },
         "source": "q-101",
-        "target": "dec-1",
-        "type": "customFlowchart"
-      },
-      {
-        "id": "e-dec1-q102",
-        "source": "dec-1",
+        "sourceHandle": "out-right",
         "target": "q-102",
-        "sourceHandle": "left",
-        "targetHandle": "top",
-        "label": "Yes",
-        "type": "customFlowchart"
-      },
-      {
-        "id": "e-dec1-q103",
-        "source": "dec-1",
-        "target": "q-103",
-        "sourceHandle": "right",
-        "targetHandle": "top",
-        "label": "No",
-        "type": "customFlowchart"
-      },
-      {
-        "id": "e-q102-end",
-        "source": "q-102",
-        "target": "end-1",
-        "type": "customFlowchart"
-      },
-      {
-        "id": "e-q103-end",
-        "source": "q-103",
-        "target": "end-1",
-        "type": "customFlowchart"
-      }
-    ],
-    "versions": [
-      {
-        "id": "ver-sofol-2-0-0",
-        "version": "2.0.0",
-        "title": "V2 Production Release with Branching",
-        "description": "Comprehensive farmer KYC workflow with land ownership branching.",
-        "status": "published",
-        "createdAt": "2026-11-01T12:46:47.766Z",
-        "createdBy": "iFarmer Credit Team",
-        "nodeCount": 6,
-        "edgeCount": 6,
-        "questionCount": 3,
-        "groupCount": 1,
-        "nodes": [],
-        "edges": [],
-        "groupMeta": {
-          "groupNumber": 1,
-          "totalGroups": 3,
-          "hasNextGroup": true,
-          "instruction": "Fill in farmer details and verify land ownership documentation.",
-          "groupJumps": []
-        }
+        "targetHandle": "in",
+        "animated": true,
+        "label": "Cross-Group: G1 ➔ G2",
+        "style": {
+          "stroke": "#8b5cf6",
+          "strokeWidth": 2,
+          "strokeDasharray": "5 5"
+        },
+        "data": {
+          "validationType": "match",
+          "triggerValue": "",
+          "routingType": "smoothstep",
+          "isCrossGroup": true,
+          "sourceGroup": 1,
+          "targetGroup": 2
+        },
+        "id": "xy-edge__q-101out-right-q-102in"
       }
     ]
   }

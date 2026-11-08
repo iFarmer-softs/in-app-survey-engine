@@ -8,7 +8,7 @@ export class ProjectsService {
   constructor(
     private readonly storageService: StorageService,
     private readonly databaseService: DatabaseService
-  ) {}
+  ) { }
 
   async findAll(): Promise<FlowchartProject[]> {
     const pgRepo = this.databaseService.getProjectsRepo();
@@ -141,10 +141,6 @@ export class ProjectsService {
     }
 
     const projects = this.storageService.getAllProjects();
-    if (projects.length <= 1) {
-      throw new BadRequestException('Cannot delete the last remaining project in workspace.');
-    }
-
     const filtered = projects.filter((p) => p.id !== id);
     if (filtered.length === projects.length) {
       throw new NotFoundException(`Project with ID "${id}" not found`);
@@ -244,9 +240,9 @@ export class ProjectsService {
 
     const updatedVersions = dto.isPublished
       ? project.versions.map((v) => ({
-          ...v,
-          status: v.status === 'published' ? ('archived' as const) : v.status,
-        }))
+        ...v,
+        status: v.status === 'published' ? ('archived' as const) : v.status,
+      }))
       : [...project.versions];
 
     const updatedProject: FlowchartProject = {

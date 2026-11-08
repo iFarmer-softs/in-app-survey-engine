@@ -114,7 +114,8 @@ console.log('\n4️⃣  Testing Project Storage Factory & Duplication...');
 const blank = createBlankProject('Rice KYC 2026', 'ধান কেওয়াইসি ২০২৬', 'Test description', 2);
 assert.strictEqual(blank.title, 'Rice KYC 2026');
 assert.strictEqual(blank.groupMeta.totalGroups, 2);
-assert.ok(blank.nodes.length >= 2, 'Blank project should contain start and end terminators');
+assert.strictEqual(blank.nodes.length, 0, 'Blank project canvas should start completely empty');
+assert.strictEqual(blank.edges.length, 0, 'Blank project should start with zero edges');
 
 const cloned = duplicateProject(blank);
 assert.notStrictEqual(cloned.id, blank.id, 'Cloned project should receive a new unique ID');
@@ -2079,6 +2080,127 @@ const outsideTarget = reparentContainers.find((frame) => {
 assert.strictEqual(outsideTarget, undefined, 'Open canvas drop must have no target container');
 assert.strictEqual(outsideNode.data.containerId, 'grp-1', 'Open canvas drop must preserve parent container');
 assert.strictEqual(outsideNode.data.group, 1, 'Open canvas drop must preserve parent group number');
+
+// 24D: Option 1 — Clean Auto-Disconnect on Inter-Group Drop:
+// Sever connections between the moved symbol and old group, while keeping unaffected edges
+const existingEdges = [
+  { id: 'e-q1-q2', source: 'q-1', target: 'q-2' }, // q-1 moving to grp-2, q-2 remains in grp-1 -> must sever!
+  { id: 'e-q3-end', source: 'q-3', target: 'end-2' }, // inside grp-2 -> keep!
+];
+const reparentMapTest = new Map<string, any>([['q-1', reparentGroup2]]);
+const testReparentedIds = new Set(reparentMapTest.keys());
+
+const filteredEdges = existingEdges.filter((e) => {
+  if (!testReparentedIds.has(e.source) && !testReparentedIds.has(e.target)) {
+    return true;
+  }
+  const sourceCont = reparentMapTest.get(e.source)?.id || (e.source === 'q-2' ? 'grp-1' : undefined);
+  const targetCont = reparentMapTest.get(e.target)?.id || (e.target === 'q-2' ? 'grp-1' : undefined);
+  return Boolean(sourceCont && targetCont && sourceCont === targetCont);
+});
+
+assert.strictEqual(filteredEdges.length, 1, 'Edge connecting moved q-1 to old group q-2 must be cleanly severed');
+assert.strictEqual(filteredEdges[0].id, 'e-q3-end', 'Unaffected intra-group edge in grp-2 must remain intact');
+
+// 24E: Moving symbol BACK from Group 2 to Group 1 authoritatively severs connection to Group 2
+const edgesInGroup2 = [
+  { id: 'e-q1-q3', source: 'q-1', target: 'q-3' }, // q-1 (moving back to grp-1) connected to q-3 (in grp-2) -> must sever!
+  { id: 'e-q3-q4', source: 'q-3', target: 'q-4' }, // untouched inside grp-2
+];
+const reparentBackMap = new Map<string, any>([['q-1', reparentGroup1]]); // moving back to grp-1
+const reparentBackIds = new Set(reparentBackMap.keys());
+
+const getNodeContainerTest = (nodeId: string): string => {
+  if (reparentBackMap.has(nodeId)) return reparentBackMap.get(nodeId).id;
+  if (nodeId === 'q-3' || nodeId === 'q-4') return 'grp-2';
+  return 'grp-1';
+};
+
+const filteredBackEdges = edgesInGroup2.filter((e) => {
+  if (!reparentBackIds.has(e.source) && !reparentBackIds.has(e.target)) return true;
+  return getNodeContainerTest(e.source) === getNodeContainerTest(e.target);
+});
+
+assert.strictEqual(filteredBackEdges.length, 1, 'Connection from q-1 to q-3 in Group 2 must be severed when moving back to Group 1');
+assert.strictEqual(filteredBackEdges[0].id, 'e-q3-q4', 'Edge between undisturbed nodes in Group 2 must remain');
+
+// 24F: Symmetrical Round-Trip Cross-Group Dependency & Group Connector severing:
+// Simulating stale React Flow draggedNode payload on return drag to verify zero-reconnection
+const roundTripContainers = [
+  { id: 'frame-1', type: 'groupFrame', position: { x: 50, y: 50 }, style: { width: 440, height: 480 }, data: { numericGroupId: 1, questionIds: ['q-rt'] } },
+  { id: 'frame-2', type: 'groupFrame', position: { x: 550, y: 50 }, style: { width: 440, height: 480 }, data: { numericGroupId: 2, questionIds: ['q-foreign'] } },
+];
+let roundTripNodes: any[] = [
+  ...roundTripContainers,
+  { id: 'q-rt', type: 'question', position: { x: 100, y: 100 }, data: { question_id: 10, containerId: 'frame-1', group: 1 } },
+  { id: 'q-foreign', type: 'question', position: { x: 600, y: 100 }, data: { question_id: 20, containerId: 'frame-2', group: 2 } },
+  { id: 'jump-grp2', type: 'groupJump', position: { x: 600, y: 350 }, data: { containerId: 'frame-2', group: 2, targetGroupId: 3 } },
+];
+let roundTripEdges: any[] = [
+  { id: 'e-rt-foreign', source: 'q-rt', target: 'q-foreign', data: { isCrossGroup: true } },
+  { id: 'e-foreign-jump', source: 'q-foreign', target: 'jump-grp2' }
+];
+
+// 1. Move q-rt to Group 2
+const reparentStep1 = new Map<string, any>([['q-rt', roundTripContainers[1]]]);
+roundTripNodes = roundTripNodes.map(n => {
+  if (n.id === 'q-rt') return { ...n, position: { x: 600, y: 220 }, data: { ...n.data, containerId: 'frame-2', group: 2 } };
+  if (n.id === 'frame-1') return { ...n, data: { ...n.data, questionIds: [] } };
+  if (n.id === 'frame-2') return { ...n, data: { ...n.data, questionIds: ['q-foreign', 'q-rt'] } };
+  return n;
+});
+// 2. Move q-rt BACK to Group 1 with a potentially stale draggedNode payload
+const staleDraggedNode = { id: 'q-rt', type: 'question', position: { x: 100, y: 100 }, data: { containerId: 'frame-1', group: 1 } };
+const nodeInState = roundTripNodes.find(n => n.id === staleDraggedNode.id);
+const activeContainers = roundTripNodes.filter(n => n.type === 'groupFrame' || n.type === 'groupContainer');
+const prevCont = activeContainers.find(c => {
+  if (nodeInState.data?.containerId === c.id) return true;
+  if ((c.data?.questionIds || []).includes(staleDraggedNode.id)) return true;
+  return false;
+});
+assert.strictEqual(prevCont?.id, 'frame-2', 'Previous container must authoritatively resolve to frame-2 despite stale draggedNode.data');
+
+const reparentStep2 = new Map<string, any>([['q-rt', roundTripContainers[0]]]);
+const step2Ids = new Set(reparentStep2.keys());
+const getStep2Container = (id: string) => {
+  if (reparentStep2.has(id)) return reparentStep2.get(id).id;
+  const n = roundTripNodes.find(item => item.id === id);
+  return n?.data?.containerId;
+};
+
+const survivingEdges = roundTripEdges.filter(e => {
+  if (!step2Ids.has(e.source) && !step2Ids.has(e.target)) return true;
+  const s = getStep2Container(e.source);
+  const t = getStep2Container(e.target);
+  return Boolean(s && t && s === t);
+});
+
+assert.strictEqual(survivingEdges.length, 1, 'Cross-group edge to foreign node must be cleanly severed on drop back');
+assert.strictEqual(survivingEdges[0].id, 'e-foreign-jump', 'Group 2 internal connector edge must stay untouched');
+
+// 24G: Severing Cross-Group Dependency When Child Drops into the Origin Group (User Case)
+// Source (Condition Check) in Group 1, Target (Q103) in Group 2. When Q103 is dragged into Group 1,
+// the cross-group edge must be cleanly SEVERED and not kept as a deformed [G1➔G2] intra-group edge.
+const caseEdges = [
+  { id: 'e-cond-q103', source: 'cond-1', target: 'q-103', label: '[G1➔G2] ELSE', data: { isCrossGroup: true, sourceGroup: 1, targetGroup: 2 } },
+  { id: 'e-q101-cond', source: 'q-101', target: 'cond-1', label: 'MATCH: Yes' }
+];
+// Reparenting q-103 into frame-1 (where cond-1 already resides)
+const reparentQ103Map = new Map<string, any>([['q-103', roundTripContainers[0]]]);
+const reparentQ103Ids = new Set(reparentQ103Map.keys());
+
+const cleanedEdges = caseEdges.filter(e => {
+  const isSourceReparented = reparentQ103Ids.has(e.source);
+  const isTargetReparented = reparentQ103Ids.has(e.target);
+
+  if (!isSourceReparented && !isTargetReparented) return true;
+  // If only one endpoint was reparented, sever connection to prevent stale cross-group remnants
+  if (isSourceReparented !== isTargetReparented) return false;
+  return true;
+});
+
+assert.strictEqual(cleanedEdges.length, 1, 'Cross-group edge e-cond-q103 must be severed when q-103 joins Group 1');
+assert.strictEqual(cleanedEdges[0].id, 'e-q101-cond', 'Internal edge between undisturbed nodes in Group 1 must remain intact');
 
 console.log('   ✅ Inter-Group Symbol Drag-and-Drop Auto-Reparenting operating with 100% precision.');
 

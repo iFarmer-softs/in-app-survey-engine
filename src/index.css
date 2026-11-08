@@ -334,6 +334,40 @@ html, body, #root {
   border-color: var(--border-bright);
 }
 
+.btn-save {
+  background: rgba(30, 41, 59, 0.75);
+  color: #38bdf8;
+  border-color: rgba(56, 189, 248, 0.35);
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all var(--transition-fast);
+}
+
+.btn-save:hover:not(:disabled) {
+  background: rgba(56, 189, 248, 0.15);
+  border-color: #38bdf8;
+  color: #7dd3fc;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.25);
+}
+
+.btn-save.is-saved {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border-color: rgba(16, 185, 129, 0.45);
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.25);
+}
+
+.btn-save.is-saving {
+  opacity: 0.8;
+  cursor: wait;
+}
+
+.btn-save:disabled {
+  cursor: not-allowed;
+}
+
 .btn-sm {
   padding: 5px 10px;
   font-size: 12px;
@@ -5240,9 +5274,11 @@ body.is-resizing-sidebar * {
 
 .group-header-actions {
   display: flex;
+  flex-direction: row;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   flex-shrink: 0;
+  flex-wrap: nowrap;
 }
 
 .btn-group-toggle {
@@ -5305,7 +5341,8 @@ body.is-resizing-sidebar * {
 .btn-group-icon-sm.btn-delete:hover {
   background: var(--danger-subtle);
   color: var(--danger);
-  border-color: var(--danger);
+  border-color: rgba(239, 68, 68, 0.4);
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.25);
 }
 
 .group-collapsed-footer {
@@ -6317,10 +6354,20 @@ body.is-resizing-sidebar * {
   text-overflow: ellipsis;
 }
 
+.group-frame-header-right {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  flex-wrap: nowrap;
+}
+
 .group-frame-count-badge {
   font-size: 10px;
   font-weight: 600;
   color: var(--text-secondary);
+  white-space: nowrap;
 }
 
 .group-frame-interior {

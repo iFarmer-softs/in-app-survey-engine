@@ -218,17 +218,15 @@ export const FlowchartListView: React.FC<FlowchartListViewProps> = ({
             All ({projects.length})
           </button>
           <button
-            className={`filter-pill ${
-              statusFilter === 'published' ? 'is-active' : ''
-            }`}
+            className={`filter-pill ${statusFilter === 'published' ? 'is-active' : ''
+              }`}
             onClick={() => setStatusFilter('published')}
           >
             Published ({projects.filter((p) => p.status === 'published').length})
           </button>
           <button
-            className={`filter-pill ${
-              statusFilter === 'draft' ? 'is-active' : ''
-            }`}
+            className={`filter-pill ${statusFilter === 'draft' ? 'is-active' : ''
+              }`}
             onClick={() => setStatusFilter('draft')}
           >
             Drafts ({projects.filter((p) => p.status === 'draft').length})
@@ -247,9 +245,8 @@ export const FlowchartListView: React.FC<FlowchartListViewProps> = ({
           return (
             <div
               key={p.id}
-              className={`flowchart-project-card ${
-                isActive ? 'is-current-active' : ''
-              }`}
+              className={`flowchart-project-card ${isActive ? 'is-current-active' : ''
+                }`}
               onClick={() => onOpenProject(p.id)}
             >
               {/* Card Top Row */}
@@ -305,23 +302,21 @@ export const FlowchartListView: React.FC<FlowchartListViewProps> = ({
                   >
                     <Copy size={14} />
                   </button>
-                  {projects.length > 1 && (
-                    <button
-                      className="quick-icon-btn text-danger"
-                      title="Delete Flowchart"
-                      onClick={() => {
-                        if (
-                          window.confirm(
-                            `Are you sure you want to delete "${p.title}"?`
-                          )
-                        ) {
-                          onDeleteProject(p.id);
-                        }
-                      }}
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  )}
+                  <button
+                    className="quick-icon-btn text-danger"
+                    title="Delete Flowchart"
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          `Are you sure you want to delete "${p.title}"?`
+                        )
+                      ) {
+                        onDeleteProject(p.id);
+                      }
+                    }}
+                  >
+                    <Trash2 size={14} />
+                  </button>
                 </div>
               </div>
 
