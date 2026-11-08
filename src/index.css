@@ -2140,6 +2140,211 @@ body.is-resizing-sidebar * {
   gap: 6px;
 }
 
+/* Mobile Simulator Multi-Page & Progress Enhancements */
+.mobile-progress-bar-container {
+  height: 3px;
+  background-color: #e2e8f0;
+  width: 100%;
+  overflow: hidden;
+}
+
+.mobile-progress-fill {
+  height: 100%;
+  background-color: #10b981;
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.mobile-back-icon-btn {
+  background: none;
+  border: none;
+  padding: 2px;
+  margin: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: background-color var(--transition-fast);
+}
+
+.mobile-back-icon-btn:hover:not(:disabled) {
+  background-color: #f1f5f9;
+}
+
+.mobile-back-icon-disabled {
+  color: #cbd5e1;
+  cursor: not-allowed;
+}
+
+.mobile-step-pill {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 12px;
+  background-color: #f1f5f9;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+  font-family: var(--font-bn);
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+}
+
+.field-has-error {
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 0 1px #ef4444 !important;
+}
+
+.mobile-field-error-msg {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: #ef4444;
+  margin-top: 5px;
+  font-family: var(--font-bn);
+  font-weight: 500;
+}
+
+.mobile-empty-group-notice {
+  padding: 20px 14px;
+  background-color: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  text-align: center;
+  font-size: 11px;
+  color: #64748b;
+  font-family: var(--font-bn);
+  line-height: 1.5;
+  margin: 10px 0;
+}
+
+.mobile-completion-view {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 28px 16px;
+  flex: 1;
+  animation: fadeIn 0.3s ease;
+}
+
+.completion-icon-wrapper {
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  background-color: #ecfdf5;
+  color: #10b981;
+  border: 3px solid #a7f3d0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+}
+
+.completion-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 6px;
+  font-family: var(--font-bn);
+}
+
+.completion-subtitle {
+  font-size: 11px;
+  color: #64748b;
+  margin-bottom: 20px;
+  font-family: var(--font-bn);
+  line-height: 1.4;
+}
+
+.completion-summary-card {
+  width: 100%;
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 20px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.completion-summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  font-size: 11px;
+  border-bottom: 1px dashed #f1f5f9;
+  font-family: var(--font-bn);
+}
+
+.completion-summary-row:last-child {
+  border-bottom: none;
+}
+
+.completion-summary-label {
+  color: #64748b;
+}
+
+.completion-summary-value {
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.completion-btn-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+.btn-review-answers {
+  width: 100%;
+  padding: 10px;
+  background-color: #ffffff;
+  color: #334155;
+  font-weight: 600;
+  font-size: 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: var(--font-bn);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all var(--transition-fast);
+}
+
+.btn-review-answers:hover {
+  background-color: #f8fafc;
+  border-color: #94a3b8;
+}
+
+.btn-restart-survey {
+  width: 100%;
+  padding: 10px;
+  background-color: #10b981;
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 12px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: var(--font-bn);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all var(--transition-fast);
+}
+
+.btn-restart-survey:hover {
+  background-color: #059669;
+}
+
 /* Animations */
 @keyframes fadeIn {
   from { opacity: 0; transform: scale(0.98); }

@@ -139,10 +139,27 @@ export class CompilerService {
       }
     }
 
+    const detectedGroupNumbers = new Set<number>();
+    if (groupMeta?.groupNumber) detectedGroupNumbers.add(groupMeta.groupNumber);
+    if (groupMeta?.totalGroups) detectedGroupNumbers.add(groupMeta.totalGroups);
+    for (const q of questions) {
+      if (q.group) detectedGroupNumbers.add(q.group);
+    }
+    for (const n of nodes) {
+      if (n.type === 'groupFrame' || n.type === 'groupContainer') {
+        const g = (n.data as any)?.numericGroupId || parseInt(String((n.data as any)?.groupId).replace(/\D+/g, ''), 10);
+        if (g && !isNaN(g)) detectedGroupNumbers.add(g);
+      }
+    }
+    const maxGroupNum = detectedGroupNumbers.size > 0 ? Math.max(...detectedGroupNumbers) : (groupMeta?.totalGroups || 1);
+    const totalGroups = Math.max(groupMeta?.totalGroups || 1, maxGroupNum);
+    const currentGroup = groupMeta?.groupNumber || 1;
+    const hasNext = Boolean(groupMeta?.hasNextGroup || currentGroup < totalGroups || groupJumps.length > 0);
+
     return {
-      total_groups: groupMeta?.totalGroups || 1,
-      current_group: groupMeta?.groupNumber || 1,
-      next: groupMeta?.hasNextGroup ?? false,
+      total_groups: totalGroups,
+      current_group: currentGroup,
+      next: hasNext,
       instruction: groupMeta?.instruction || 'Complete all required questions.',
       data: questions,
       groups: groupJumps.length > 0 ? groupJumps : undefined,

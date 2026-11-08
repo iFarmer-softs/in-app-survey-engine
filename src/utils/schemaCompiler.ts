@@ -245,13 +245,31 @@ export function compileFlowToSchema(
     }
   }
 
+  // Calculate actual total groups and whether a next group exists
+  const detectedGroupNumbers = new Set<number>();
+  if (meta.groupNumber) detectedGroupNumbers.add(meta.groupNumber);
+  if (meta.totalGroups) detectedGroupNumbers.add(meta.totalGroups);
+  for (const q of questions) {
+    if (q.group) detectedGroupNumbers.add(q.group);
+  }
+  for (const n of nodes) {
+    if (n.type === 'groupFrame' || n.type === 'groupContainer') {
+      const g = (n.data as any)?.numericGroupId || parseInt(String((n.data as any)?.groupId).replace(/\D+/g, ''), 10);
+      if (g && !isNaN(g)) detectedGroupNumbers.add(g);
+    }
+  }
+  const maxGroupNum = detectedGroupNumbers.size > 0 ? Math.max(...detectedGroupNumbers) : (meta.totalGroups || 1);
+  const totalGroups = Math.max(meta.totalGroups || 1, maxGroupNum);
+  const currentGroup = meta.groupNumber || 1;
+  const hasNext = Boolean(meta.hasNextGroup || currentGroup < totalGroups || groupJumps.length > 0);
+
   return {
     data: questions,
     instruction: meta.instruction || '',
     groups_to_jump: groupJumps,
-    next: meta.hasNextGroup,
-    total_groups: meta.totalGroups,
-    current_group: meta.groupNumber,
+    next: hasNext,
+    total_groups: totalGroups,
+    current_group: currentGroup,
   };
 }
 
@@ -378,8 +396,8 @@ export function parseSchemaToFlow(schema: DynamicKycGroupResponse | any[] | any)
     groupJumps: Array.isArray(metaRaw.groups_to_jump)
       ? metaRaw.groups_to_jump
       : Array.isArray(metaRaw.groups)
-      ? metaRaw.groups
-      : [],
+        ? metaRaw.groups
+        : [],
   };
 
   // 1. Add Start Node
@@ -627,8 +645,8 @@ export function parseSchemaToFlow(schema: DynamicKycGroupResponse | any[] | any)
   const rawGroupJumps = Array.isArray(schema.groups_to_jump)
     ? schema.groups_to_jump
     : Array.isArray(schema.groups)
-    ? schema.groups
-    : [];
+      ? schema.groups
+      : [];
 
   if (rawGroupJumps.length > 0) {
     rawGroupJumps.forEach((jump: any, jIdx: number) => {
