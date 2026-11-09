@@ -36,13 +36,17 @@ export function useProjectManager() {
         setIsServerConnected(isHealthy);
 
         if (isHealthy) {
-          const remoteProjects = await apiClient.getProjects();
-          if (isMounted && remoteProjects && remoteProjects.length > 0) {
-            setProjects(remoteProjects);
-            saveAllProjects(remoteProjects);
+          try {
+            const remoteProjects = await apiClient.getProjects();
+            if (isMounted && remoteProjects && remoteProjects.length > 0) {
+              setProjects(remoteProjects);
+              saveAllProjects(remoteProjects);
+            }
+          } catch (projErr) {
+            console.warn('[ProjectManager] Failed to fetch remote projects:', projErr);
           }
         }
-      } catch {
+      } catch (err) {
         if (isMounted) {
           setIsServerConnected(false);
         }

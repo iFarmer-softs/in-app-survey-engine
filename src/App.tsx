@@ -14,8 +14,6 @@ import {
 import type { Edge, Node, EdgeChange, NodeChange, Connection } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import {
-  Layers,
-  Sparkles,
   PanelLeftOpen,
   PanelRightOpen,
   Crop,
@@ -2877,35 +2875,6 @@ const FlowEditor: React.FC = () => {
                   onDragOver={onDragOver}
                   style={{ flex: 1, minHeight: 0 }}
                 >
-                  {!groupDesignSession && selectedQuestionNodes.length >= 1 && (
-                    <div className="canvas-floating-selection-bar">
-                      <div className="selection-bar-badge">
-                        <Layers size={13} className="text-emerald" />
-                        <span>
-                          <strong>{selectedQuestionNodes.length}</strong> Question{selectedQuestionNodes.length > 1 ? 's' : ''} Selected
-                        </span>
-                      </div>
-                      <button
-                        className="btn btn-primary btn-floating-save-group"
-                        onClick={() => setIsSaveSelectionModalOpen(true)}
-                        title="Bundle selected questions into a reusable Question Group"
-                      >
-                        <Sparkles size={14} />
-                        <span>Create Group from Selection</span>
-                      </button>
-
-                      <button
-                        className="btn btn-secondary btn-floating-save-group"
-                        onClick={handleWrapSelectionInFrame}
-                        title="Wrap selected questions into a Group Frame right here on canvas (Ctrl+G)"
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}
-                      >
-                        <Crop size={14} className="text-emerald" />
-                        <span>Wrap in Group Frame (Ctrl+G)</span>
-                      </button>
-                    </div>
-                  )}
-
                   {/* Floating Dependency Path Tracing Indicator */}
                   {activeTrace && (
                     <div className="floating-trace-indicator">

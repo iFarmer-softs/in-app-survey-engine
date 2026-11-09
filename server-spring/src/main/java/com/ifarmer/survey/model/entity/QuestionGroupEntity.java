@@ -10,49 +10,49 @@ import org.hibernate.type.SqlTypes;
 import java.time.Instant;
 
 @Entity
-@Table(name = "reusable_question_groups")
+@Table(name = "\"reusable_question_groups\"")
 public class QuestionGroupEntity {
 
     @Id
-    @Column(name = "id", length = 128, nullable = false)
+    @Column(name = "\"id\"", length = 128, nullable = false)
     private String id;
 
-    @Column(name = "groupId")
+    @Column(name = "\"groupId\"")
     private Integer groupId;
 
-    @Column(name = "name", length = 255, nullable = false)
+    @Column(name = "\"name\"", length = 255, nullable = false)
     private String name;
 
-    @Column(name = "nameBn", length = 255)
+    @Column(name = "\"nameBn\"", length = 255)
     private String nameBn;
 
-    @Column(name = "description", columnDefinition = "TEXT")
+    @Column(name = "\"description\"", columnDefinition = "TEXT")
     private String description = "";
 
-    @Column(name = "category", length = 64, nullable = false)
+    @Column(name = "\"category\"", length = 64, nullable = false)
     private String category = "custom";
 
-    @Column(name = "color", length = 32, nullable = false)
+    @Column(name = "\"color\"", length = 32, nullable = false)
     private String color = "#0284c7";
 
     @CreationTimestamp
-    @Column(name = "createdAt", updatable = false)
+    @Column(name = "\"createdAt\"", updatable = false)
     private Instant createdAt;
 
     @UpdateTimestamp
-    @Column(name = "updatedAt")
+    @Column(name = "\"updatedAt\"")
     private Instant updatedAt;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "questions", columnDefinition = "jsonb")
+    @Column(name = "\"questions\"", columnDefinition = "jsonb")
     private JsonNode questions;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "flowNodes", columnDefinition = "jsonb")
+    @Column(name = "\"flowNodes\"", columnDefinition = "jsonb")
     private JsonNode flowNodes;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "flowEdges", columnDefinition = "jsonb")
+    @Column(name = "\"flowEdges\"", columnDefinition = "jsonb")
     private JsonNode flowEdges;
 
     public QuestionGroupEntity() {}
@@ -153,4 +153,3 @@ public class QuestionGroupEntity {
         this.flowEdges = flowEdges;
     }
 }
-

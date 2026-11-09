@@ -9,61 +9,61 @@ import org.hibernate.type.SqlTypes;
 import java.time.Instant;
 
 @Entity
-@Table(name = "flowchart_versions")
+@Table(name = "\"flowchart_versions\"")
 public class VersionEntity {
 
     @Id
-    @Column(name = "id", length = 128, nullable = false)
+    @Column(name = "\"id\"", length = 128, nullable = false)
     private String id;
 
-    @Column(name = "projectId", length = 128, nullable = false)
+    @Column(name = "\"projectId\"", length = 128, nullable = false)
     private String projectId;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "projectId", insertable = false, updatable = false)
+    @JoinColumn(name = "\"projectId\"", insertable = false, updatable = false)
     private ProjectEntity project;
 
-    @Column(name = "version", length = 32, nullable = false)
+    @Column(name = "\"version\"", length = 32, nullable = false)
     private String version = "1.0.0";
 
-    @Column(name = "title", length = 255, nullable = false)
+    @Column(name = "\"title\"", length = 255, nullable = false)
     private String title;
 
-    @Column(name = "description", columnDefinition = "TEXT")
+    @Column(name = "\"description\"", columnDefinition = "TEXT")
     private String description;
 
-    @Column(name = "status", length = 32, nullable = false)
+    @Column(name = "\"status\"", length = 32, nullable = false)
     private String status = "draft";
 
     @CreationTimestamp
-    @Column(name = "createdAt", updatable = false)
+    @Column(name = "\"createdAt\"", updatable = false)
     private Instant createdAt;
 
-    @Column(name = "createdBy", length = 128)
+    @Column(name = "\"createdBy\"", length = 128)
     private String createdBy;
 
-    @Column(name = "nodeCount", nullable = false)
+    @Column(name = "\"nodeCount\"", nullable = false)
     private int nodeCount = 0;
 
-    @Column(name = "edgeCount", nullable = false)
+    @Column(name = "\"edgeCount\"", nullable = false)
     private int edgeCount = 0;
 
-    @Column(name = "questionCount", nullable = false)
+    @Column(name = "\"questionCount\"", nullable = false)
     private int questionCount = 0;
 
-    @Column(name = "groupCount", nullable = false)
+    @Column(name = "\"groupCount\"", nullable = false)
     private int groupCount = 1;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "groupMeta", columnDefinition = "jsonb")
+    @Column(name = "\"groupMeta\"", columnDefinition = "jsonb")
     private JsonNode groupMeta;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "nodes", columnDefinition = "jsonb")
+    @Column(name = "\"nodes\"", columnDefinition = "jsonb")
     private JsonNode nodes;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "edges", columnDefinition = "jsonb")
+    @Column(name = "\"edges\"", columnDefinition = "jsonb")
     private JsonNode edges;
 
     public VersionEntity() {}
@@ -196,4 +196,3 @@ public class VersionEntity {
         this.edges = edges;
     }
 }
-

@@ -12,49 +12,49 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Entity
-@Table(name = "flowchart_projects")
+@Table(name = "\"flowchart_projects\"")
 public class ProjectEntity {
 
     @Id
-    @Column(name = "id", length = 128, nullable = false)
+    @Column(name = "\"id\"", length = 128, nullable = false)
     private String id;
 
-    @Column(name = "title", length = 255, nullable = false)
+    @Column(name = "\"title\"", length = 255, nullable = false)
     private String title;
 
-    @Column(name = "titleBn", length = 255)
+    @Column(name = "\"titleBn\"", length = 255)
     private String titleBn;
 
-    @Column(name = "description", columnDefinition = "TEXT")
+    @Column(name = "\"description\"", columnDefinition = "TEXT")
     private String description = "";
 
-    @Column(name = "status", length = 32, nullable = false)
+    @Column(name = "\"status\"", length = 32, nullable = false)
     private String status = "draft";
 
-    @Column(name = "currentVersion", length = 32, nullable = false)
+    @Column(name = "\"currentVersion\"", length = 32, nullable = false)
     private String currentVersion = "0.1.0";
 
-    @Column(name = "publishedVersionId", length = 128)
+    @Column(name = "\"publishedVersionId\"", length = 128)
     private String publishedVersionId;
 
     @CreationTimestamp
-    @Column(name = "createdAt", updatable = false)
+    @Column(name = "\"createdAt\"", updatable = false)
     private Instant createdAt;
 
     @UpdateTimestamp
-    @Column(name = "updatedAt")
+    @Column(name = "\"updatedAt\"")
     private Instant updatedAt;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "groupMeta", columnDefinition = "jsonb")
+    @Column(name = "\"groupMeta\"", columnDefinition = "jsonb")
     private JsonNode groupMeta;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "nodes", columnDefinition = "jsonb")
+    @Column(name = "\"nodes\"", columnDefinition = "jsonb")
     private JsonNode nodes;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "edges", columnDefinition = "jsonb")
+    @Column(name = "\"edges\"", columnDefinition = "jsonb")
     private JsonNode edges;
 
     @OneToMany(mappedBy = "project", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
@@ -166,4 +166,3 @@ public class ProjectEntity {
         this.versions = versions;
     }
 }
-

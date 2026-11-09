@@ -19,9 +19,12 @@ spring:
     database-platform: org.hibernate.dialect.PostgreSQLDialect
     hibernate:
       ddl-auto: update
+      naming:
+        physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
     show-sql: false
     properties:
       hibernate:
+        globally_quoted_identifiers: true
         format_sql: false
         jdbc:
           lob:
@@ -36,4 +39,3 @@ survey-engine:
       - "http://localhost:4173"
       - "http://127.0.0.1:5173"
       - "http://127.0.0.1:3000"
-

@@ -12,10 +12,9 @@ import java.util.Optional;
 @Repository
 public interface ProjectRepository extends JpaRepository<ProjectEntity, String> {
 
-    @Query("SELECT p FROM ProjectEntity p LEFT JOIN FETCH p.versions ORDER BY p.updatedAt DESC")
+    @Query("SELECT DISTINCT p FROM ProjectEntity p LEFT JOIN FETCH p.versions ORDER BY p.updatedAt DESC")
     List<ProjectEntity> findAllWithVersions();
 
     @Query("SELECT p FROM ProjectEntity p LEFT JOIN FETCH p.versions WHERE p.id = :id")
     Optional<ProjectEntity> findByIdWithVersions(@Param("id") String id);
 }
-
