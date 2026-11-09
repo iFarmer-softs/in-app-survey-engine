@@ -47,7 +47,7 @@ import type {
 } from '../../types/survey';
 import type { ReusableQuestionGroup } from '../../types/group';
 import type { GroupMeta } from '../../utils/schemaCompiler';
-import { resolveNodeGroupId } from '../../utils/flowValidator';
+import { resolveNodeGroupId, isNodeInContainer } from '../../utils/flowValidator';
 import {
   calculateDependencyTrace,
   getNodeTraceLabel,
@@ -1595,12 +1595,8 @@ export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
           {/* If Question Group Container Selected */}
           {selectedNode && (selectedNode.type === 'groupContainer' || selectedNode.type === 'groupFrame') && (() => {
             const containerData = selectedNode.data as any;
-            const childQuestionIds: string[] = containerData.questionIds || [];
             const childQuestions = nodes.filter(
-              (n) =>
-                n.type !== 'groupContainer' &&
-                n.type !== 'groupFrame' &&
-                (childQuestionIds.includes(n.id) || (n.data as any)?.containerId === selectedNode.id)
+              (n) => isNodeInContainer(n, selectedNode, nodes)
             );
             const activeColor = containerData.color || '#0284c7';
 

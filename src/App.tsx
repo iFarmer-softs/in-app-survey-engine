@@ -72,7 +72,7 @@ import {
   checkFramesOverlap,
   findNearestNonOverlappingPosition,
 } from './utils/flowLayout';
-import { validateSurveyFlow } from './utils/flowValidator';
+import { validateSurveyFlow, isNodeInContainer } from './utils/flowValidator';
 import {
   calculateDependencyTrace,
   getTraceNodeRole,
@@ -1221,7 +1221,13 @@ const FlowEditor: React.FC = () => {
               480,
           }));
 
-        if (otherFrames.length === 0) return;
+        // Resolve all child symbols inside this container authoritatively
+        const childIdSet = new Set<string>();
+        nodes.forEach((n) => {
+          if (isNodeInContainer(n, draggedNode, nodes)) {
+            childIdSet.add(n.id);
+          }
+        });
 
         const frameW =
           (draggedNode.style?.width ? parseInt(String(draggedNode.style.width), 10) : 0) ||
@@ -1234,55 +1240,64 @@ const FlowEditor: React.FC = () => {
           draggedNode.measured?.height ||
           480;
 
-        const nearestClearPos = findNearestNonOverlappingPosition(
-          draggedNode.position.x,
-          draggedNode.position.y,
-          frameW,
-          frameH,
-          otherFrames,
-          30
-        );
+        let finalPos = draggedNode.position;
+        let nudgeDx = 0;
+        let nudgeDy = 0;
 
-        const nudgeDx = nearestClearPos.x - draggedNode.position.x;
-        const nudgeDy = nearestClearPos.y - draggedNode.position.y;
-
-        // If it was overlapping and needs to be nudged to clear space
-        if (Math.abs(nudgeDx) > 1 || Math.abs(nudgeDy) > 1) {
-          const childIdSet = new Set<string>();
-          const explicitChildIds: string[] = (draggedNode.data as any)?.questionIds || [];
-          nodes.forEach((n) => {
-            if (n.id === draggedNode.id) return;
-            const nContainerId = (n.data as any)?.containerId;
-            if (nContainerId === draggedNode.id) {
-              childIdSet.add(n.id);
-            } else if (!nContainerId && explicitChildIds.includes(n.id)) {
-              childIdSet.add(n.id);
-            }
-          });
-
-          recordSnapshot(nodes, edges, groupMeta);
-
-          setNodes((currentNodes) =>
-            currentNodes.map((n) => {
-              if (n.id === draggedNode.id) {
-                return {
-                  ...n,
-                  position: nearestClearPos,
-                };
-              }
-              if (childIdSet.has(n.id)) {
-                return {
-                  ...n,
-                  position: {
-                    x: Math.round(n.position.x + nudgeDx),
-                    y: Math.round(n.position.y + nudgeDy),
-                  },
-                };
-              }
-              return n;
-            })
+        if (otherFrames.length > 0) {
+          const nearestClearPos = findNearestNonOverlappingPosition(
+            draggedNode.position.x,
+            draggedNode.position.y,
+            frameW,
+            frameH,
+            otherFrames,
+            30
           );
+
+          nudgeDx = nearestClearPos.x - draggedNode.position.x;
+          nudgeDy = nearestClearPos.y - draggedNode.position.y;
+          if (Math.abs(nudgeDx) > 1 || Math.abs(nudgeDy) > 1) {
+            finalPos = nearestClearPos;
+          }
         }
+
+        const numericGroup =
+          (draggedNode.data as any)?.numericGroupId ||
+          parseInt(String((draggedNode.data as any)?.groupId || '').replace(/\D+/g, ''), 10) ||
+          1;
+
+        recordSnapshot(nodes, edges, groupMeta);
+
+        setNodes((currentNodes) =>
+          currentNodes.map((n) => {
+            if (n.id === draggedNode.id) {
+              return {
+                ...n,
+                position: finalPos,
+                data: {
+                  ...n.data,
+                  questionIds: Array.from(childIdSet),
+                  questionCount: childIdSet.size,
+                },
+              };
+            }
+            if (childIdSet.has(n.id)) {
+              return {
+                ...n,
+                position: {
+                  x: Math.round(n.position.x + nudgeDx),
+                  y: Math.round(n.position.y + nudgeDy),
+                },
+                data: {
+                  ...n.data,
+                  containerId: draggedNode.id,
+                  group: numericGroup,
+                },
+              };
+            }
+            return n;
+          })
+        );
         return;
       }
 
@@ -1338,32 +1353,10 @@ const FlowEditor: React.FC = () => {
           );
         });
 
-        // Resolve previous container authoritatively from node's current containerId, questionIds, or group
-        const currentContainerId =
-          (nodeInState.data as any)?.containerId ||
-          (node.data as any)?.containerId;
-
-        let prevContainer: Node | undefined = undefined;
-
-        if (currentContainerId) {
-          prevContainer = existingContainers.find((c) => c.id === currentContainerId);
-        }
-
-        if (!prevContainer) {
-          prevContainer = existingContainers.find((c) => {
-            const qIds: string[] = (c.data as any)?.questionIds || [];
-            return qIds.includes(node.id);
-          });
-        }
-
-        if (!prevContainer) {
-          const nodeGrp = (nodeInState.data as any)?.group || (node.data as any)?.group;
-          if (typeof nodeGrp === 'number' && nodeGrp > 0) {
-            prevContainer = existingContainers.find(
-              (c) => (c.data as any)?.numericGroupId === nodeGrp
-            );
-          }
-        }
+        // Resolve previous container authoritatively from node's current containerId, questionIds, group, or containment
+        const prevContainer = existingContainers.find((c) =>
+          isNodeInContainer(nodeInState, c, existingContainers)
+        );
 
         // Case 1: Dropped inside a DIFFERENT container → reparent to new group
         if (target && (!prevContainer || target.id !== prevContainer.id)) {

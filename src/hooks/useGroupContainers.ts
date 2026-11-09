@@ -3,6 +3,7 @@ import { MarkerType } from '@xyflow/react';
 import type { Node, Edge, NodeChange } from '@xyflow/react';
 import type { ReusableQuestionGroup } from '../types/group';
 import { calculateGroupQuestionLayout } from '../utils/flowLayout';
+import { isNodeInContainer } from '../utils/flowValidator';
 
 interface UseGroupContainersProps {
   nodes: Node[];
@@ -37,17 +38,9 @@ export function useGroupContainers({
           const node = nodes.find((n) => n.id === change.id);
           if (node && (node.type === 'groupContainer' || node.type === 'groupFrame')) {
             removedGroupIds.add(node.id);
-            const childIds: string[] = (node.data as any)?.questionIds || [];
-            childIds.forEach((cid) => removedChildIds.add(cid));
-
             nodes.forEach((n) => {
-              if (n.id !== node.id) {
-                const nContainerId = (n.data as any)?.containerId;
-                if (nContainerId === node.id) {
-                  removedChildIds.add(n.id);
-                } else if (!nContainerId && childIds.includes(n.id)) {
-                  removedChildIds.add(n.id);
-                }
+              if (isNodeInContainer(n, node, nodes)) {
+                removedChildIds.add(n.id);
               }
             });
 
@@ -63,13 +56,8 @@ export function useGroupContainers({
           if (node && (node.type === 'groupContainer' || node.type === 'groupFrame')) {
             // Free movement during drag with lockstep child synchronisation (non-overlap resolved on release)
             const childIdSet = new Set<string>();
-            const explicitChildIds: string[] = (node.data as any)?.questionIds || [];
             nodes.forEach((n) => {
-              if (n.id === node.id) return;
-              const nContainerId = (n.data as any)?.containerId;
-              if (nContainerId === node.id) {
-                childIdSet.add(n.id);
-              } else if (!nContainerId && explicitChildIds.includes(n.id)) {
+              if (isNodeInContainer(n, node, nodes)) {
                 childIdSet.add(n.id);
               }
             });
@@ -79,6 +67,8 @@ export function useGroupContainers({
               const dy = change.position.y - node.position.y;
               if (dx !== 0 || dy !== 0) {
                 childIdSet.forEach((childId) => {
+                  // Guard against double-shifting if this child position was already in the changes array
+                  if (changes.some((c) => 'id' in c && c.id === childId && c.type === 'position')) return;
                   const childNode = nodes.find((n) => n.id === childId);
                   if (childNode) {
                     extraChanges.push({
@@ -134,9 +124,8 @@ export function useGroupContainers({
         const containerX = containerNode.position.x;
 
         // 1. Resolve child nodes for this group container
-        const rawChildIds: string[] = (containerNode.data as any).questionIds || [];
         const thisGroupChildren = currentNodes.filter(
-          (n) => rawChildIds.includes(n.id) || (n.data as any)?.containerId === containerNodeId
+          (n) => isNodeInContainer(n, containerNode, currentNodes)
         );
         targetChildIds = thisGroupChildren.map((n) => n.id);
 
@@ -294,12 +283,16 @@ export function useGroupContainers({
       setNodes((currentNodes) => {
         const containerNode = currentNodes.find((n) => n.id === containerNodeId);
         if (!containerNode) return currentNodes;
-        const childIds: string[] = (containerNode.data as any).questionIds || [];
+        const childIds = new Set(
+          currentNodes
+            .filter((n) => isNodeInContainer(n, containerNode, currentNodes))
+            .map((n) => n.id)
+        );
 
         return currentNodes
           .filter((n) => n.id !== containerNodeId)
           .map((n) => {
-            if (childIds.includes(n.id) || (n.data as any)?.containerId === containerNodeId) {
+            if (childIds.has(n.id) || (n.data as any)?.containerId === containerNodeId) {
               return {
                 ...n,
                 hidden: false,
@@ -340,33 +333,9 @@ export function useGroupContainers({
         const containerNode = currentNodes.find((n) => n.id === containerNodeId);
         if (!containerNode) return currentNodes;
 
-        // 1. Explicit child IDs
-        const childIds: string[] = (containerNode.data as any).questionIds || [];
-        childIds.forEach((id) => deletedNodeIds.add(id));
-
-        // 2. Nodes pointing to containerId
         currentNodes.forEach((n) => {
-          if ((n.data as any)?.containerId === containerNodeId) {
+          if (isNodeInContainer(n, containerNode, currentNodes)) {
             deletedNodeIds.add(n.id);
-          }
-        });
-
-        // 3. Spatially contained nodes within the frame
-        const frameWidth = Number(containerNode.style?.width) || (containerNode.data as any)?.width || 440;
-        const frameHeight = Number(containerNode.style?.height) || (containerNode.data as any)?.height || 480;
-        const fx = containerNode.position.x;
-        const fy = containerNode.position.y;
-
-        currentNodes.forEach((n) => {
-          if (n.id !== containerNodeId) {
-            if (
-              n.position.x >= fx - 10 &&
-              n.position.x <= fx + frameWidth + 10 &&
-              n.position.y >= fy - 10 &&
-              n.position.y <= fy + frameHeight + 10
-            ) {
-              deletedNodeIds.add(n.id);
-            }
           }
         });
 

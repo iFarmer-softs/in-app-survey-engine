@@ -3,6 +3,7 @@ import { Handle, Position, NodeResizer, useReactFlow } from '@xyflow/react';
 import type { NodeProps } from '@xyflow/react';
 import { Layers, Sparkles, Trash } from 'lucide-react';
 import type { GroupCategory } from '../../types/group';
+import { isNodeInContainer } from '../../utils/flowValidator';
 
 export interface GroupFrameNodeData {
   groupId: string;
@@ -27,9 +28,15 @@ export const GroupFrameNode = memo(({ id, data, selected, onDeleteFrame }: Group
   const isDropTarget = Boolean(nodeData.isDropTarget);
   const color = nodeData.color || '#8b5cf6';
   const activeColor = isDropTarget ? '#10b981' : color;
-  const childCount = nodeData.questionCount ?? nodeData.questionIds?.length ?? 0;
   const deleteHandler = onDeleteFrame || nodeData.onDeleteFrame;
   const { getNodes } = useReactFlow();
+
+  const allNodes = getNodes();
+  const currentFrameNode = allNodes.find((n) => n.id === id);
+  const dynamicCount = currentFrameNode
+    ? allNodes.filter((n) => isNodeInContainer(n, currentFrameNode, allNodes)).length
+    : 0;
+  const childCount = dynamicCount > 0 ? dynamicCount : (nodeData.questionCount ?? nodeData.questionIds?.length ?? 0);
 
   // Strict Non-Overlap Enforcement: Stop resizing if expanding into any adjacent frame
   const handleShouldResize = useCallback(

@@ -20,6 +20,104 @@ const OPTION_BASED_TYPES: AnswerType[] = [
 ];
 
 /**
+ * Authoritatively determines if a child symbol belongs to a group container or frame.
+ * Checks (in priority order):
+ * 1. Direct containerId match (matches container.id or container.data.groupId)
+ * 2. Inclusion in container.data.questionIds array
+ * 3. Protected foreign ownership: If child explicitly belongs to another container on canvas, do not steal it.
+ * 4. Spatial containment check: symbol is positioned inside container boundary.
+ * 5. Group number match (when container numericGroupId matches child's group).
+ */
+export function isNodeInContainer(
+  childNode: Node,
+  containerNode: Node,
+  allNodes: Node[] = []
+): boolean {
+  if (!childNode || !containerNode || childNode.id === containerNode.id) return false;
+  if (childNode.type === 'groupFrame' || childNode.type === 'groupContainer') return false;
+
+  const cData = containerNode.data as any;
+  const nData = childNode.data as any;
+
+  // 1. Direct containerId match
+  if (nData?.containerId) {
+    if (nData.containerId === containerNode.id) return true;
+    if (cData?.groupId && nData.containerId === cData.groupId) return true;
+  }
+
+  // 2. Explicit questionIds list
+  const qIds: string[] = cData?.questionIds || [];
+  if (qIds.includes(childNode.id)) {
+    return true;
+  }
+
+  // If child is explicitly bound to a DIFFERENT active container on canvas, protect that container's ownership
+  if (nData?.containerId) {
+    const boundToOther = allNodes.some(
+      (other) =>
+        (other.type === 'groupFrame' || other.type === 'groupContainer') &&
+        other.id !== containerNode.id &&
+        (other.id === nData.containerId || (other.data as any)?.groupId === nData.containerId)
+    );
+    if (boundToOther) {
+      return false;
+    }
+  }
+
+  // 3. Spatial containment check: symbol is positioned inside container boundary
+  if (childNode.position && containerNode.position) {
+    const fX = containerNode.position.x;
+    const fY = containerNode.position.y;
+    const fW =
+      (containerNode.style?.width ? parseInt(String(containerNode.style.width), 10) : 0) ||
+      (typeof containerNode.width === 'number' && containerNode.width > 0 ? containerNode.width : 0) ||
+      containerNode.measured?.width ||
+      cData?.width ||
+      (containerNode.type === 'groupContainer' ? 350 : 440);
+    const fH =
+      (containerNode.style?.height ? parseInt(String(containerNode.style.height), 10) : 0) ||
+      (typeof containerNode.height === 'number' && containerNode.height > 0 ? containerNode.height : 0) ||
+      containerNode.measured?.height ||
+      cData?.expandedHeight ||
+      cData?.height ||
+      (containerNode.type === 'groupContainer' ? 400 : 480);
+
+    const nW = childNode.measured?.width || (childNode.type === 'question' ? 270 : 180);
+    const nH = childNode.measured?.height || (childNode.type === 'question' ? 200 : 100);
+    const nCenterX = childNode.position.x + nW / 2;
+    const nCenterY = childNode.position.y + nH / 2;
+
+    const isInside =
+      (childNode.position.x >= fX - 15 &&
+        childNode.position.x + Math.min(nW, 50) <= fX + fW + 15 &&
+        childNode.position.y >= fY - 15 &&
+        childNode.position.y + Math.min(nH, 50) <= fY + fH + 15) ||
+      (nCenterX >= fX && nCenterX <= fX + fW && nCenterY >= fY && nCenterY <= fH);
+
+    if (isInside) {
+      return true;
+    }
+  }
+
+  // 4. Group number match (when numericGroupId matches child's group)
+  const cNum =
+    typeof cData?.numericGroupId === 'number' && cData.numericGroupId > 0
+      ? cData.numericGroupId
+      : parseInt(String(cData?.title || cData?.titleBn || cData?.groupId || '').replace(/\D+/g, ''), 10);
+
+  const nGrp =
+    typeof nData?.group === 'number' && nData.group > 0
+      ? nData.group
+      : undefined;
+
+  if (typeof cNum === 'number' && !isNaN(cNum) && cNum > 0 && nGrp === cNum) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
  * Resolves the numeric group ID of any given node (question or container).
  */
 export function resolveNodeGroupId(

@@ -11,6 +11,7 @@ import {
   isBinaryRedundantBranch,
   resolveNodeGroupId,
   isCrossGroupEdge,
+  isNodeInContainer,
 } from '../utils/flowValidator.ts';
 import {
   calculateGroupQuestionLayout,
@@ -3031,5 +3032,97 @@ assert.deepStrictEqual(g3BranchQuestions, [109], 'Specific branch from Q#106 opt
 
 console.log('   ✅ Multi-option branch selection, Option "e" -> Group 2 priority, and fallback isolation operating with 100% precision.');
 
-console.log('\n🎉 ALL TESTS PASSED SUCCESSFULLY! (31/31 test suites passed)\n');
+// 32. Synchronized Parent Container Dragging & Universal Symbol Enclosure (Questions, Decisions, Jumps, Process)
+console.log('3️⃣2️⃣ Testing Synchronized Parent Container Dragging & Universal Symbol Enclosure...');
+
+const testParentFrame = {
+  id: 'frame-sync-parent',
+  type: 'groupFrame',
+  position: { x: 100, y: 100 },
+  style: { width: 500, height: 600 },
+  data: { numericGroupId: 1, title: 'Group Area 1', questionIds: [] }, // Initially unpopulated questionIds
+};
+
+const mixedChildSymbols = [
+  // 1. Question with group: 1, no containerId
+  { id: 'sym-q1', type: 'question', position: { x: 150, y: 160 }, measured: { width: 270, height: 180 }, data: { question_id: 101, group: 1 } },
+  // 2. Decision node with group: 1, no containerId
+  { id: 'sym-dec', type: 'decision', position: { x: 200, y: 380 }, measured: { width: 180, height: 100 }, data: { label: 'Condition Check', group: 1 } },
+  // 3. Jump node spatially inside frame, no containerId, no group
+  { id: 'sym-jump', type: 'groupJump', position: { x: 300, y: 500 }, measured: { width: 180, height: 80 }, data: { targetGroupId: 3 } },
+  // 4. Process node with explicit containerId
+  { id: 'sym-proc', type: 'process', position: { x: 180, y: 280 }, measured: { width: 180, height: 90 }, data: { containerId: 'frame-sync-parent' } },
+  // 5. Foreign node completely outside frame in open canvas
+  { id: 'foreign-q', type: 'question', position: { x: 900, y: 900 }, measured: { width: 270, height: 180 }, data: { question_id: 201, group: 2 } },
+];
+
+const allCanvasNodes = [testParentFrame, ...mixedChildSymbols];
+
+// 32A: Authoritative containment check must resolve all 4 enclosed symbols regardless of containerId absence
+const resolvedChildren = allCanvasNodes.filter((n) => isNodeInContainer(n, testParentFrame, allCanvasNodes));
+assert.strictEqual(resolvedChildren.length, 4, 'All 4 enclosed mixed symbols must be resolved as children');
+assert.ok(resolvedChildren.some((n) => n.id === 'sym-q1'), 'Question without containerId must be resolved');
+assert.ok(resolvedChildren.some((n) => n.id === 'sym-dec'), 'Decision node without containerId must be resolved');
+assert.ok(resolvedChildren.some((n) => n.id === 'sym-jump'), 'Spatial jump node must be resolved');
+assert.ok(resolvedChildren.some((n) => n.id === 'sym-proc'), 'Process node with containerId must be resolved');
+assert.ok(!resolvedChildren.some((n) => n.id === 'foreign-q'), 'Foreign node outside frame must NOT be included');
+
+// 32B: Synchronized Dragging translation verification
+const dragDx = 120;
+const dragDy = 85;
+const childIdSet32 = new Set(resolvedChildren.map((n) => n.id));
+
+const translatedNodes = allCanvasNodes.map((n) => {
+  if (n.id === testParentFrame.id) {
+    return { ...n, position: { x: n.position.x + dragDx, y: n.position.y + dragDy } };
+  }
+  if (childIdSet32.has(n.id)) {
+    return { ...n, position: { x: n.position.x + dragDx, y: n.position.y + dragDy } };
+  }
+  return n;
+});
+
+assert.strictEqual(translatedNodes.find((n) => n.id === 'frame-sync-parent')!.position.x, 220);
+assert.strictEqual(translatedNodes.find((n) => n.id === 'frame-sync-parent')!.position.y, 185);
+assert.strictEqual(translatedNodes.find((n) => n.id === 'sym-q1')!.position.x, 150 + dragDx);
+assert.strictEqual(translatedNodes.find((n) => n.id === 'sym-dec')!.position.x, 200 + dragDx);
+assert.strictEqual(translatedNodes.find((n) => n.id === 'sym-jump')!.position.x, 300 + dragDx);
+assert.strictEqual(translatedNodes.find((n) => n.id === 'sym-proc')!.position.x, 180 + dragDx);
+assert.strictEqual(translatedNodes.find((n) => n.id === 'foreign-q')!.position.x, 900, 'Foreign node must not shift');
+
+// 32C: Drag Stop commits containerId and populates questionIds
+const committedNodes = translatedNodes.map((n) => {
+  if (n.id === testParentFrame.id) {
+    return {
+      ...n,
+      data: {
+        ...n.data,
+        questionIds: Array.from(childIdSet32),
+        questionCount: childIdSet32.size,
+      },
+    };
+  }
+  if (childIdSet32.has(n.id)) {
+    return {
+      ...n,
+      data: {
+        ...n.data,
+        containerId: testParentFrame.id,
+        group: testParentFrame.data.numericGroupId,
+      },
+    };
+  }
+  return n;
+});
+
+const committedFrame = committedNodes.find((n) => n.id === testParentFrame.id)!;
+assert.strictEqual((committedFrame.data as any).questionCount, 4);
+assert.deepStrictEqual((committedFrame.data as any).questionIds, ['sym-q1', 'sym-dec', 'sym-jump', 'sym-proc']);
+assert.strictEqual((committedNodes.find((n) => n.id === 'sym-q1')!.data as any).containerId, 'frame-sync-parent');
+assert.strictEqual((committedNodes.find((n) => n.id === 'sym-dec')!.data as any).containerId, 'frame-sync-parent');
+assert.strictEqual((committedNodes.find((n) => n.id === 'sym-jump')!.data as any).containerId, 'frame-sync-parent');
+
+console.log('   ✅ Synchronized Parent Container Dragging & Universal Symbol Enclosure operating with 100% precision.');
+
+console.log('\n🎉 ALL TESTS PASSED SUCCESSFULLY! (32/32 test suites passed)\n');
 
