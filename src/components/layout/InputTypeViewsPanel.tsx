@@ -273,9 +273,8 @@ export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
 
   return (
     <aside
-      className={`sidebar right-sidebar input-types-sidebar ${!isOpen ? 'is-collapsed' : ''} ${
-        isResizing ? 'is-resizing' : ''
-      }`}
+      className={`sidebar right-sidebar input-types-sidebar ${!isOpen ? 'is-collapsed' : ''} ${isResizing ? 'is-resizing' : ''
+        }`}
       style={isOpen && width ? { width: `${width}px`, minWidth: `${width}px` } : undefined}
     >
       {/* Sidebar Header with Switcher Tabs */}
@@ -298,15 +297,15 @@ export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
                 ? selectedNode.type === 'question'
                   ? 'Question Inspector'
                   : selectedNode.type === 'groupContainer' || selectedNode.type === 'groupFrame'
-                  ? 'Question Group Inspector'
-                  : selectedNode.type === 'decision'
-                  ? 'Decision Inspector'
-                  : selectedNode.type === 'groupJump'
-                  ? 'Jump Inspector'
-                  : 'Node Inspector'
+                    ? 'Question Group Inspector'
+                    : selectedNode.type === 'decision'
+                      ? 'Decision Inspector'
+                      : selectedNode.type === 'groupJump'
+                        ? 'Jump Inspector'
+                        : 'Node Inspector'
                 : selectedEdge
-                ? 'Rule Inspector'
-                : 'Group Settings'}
+                  ? 'Rule Inspector'
+                  : 'Group Settings'}
             </span>
           </button>
 
@@ -338,13 +337,12 @@ export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
             {INPUT_TYPE_VIEWS.map((item) => (
               <div
                 key={item.type}
-                className={`input-type-card ${
-                  selectedNode &&
+                className={`input-type-card ${selectedNode &&
                   selectedNode.type === 'question' &&
                   (selectedNode.data as any).answer_type === item.type
-                    ? 'is-current-type'
-                    : ''
-                }`}
+                  ? 'is-current-type'
+                  : ''
+                  }`}
                 draggable
                 onDragStart={(e) => onDragStart(e, item)}
                 onClick={() => handleApplyAnswerType(item)}
@@ -559,9 +557,8 @@ export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
                 <div className="form-group flex-1">
                   <label className="form-label">Mandatory?</label>
                   <div
-                    className={`toggle-pill ${
-                      (selectedNode.data as any).mandatory ? 'is-checked' : ''
-                    }`}
+                    className={`toggle-pill ${(selectedNode.data as any).mandatory ? 'is-checked' : ''
+                      }`}
                     onClick={() =>
                       onUpdateNodeData(selectedNode.id, {
                         ...selectedNode.data,
@@ -580,9 +577,8 @@ export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
                 <div className="form-group flex-1">
                   <label className="form-label">Editable?</label>
                   <div
-                    className={`toggle-pill ${
-                      ((selectedNode.data as any).editable ?? true) ? 'is-checked' : 'is-locked'
-                    }`}
+                    className={`toggle-pill ${((selectedNode.data as any).editable ?? true) ? 'is-checked' : 'is-locked'
+                      }`}
                     onClick={() =>
                       onUpdateNodeData(selectedNode.id, {
                         ...selectedNode.data,
@@ -610,9 +606,8 @@ export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
                 <div className="form-group flex-1">
                   <label className="form-label">Active Status?</label>
                   <div
-                    className={`toggle-pill ${
-                      ((selectedNode.data as any).active ?? true) ? 'is-checked' : 'is-locked'
-                    }`}
+                    className={`toggle-pill ${((selectedNode.data as any).active ?? true) ? 'is-checked' : 'is-locked'
+                      }`}
                     onClick={() =>
                       onUpdateNodeData(selectedNode.id, {
                         ...selectedNode.data,
@@ -638,9 +633,8 @@ export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
                 <div className="form-group flex-1">
                   <label className="form-label">Auto-filled?</label>
                   <div
-                    className={`toggle-pill ${
-                      (selectedNode.data as any).auto_filled ? 'is-purple' : ''
-                    }`}
+                    className={`toggle-pill ${(selectedNode.data as any).auto_filled ? 'is-purple' : ''
+                      }`}
                     onClick={() =>
                       onUpdateNodeData(selectedNode.id, {
                         ...selectedNode.data,
@@ -661,9 +655,8 @@ export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
                 <div className="form-group flex-1">
                   <label className="form-label">Initial Visibility</label>
                   <div
-                    className={`toggle-pill ${
-                      (selectedNode.data as any).hidden ? 'is-amber' : ''
-                    }`}
+                    className={`toggle-pill ${(selectedNode.data as any).hidden ? 'is-amber' : ''
+                      }`}
                     onClick={() =>
                       onUpdateNodeData(selectedNode.id, {
                         ...selectedNode.data,
@@ -740,107 +733,106 @@ export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
               {['dropdown', 'select_one', 'select_multiple', 'radio'].includes(
                 (selectedNode.data as any).answer_type
               ) && (
-                <div className="form-group">
-                  <label className="form-label">Options (Comma separated)</label>
-                  <textarea
-                    className="form-textarea bn-font"
-                    rows={2}
-                    value={(selectedNode.data as any).options || ''}
-                    onChange={(e) =>
-                      onUpdateNodeData(selectedNode.id, {
-                        ...selectedNode.data,
-                        options: e.target.value,
-                      })
-                    }
-                  />
-                  <div className="quick-presets">
-                    <span className="preset-label">Presets:</span>
-                    <button
-                      type="button"
-                      className="preset-btn"
-                      onClick={() =>
+                  <div className="form-group">
+                    <label className="form-label">Options (Comma separated)</label>
+                    <textarea
+                      className="form-textarea bn-font"
+                      rows={2}
+                      value={(selectedNode.data as any).options || ''}
+                      onChange={(e) =>
                         onUpdateNodeData(selectedNode.id, {
                           ...selectedNode.data,
-                          options: 'হ্যাঁ (Yes), না (No)',
+                          options: e.target.value,
                         })
                       }
-                    >
-                      Yes/No
-                    </button>
-                    <button
-                      type="button"
-                      className="preset-btn"
-                      onClick={() =>
-                        onUpdateNodeData(selectedNode.id, {
-                          ...selectedNode.data,
-                          options: 'ধান, ভুট্টা, আলু, সবজি, মাছ চাষ',
-                        })
-                      }
-                    >
-                      Crops
-                    </button>
-                  </div>
-
-                  {/* Option-level Nested Flowchart Branches */}
-                  {((selectedNode.data as any).options || '')
-                    .split(',')
-                    .map((o: string) => o.trim())
-                    .filter((o: string) => o.length > 0).length > 0 && (
-                    <div className="option-nested-flow-inspector">
-                      <div className="nested-header">
-                        <GitBranch size={13} className="text-amber" />
-                        <span className="nested-title">Nested Sub-Flows per Option:</span>
-                      </div>
-                      <p className="nested-help">
-                        Connect child questions directly from option ports on the canvas, or click below:
-                      </p>
-                      <div className="nested-options-cards">
-                        {((selectedNode.data as any).options || '')
-                          .split(',')
-                          .map((o: string) => o.trim())
-                          .filter((o: string) => o.length > 0)
-                          .map((trimmedOpt: string, i: number) => {
-                            const connectedEdges = edges.filter(
-                              (e) =>
-                                e.source === selectedNode.id &&
-                                e.sourceHandle === `opt-${encodeURIComponent(trimmedOpt)}`
-                            );
-
-                            return (
-                              <div key={i} className="nested-option-row">
-                                <div className="nested-option-info">
-                                  <span className="nested-option-name bn-font">
-                                    {trimmedOpt}
-                                  </span>
-                                  <span className="connected-count">
-                                    {connectedEdges.length === 0
-                                      ? '0 nested nodes'
-                                      : `${connectedEdges.length} nested node${
-                                          connectedEdges.length > 1 ? 's' : ''
-                                        }`}
-                                  </span>
-                                </div>
-                                {onAddNestedQuestion && (
-                                  <button
-                                    type="button"
-                                    className="btn-add-nested"
-                                    onClick={() =>
-                                      onAddNestedQuestion(selectedNode.id, trimmedOpt)
-                                    }
-                                    title={`Add a nested question branching from "${trimmedOpt}"`}
-                                  >
-                                    <Plus size={12} />
-                                    <span>+ Nested Branch</span>
-                                  </button>
-                                )}
-                              </div>
-                            );
-                          })}
-                      </div>
+                    />
+                    <div className="quick-presets">
+                      <span className="preset-label">Presets:</span>
+                      <button
+                        type="button"
+                        className="preset-btn"
+                        onClick={() =>
+                          onUpdateNodeData(selectedNode.id, {
+                            ...selectedNode.data,
+                            options: 'হ্যাঁ (Yes), না (No)',
+                          })
+                        }
+                      >
+                        Yes/No
+                      </button>
+                      <button
+                        type="button"
+                        className="preset-btn"
+                        onClick={() =>
+                          onUpdateNodeData(selectedNode.id, {
+                            ...selectedNode.data,
+                            options: 'ধান, ভুট্টা, আলু, সবজি, মাছ চাষ',
+                          })
+                        }
+                      >
+                        Crops
+                      </button>
                     </div>
-                  )}
-                </div>
-              )}
+
+                    {/* Option-level Nested Flowchart Branches */}
+                    {((selectedNode.data as any).options || '')
+                      .split(',')
+                      .map((o: string) => o.trim())
+                      .filter((o: string) => o.length > 0).length > 0 && (
+                        <div className="option-nested-flow-inspector">
+                          <div className="nested-header">
+                            <GitBranch size={13} className="text-amber" />
+                            <span className="nested-title">Nested Sub-Flows per Option:</span>
+                          </div>
+                          <p className="nested-help">
+                            Connect child questions directly from option ports on the canvas, or click below:
+                          </p>
+                          <div className="nested-options-cards">
+                            {((selectedNode.data as any).options || '')
+                              .split(',')
+                              .map((o: string) => o.trim())
+                              .filter((o: string) => o.length > 0)
+                              .map((trimmedOpt: string, i: number) => {
+                                const connectedEdges = edges.filter(
+                                  (e) =>
+                                    e.source === selectedNode.id &&
+                                    e.sourceHandle === `opt-${encodeURIComponent(trimmedOpt)}`
+                                );
+
+                                return (
+                                  <div key={i} className="nested-option-row">
+                                    <div className="nested-option-info">
+                                      <span className="nested-option-name bn-font">
+                                        {trimmedOpt}
+                                      </span>
+                                      <span className="connected-count">
+                                        {connectedEdges.length === 0
+                                          ? '0 nested nodes'
+                                          : `${connectedEdges.length} nested node${connectedEdges.length > 1 ? 's' : ''
+                                          }`}
+                                      </span>
+                                    </div>
+                                    {onAddNestedQuestion && (
+                                      <button
+                                        type="button"
+                                        className="btn-add-nested"
+                                        onClick={() =>
+                                          onAddNestedQuestion(selectedNode.id, trimmedOpt)
+                                        }
+                                        title={`Add a nested question branching from "${trimmedOpt}"`}
+                                      >
+                                        <Plus size={12} />
+                                        <span>+ Nested Branch</span>
+                                      </button>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                          </div>
+                        </div>
+                      )}
+                  </div>
+                )}
 
               <div className="form-group">
                 <label className="form-label">Placeholder</label>
@@ -930,9 +922,9 @@ export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
                 const selectedSourceQNode = nodes.find((n) => n.id === crossSourceQuestionId);
                 const sourceOptions = (selectedSourceQNode?.data as any)?.options
                   ? String((selectedSourceQNode?.data as any)?.options)
-                      .split(',')
-                      .map((s) => s.trim())
-                      .filter(Boolean)
+                    .split(',')
+                    .map((s) => s.trim())
+                    .filter(Boolean)
                   : [];
 
                 const handleAddCrossDependency = () => {
@@ -1227,9 +1219,8 @@ export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
                                 {sourceOptions.map((opt, i) => (
                                   <span
                                     key={i}
-                                    className={`cross-group-pill-opt ${
-                                      crossTriggerValue === opt ? 'is-selected' : ''
-                                    }`}
+                                    className={`cross-group-pill-opt ${crossTriggerValue === opt ? 'is-selected' : ''
+                                      }`}
                                     onClick={() => {
                                       setCrossTriggerValue(opt);
                                       setCrossValType('match');
@@ -1391,8 +1382,8 @@ export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
             const selectedValue = matchedGroup
               ? matchedGroup.id
               : jumpData.targetGroupId
-              ? 'custom'
-              : '';
+                ? 'custom'
+                : '';
 
             return (
               <div className="node-inspector-block">
