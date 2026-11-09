@@ -14,7 +14,14 @@ export type AnswerType =
   | 'image'
   | 'read_only';
 
-export type ValidationType = 'match' | 'greater' | 'less';
+export type ValidationType =
+  | 'match'
+  | 'not_match'
+  | 'greater'
+  | 'less'
+  | 'greater_or_equal'
+  | 'less_or_equal'
+  | 'else';
 
 export interface ValidationConfig {
   validation_type: ValidationType;
@@ -42,11 +49,18 @@ export interface DynamicKycQuestion {
   auto_filled?: boolean;
   cross_group_dependency?: any[];
   hidden?: boolean;
+  subsequent_questions?: number[];
 }
 
 export interface GroupJumpOption {
   group_id: string;
   group_title: string;
+  source_question_id?: number;
+  trigger_value?: string;
+  trigger_type?: string;
+  source_handle?: string;
+  source_group?: number;
+  target_question_id?: number;
 }
 
 export interface DynamicKycGroupResponse {

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import {
   Smartphone,
   ChevronLeft,
@@ -131,6 +131,7 @@ function flattenNestedQuestions(
       validation: Object.keys(validation).length > 0 ? validation : null,
       cross_group_dependency: item.cross_group_dependency,
       hidden: item.hidden,
+      subsequent_questions: item.subsequent_questions,
     };
 
     result.push(q);
@@ -259,7 +260,61 @@ function normalizeSchema(schema: any): NormalizedSurvey {
 }
 
 /**
- * Robust rule evaluator handling match maps, wildcard, numeric, and string comparisons.
+ * Evaluates whether a group jump trigger condition is satisfied by the user's answer.
+ * Supports match, not_match, else, greater, less, greater_or_equal, less_or_equal.
+ */
+function evaluateJumpTrigger(j: any, ans: string): boolean {
+  if (!ans || !ans.trim()) return false;
+  const trimmedAns = ans.trim();
+  const lowerAns = trimmedAns.toLowerCase();
+  const trig = String(j.trigger_value || '').trim();
+  const lowerTrig = trig.toLowerCase();
+  const trigType = j.trigger_type || 'match';
+
+  if (trigType === 'greater') {
+    const num = parseFloat(trimmedAns);
+    const threshold = parseFloat(trig);
+    return !isNaN(num) && !isNaN(threshold) && num > threshold;
+  }
+
+  if (trigType === 'less') {
+    const num = parseFloat(trimmedAns);
+    const threshold = parseFloat(trig);
+    return !isNaN(num) && !isNaN(threshold) && num < threshold;
+  }
+
+  if (trigType === 'greater_or_equal') {
+    const num = parseFloat(trimmedAns);
+    const threshold = parseFloat(trig);
+    return !isNaN(num) && !isNaN(threshold) && num >= threshold;
+  }
+
+  if (trigType === 'less_or_equal') {
+    const num = parseFloat(trimmedAns);
+    const threshold = parseFloat(trig);
+    return !isNaN(num) && !isNaN(threshold) && num <= threshold;
+  }
+
+  if (trigType === 'not_match' || j.source_handle === 'else' || trigType === 'else') {
+    if (!trig || trig === 'else') return true;
+    const opts = trig.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+    if (opts.length > 1) {
+      return !opts.some((o) => lowerAns === o || lowerAns.includes(o));
+    }
+    return lowerAns !== lowerTrig && !lowerAns.includes(lowerTrig);
+  }
+
+  // Default 'match'
+  if (!trig) return true;
+  const opts = trig.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+  if (opts.length > 0) {
+    return opts.some((o) => lowerAns === o || lowerAns.includes(o) || o.includes(lowerAns));
+  }
+  return lowerAns === lowerTrig || lowerAns.includes(lowerTrig) || lowerTrig.includes(lowerAns);
+}
+
+/**
+ * Robust rule evaluator handling match maps, wildcard, negation/else, numeric, and string comparisons.
  */
 function evaluateRule(ruleConfig: any, parentAnswer: string): boolean {
   if (!parentAnswer || parentAnswer.trim() === '') return false;
@@ -271,6 +326,16 @@ function evaluateRule(ruleConfig: any, parentAnswer: string): boolean {
   if (typeof ruleConfig === 'string' || typeof ruleConfig === 'number') {
     const s = String(ruleConfig).trim();
     if (s === '') return true;
+    if (s.startsWith('>=')) {
+      const numVal = parseFloat(trimmedParent);
+      const threshold = parseFloat(s.slice(2).trim());
+      return !isNaN(numVal) && numVal >= threshold;
+    }
+    if (s.startsWith('<=')) {
+      const numVal = parseFloat(trimmedParent);
+      const threshold = parseFloat(s.slice(2).trim());
+      return !isNaN(numVal) && numVal <= threshold;
+    }
     if (s.startsWith('>')) {
       const numVal = parseFloat(trimmedParent);
       const threshold = parseFloat(s.slice(1).trim());
@@ -281,7 +346,14 @@ function evaluateRule(ruleConfig: any, parentAnswer: string): boolean {
       const threshold = parseFloat(s.slice(1).trim());
       return !isNaN(numVal) && numVal < threshold;
     }
-    return trimmedParent.toLowerCase().includes(s.toLowerCase());
+    if (s.startsWith('!=') || s.startsWith('NOT ')) {
+      const target = s.replace(/^!=\s*|^NOT\s*/i, '').trim().toLowerCase();
+      return trimmedParent.toLowerCase() !== target;
+    }
+    return (
+      trimmedParent.toLowerCase() === s.toLowerCase() ||
+      trimmedParent.toLowerCase().includes(s.toLowerCase())
+    );
   }
 
   const vType = ruleConfig.validation_type || 'match';
@@ -298,21 +370,51 @@ function evaluateRule(ruleConfig: any, parentAnswer: string): boolean {
     return !isNaN(num) && num < threshold;
   }
 
+  if (vType === 'greater_or_equal') {
+    const num = parseFloat(trimmedParent);
+    const threshold = Number(ruleConfig.validation);
+    return !isNaN(num) && num >= threshold;
+  }
+
+  if (vType === 'less_or_equal') {
+    const num = parseFloat(trimmedParent);
+    const threshold = Number(ruleConfig.validation);
+    return !isNaN(num) && num <= threshold;
+  }
+
+  if (vType === 'not_match') {
+    const trig = String(ruleConfig.validation || '').trim().toLowerCase();
+    const lowerParent = trimmedParent.toLowerCase();
+    return lowerParent !== trig && !lowerParent.includes(trig);
+  }
+
   // match type
   const targetVal = ruleConfig.validation;
   if (targetVal === undefined || targetVal === null) return true;
 
   if (typeof targetVal === 'object' && !Array.isArray(targetVal)) {
-    // e.g. { "Yes": true, "No": false } or { "": true }
+    // e.g. { "Yes": true, "No": false } or pure negation { "Yes": false }
+    const falsyKeys = Object.entries(targetVal)
+      .filter(([_, val]) => !val)
+      .map(([k]) => k.trim());
     const truthyKeys = Object.entries(targetVal)
       .filter(([_, val]) => Boolean(val))
       .map(([k]) => k.trim());
 
+    // If pure negation/else (e.g. { "Yes": false } without truthy keys):
+    if (truthyKeys.length === 0 && falsyKeys.length > 0) {
+      return !falsyKeys.some((k) => {
+        const lowerKey = k.toLowerCase();
+        const lowerParent = trimmedParent.toLowerCase();
+        return lowerParent === lowerKey || lowerParent.includes(lowerKey);
+      });
+    }
+
     if (truthyKeys.length === 0) return false;
     if (truthyKeys.includes('')) return true; // Wildcard non-empty match
 
-    // Match if trimmedParent matches any truthy key (case-insensitive substring or equality)
-    return truthyKeys.some((k) => {
+    // Match if trimmedParent matches any truthy key and does not match explicit falsy key
+    const matchesTruthy = truthyKeys.some((k) => {
       const lowerKey = k.toLowerCase();
       const lowerParent = trimmedParent.toLowerCase();
       return (
@@ -321,6 +423,17 @@ function evaluateRule(ruleConfig: any, parentAnswer: string): boolean {
         lowerKey.includes(lowerParent)
       );
     });
+
+    if (!matchesTruthy) return false;
+
+    // Reject if matches any explicit falsy key
+    const matchesFalsy = falsyKeys.some((k) => {
+      const lowerKey = k.toLowerCase();
+      const lowerParent = trimmedParent.toLowerCase();
+      return lowerParent === lowerKey;
+    });
+
+    return !matchesFalsy;
   }
 
   if (Array.isArray(targetVal)) {
@@ -335,6 +448,16 @@ function evaluateRule(ruleConfig: any, parentAnswer: string): boolean {
 
   const strTarget = String(targetVal).trim();
   if (strTarget === '') return true;
+  if (strTarget.startsWith('>=')) {
+    const numVal = parseFloat(trimmedParent);
+    const threshold = parseFloat(strTarget.slice(2).trim());
+    return !isNaN(numVal) && numVal >= threshold;
+  }
+  if (strTarget.startsWith('<=')) {
+    const numVal = parseFloat(trimmedParent);
+    const threshold = parseFloat(strTarget.slice(2).trim());
+    return !isNaN(numVal) && numVal <= threshold;
+  }
   if (strTarget.startsWith('>')) {
     const numVal = parseFloat(trimmedParent);
     const threshold = parseFloat(strTarget.slice(1).trim());
@@ -416,8 +539,15 @@ export const MobilePreviewModal: React.FC<MobilePreviewModalProps> = ({
           return false;
         }
 
+        const isCrossGroup = parentQ && parentQ.group && parentQ.group !== q.group;
+        const parentGroupVisited = parentQ?.group ? history.includes(parentQ.group) : false;
+
         const parentAns = answers[String(parentId)] || '';
         if (!parentAns || parentAns.trim() === '') {
+          // If the parent question is in a different group that was never visited (e.g. bypassed via jump), do not block this question
+          if (isCrossGroup && !parentGroupVisited) {
+            continue;
+          }
           return false;
         }
 
@@ -439,14 +569,165 @@ export const MobilePreviewModal: React.FC<MobilePreviewModalProps> = ({
     });
 
     return visible;
-  }, [normalized.questions, answers]);
+  }, [normalized.questions, answers, history]);
+
+  // Helper to determine the allowed question IDs for a group based on specific option targets and reachability
+  const getEligibleQuestionIdsForGroup = useCallback(
+    (gNum: number): Set<number> | null => {
+      const jumpsToG = ((normalized.groupJumps as any[]) || []).filter((j: any) => {
+        const jId = parseInt(j.group_id, 10);
+        return jId === gNum;
+      });
+
+      // 1. If any general jump targeting the entire group is satisfied, all questions in this group are eligible
+      const lastVisitedGroup = history.length > 0 ? history[history.length - 1] : undefined;
+      const generalJumps = jumpsToG.filter(
+        (j: any) => j.target_question_id === undefined || j.target_question_id === null
+      );
+      const hasGeneralJumpSatisfied = generalJumps.some((j: any) => {
+        if (j.source_group !== undefined && lastVisitedGroup !== undefined && j.source_group !== lastVisitedGroup) {
+          return false;
+        }
+        const qId = j.source_question_id;
+        if (qId !== undefined && qId !== null) {
+          const rawAns = answers[String(qId)] || '';
+          return evaluateJumpTrigger(j, rawAns);
+        }
+        return true;
+      });
+
+      if (hasGeneralJumpSatisfied) {
+        return null;
+      }
+
+      // 2. Filter jumps that have target_question_id specified
+      const specificTargetJumps = jumpsToG.filter(
+        (j: any) => j.target_question_id !== undefined && j.target_question_id !== null
+      );
+
+      // If no jump targets a specific question in this group, then all questions in this group are eligible
+      if (specificTargetJumps.length === 0) {
+        return null; // null means no specific restriction
+      }
+
+      // Check which specific target jumps have their condition satisfied by current answers
+      const satisfiedTargets = new Set<number>();
+      for (const j of specificTargetJumps) {
+        if (j.source_group !== undefined && lastVisitedGroup !== undefined && j.source_group !== lastVisitedGroup) {
+          continue;
+        }
+        const qId = j.source_question_id;
+        const targetQId = Number(j.target_question_id);
+        if (qId !== undefined && qId !== null) {
+          const rawAns = answers[String(qId)] || '';
+          if (evaluateJumpTrigger(j, rawAns)) {
+            satisfiedTargets.add(targetQId);
+          }
+        } else {
+          satisfiedTargets.add(targetQId);
+        }
+      }
+
+      // If no specific jump was satisfied, no specific restriction applies (e.g. navigated sequentially)
+      if (satisfiedTargets.size === 0) {
+        return null;
+      }
+
+      const allowed = new Set<number>();
+      const allQMap = new Map<number, DynamicKycQuestion>();
+      normalized.questions.forEach((q) => allQMap.set(q.question_id, q));
+
+      satisfiedTargets.forEach((tId) => {
+        allowed.add(tId);
+        const q = allQMap.get(tId);
+        if (q?.subsequent_questions && Array.isArray(q.subsequent_questions) && q.subsequent_questions.length > 0) {
+          q.subsequent_questions.forEach((sqId) => allowed.add(sqId));
+        }
+      });
+
+      return allowed;
+    },
+    [normalized.groupJumps, normalized.questions, normalized.currentGroup, answers, history]
+  );
 
   // Questions belonging to the currently active page / group
   const currentPageQuestions = useMemo(() => {
+    const allowedIds = getEligibleQuestionIdsForGroup(currentGroup);
     return normalized.questions
       .filter((q) => (q.group || normalized.currentGroup || 1) === currentGroup)
-      .filter((q) => visibleQuestions.has(q.question_id));
-  }, [normalized.questions, normalized.currentGroup, currentGroup, visibleQuestions]);
+      .filter(
+        (q) => (!allowedIds || allowedIds.has(q.question_id)) && visibleQuestions.has(q.question_id)
+      );
+  }, [
+    normalized.questions,
+    normalized.currentGroup,
+    currentGroup,
+    getEligibleQuestionIdsForGroup,
+    visibleQuestions,
+  ]);
+
+  // Helper to determine whether a target group is eligible given current answers
+  const isGroupEligible = useCallback(
+    (gNum: number, currentTargetJump: number | null): boolean => {
+      // 1. If explicitly jumped to, it is eligible
+      if (currentTargetJump === gNum) return true;
+
+      // 2. Check if this group is targeted by any conditional jumps
+      const conditionalJumpsToG = ((normalized.groupJumps as any[]) || []).filter((j: any) => {
+        const jId = parseInt(j.group_id, 10);
+        return (
+          jId === gNum &&
+          (j.trigger_value || j.source_question_id !== undefined || j.trigger_type || j.source_handle)
+        );
+      });
+
+      if (conditionalJumpsToG.length > 0) {
+        // A conditional jump targeting this group exists! Check if any condition is satisfied
+        const isSatisfied = conditionalJumpsToG.some((j: any) => {
+          const qId = j.source_question_id;
+          if (qId !== undefined && qId !== null) {
+            const rawAns = answers[String(qId)] || '';
+            return evaluateJumpTrigger(j, rawAns);
+          }
+          return false;
+        });
+
+        if (!isSatisfied) {
+          return false;
+        }
+      }
+
+      // 3. Check if all questions in this group are hidden due to conditions or target question restrictions
+      const allowedIds = getEligibleQuestionIdsForGroup(gNum);
+      if (allowedIds !== null && allowedIds.size === 0) {
+        return false;
+      }
+
+      const groupQuestions = normalized.questions.filter(
+        (q) => (q.group || normalized.currentGroup || 1) === gNum
+      );
+
+      if (groupQuestions.length > 0) {
+        const hasVisibleQuestion = groupQuestions.some(
+          (q) =>
+            (!allowedIds || allowedIds.has(q.question_id)) && visibleQuestions.has(q.question_id)
+        );
+        if (!hasVisibleQuestion) {
+          return false;
+        }
+      }
+
+      return true;
+    },
+    [
+      normalized.groupJumps,
+      normalized.questions,
+      normalized.currentGroup,
+      answers,
+      visibleQuestions,
+      getEligibleQuestionIdsForGroup,
+    ]
+  );
 
   const currentGroupIndex = availableGroups.indexOf(currentGroup);
   const totalSteps = availableGroups.length;
@@ -457,7 +738,38 @@ export const MobilePreviewModal: React.FC<MobilePreviewModalProps> = ({
         : Math.round(((currentGroupIndex + 1) / totalSteps) * 100)
       : 100;
 
-  const hasNextGroup = availableGroups.some((g) => g > currentGroup);
+  const hasNextGroup = useMemo(() => {
+    let activeJumpGroup: number | null = null;
+    let fallbackGroupJump: number | null = null;
+    if (normalized.groupJumps && normalized.groupJumps.length > 0) {
+      for (const q of currentPageQuestions) {
+        const rawAns = answers[String(q.question_id)];
+        if (!rawAns || rawAns.trim() === '') continue;
+        for (const j of normalized.groupJumps as any[]) {
+          const jId = parseInt(j.group_id, 10);
+          if (isNaN(jId) || jId === currentGroup) continue;
+          if (j.source_question_id !== undefined && j.source_question_id !== null) {
+            if (Number(j.source_question_id) === q.question_id) {
+              if (evaluateJumpTrigger(j, rawAns)) {
+                activeJumpGroup = jId;
+                break;
+              }
+            }
+          } else if (fallbackGroupJump === null) {
+            fallbackGroupJump = jId;
+          }
+        }
+        if (activeJumpGroup !== null) break;
+      }
+    }
+
+    const resolvedJump = activeJumpGroup ?? fallbackGroupJump;
+    if (resolvedJump !== null && isGroupEligible(resolvedJump, resolvedJump)) {
+      return true;
+    }
+    const subsequentGroups = availableGroups.filter((g) => g > currentGroup);
+    return subsequentGroups.some((g) => isGroupEligible(g, resolvedJump));
+  }, [availableGroups, currentGroup, isGroupEligible, normalized.groupJumps, currentPageQuestions, answers]);
   const canGoBack = history.length > 0 || currentGroupIndex > 0;
 
   const currentInstruction =
@@ -506,30 +818,47 @@ export const MobilePreviewModal: React.FC<MobilePreviewModalProps> = ({
     }
     setValidationErrors({});
 
-    // 2. Determine target next group (checking group jumps or next sequential group)
+    // 2. Determine target next group (checking conditional group jumps or next eligible sequential group)
     let targetJumpGroup: number | null = null;
+    let fallbackGroupJump: number | null = null;
     if (normalized.groupJumps.length > 0) {
       for (const q of currentPageQuestions) {
-        const ans = answers[String(q.question_id)];
-        if (!ans) continue;
-        const matched = normalized.groupJumps.find((j) => {
+        const rawAns = answers[String(q.question_id)];
+        if (!rawAns || rawAns.trim() === '') continue;
+
+        for (const j of normalized.groupJumps as any[]) {
           const jId = parseInt(j.group_id, 10);
-          return (
-            jId > currentGroup &&
-            (j.group_title?.toLowerCase().includes(ans.toLowerCase()) ||
-              j.group_id === ans)
-          );
-        });
-        if (matched) {
-          targetJumpGroup = parseInt(matched.group_id, 10);
+          if (isNaN(jId) || jId === currentGroup) continue;
+
+          if (j.source_question_id !== undefined && j.source_question_id !== null) {
+            if (Number(j.source_question_id) === q.question_id) {
+              if (evaluateJumpTrigger(j, rawAns)) {
+                targetJumpGroup = jId;
+                break;
+              }
+            }
+          } else if (fallbackGroupJump === null) {
+            fallbackGroupJump = jId;
+          }
+        }
+        if (targetJumpGroup !== null) break;
+      }
+    }
+
+    const resolvedTarget = targetJumpGroup ?? fallbackGroupJump;
+    let nextGroup: number | null = null;
+    if (resolvedTarget !== null && isGroupEligible(resolvedTarget, resolvedTarget)) {
+      nextGroup = resolvedTarget;
+    } else {
+      // Find the next sequential group that is actually eligible (not filtered out by conditions)
+      const subsequentGroups = availableGroups.filter((g) => g > currentGroup);
+      for (const candidate of subsequentGroups) {
+        if (isGroupEligible(candidate, resolvedTarget)) {
+          nextGroup = candidate;
           break;
         }
       }
     }
-
-    const subsequentGroups = availableGroups.filter((g) => g > currentGroup);
-    const nextGroup =
-      targetJumpGroup || (subsequentGroups.length > 0 ? subsequentGroups[0] : null);
 
     if (nextGroup) {
       // Advance to next page / group!

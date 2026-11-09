@@ -11,7 +11,6 @@ public record CompileResponse(
     boolean next,
     String instruction,
     List<Map<String, Object>> data,
-    List<Map<String, String>> groups,
-    List<Map<String, String>> groups_to_jump
+    List<Map<String, Object>> groups,
+    List<Map<String, Object>> groups_to_jump
 ) {}
-

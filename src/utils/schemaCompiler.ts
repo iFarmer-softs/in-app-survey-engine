@@ -45,9 +45,49 @@ export function compileFlowToSchema(
 
   const questions: DynamicKycQuestion[] = [];
 
+  // Precompute downstream questions within the same group for each question
+  const downstreamMap: Record<number, number[]> = {};
+  for (const qNode of questionNodes) {
+    const qId = (qNode.data as any)?.question_id;
+    if (!qId) continue;
+    const qGroup = getNodeGroup(qNode, qNode.data);
+    const visited = new Set<string>();
+    const queue = [qNode.id];
+    const downstream: number[] = [];
+
+    while (queue.length > 0) {
+      const currId = queue.shift()!;
+      if (visited.has(currId)) continue;
+      visited.add(currId);
+
+      const outEdges = edges.filter((e) => e.source === currId);
+      for (const e of outEdges) {
+        const tgtNode = nodes.find((n) => n.id === e.target);
+        if (!tgtNode) continue;
+        if (tgtNode.type === 'question') {
+          const tgtGroup = getNodeGroup(tgtNode, tgtNode.data);
+          if (tgtGroup === qGroup) {
+            const tgtQId = (tgtNode.data as any)?.question_id;
+            if (tgtQId && !downstream.includes(tgtQId)) {
+              downstream.push(tgtQId);
+            }
+            if (!visited.has(tgtNode.id)) {
+              queue.push(tgtNode.id);
+            }
+          }
+        } else if (tgtNode.type === 'decision' || tgtNode.type === 'process') {
+          if (!visited.has(tgtNode.id)) {
+            queue.push(tgtNode.id);
+          }
+        }
+      }
+    }
+    downstreamMap[qId] = downstream;
+  }
+
   // Sort nodes by vertical position (Y) to keep a logical top-to-bottom order
   const sortedQuestionNodes = [...questionNodes].sort(
-    (a, b) => a.position.y - b.position.y
+    (a, b) => (a.position?.y ?? 0) - (b.position?.y ?? 0)
   );
 
   for (const qNode of sortedQuestionNodes) {
@@ -57,8 +97,32 @@ export function compileFlowToSchema(
     const dependsOn: number[] = [];
     const validationMap: Record<string, ValidationConfig> = {};
 
-    // Find incoming edges directly or through decision nodes
-    const incomingEdges = edges.filter((e) => e.target === qNode.id);
+    // Find incoming edges directly or through container / decision nodes
+    const incomingToNode = edges.filter((e) => e.target === qNode.id);
+    const myGroup = getNodeGroup(qNode, data);
+    const containerId = data.containerId;
+    const containerNode = nodes.find(
+      (n) =>
+        (n.type === 'groupFrame' || n.type === 'groupContainer') &&
+        (n.id === containerId || (n.data as any)?.numericGroupId === myGroup)
+    );
+    const containerIncoming = containerNode
+      ? edges.filter((e) => e.target === containerNode.id)
+      : [];
+
+    const hasInternalIncoming = incomingToNode.some((e) => {
+      const src = nodes.find((n) => n.id === e.source);
+      return src && getNodeGroup(src, src.data) === myGroup;
+    });
+
+    const incomingEdges = [...incomingToNode];
+    if (!hasInternalIncoming && containerIncoming.length > 0) {
+      for (const ce of containerIncoming) {
+        if (!incomingEdges.some((ie) => ie.id === ce.id)) {
+          incomingEdges.push(ce);
+        }
+      }
+    }
 
     for (const inEdge of incomingEdges) {
       const sourceNode = nodes.find((n) => n.id === inEdge.source);
@@ -170,6 +234,10 @@ export function compileFlowToSchema(
       } else if (sourceNode.type === 'decision') {
         const decData = sourceNode.data as unknown as DecisionNodeData;
         const decisionIncoming = edges.filter((e) => e.target === sourceNode.id);
+        const isElse =
+          inEdge.sourceHandle === 'else' ||
+          (typeof inEdge.label === 'string' && inEdge.label.toUpperCase().includes('ELSE'));
+
         for (const decInEdge of decisionIncoming) {
           const parentQuestionNode = nodes.find((n) => n.id === decInEdge.source && n.type === 'question');
           if (parentQuestionNode) {
@@ -181,20 +249,38 @@ export function compileFlowToSchema(
 
             const parentGroup = getNodeGroup(parentQuestionNode, parentData);
             const currentGroup = getNodeGroup(qNode, data);
-            if (decData.conditionType === 'match') {
-              const matches: Record<string, boolean> = {};
-              matches[String(decData.comparisonValue)] = true;
+            const condType = decData.conditionType || 'match';
+
+            if (condType === 'match') {
+              if (isElse) {
+                validationMap[String(parentId)] = {
+                  group: parentGroup,
+                  is_same_group: parentGroup === currentGroup,
+                  validation_type: 'not_match',
+                  validation: String(decData.comparisonValue || ''),
+                };
+              } else {
+                const matches: Record<string, boolean> = {};
+                matches[String(decData.comparisonValue || '')] = true;
+                validationMap[String(parentId)] = {
+                  group: parentGroup,
+                  is_same_group: parentGroup === currentGroup,
+                  validation_type: 'match',
+                  validation: matches,
+                };
+              }
+            } else if (condType === 'greater') {
               validationMap[String(parentId)] = {
                 group: parentGroup,
                 is_same_group: parentGroup === currentGroup,
-                validation_type: 'match',
-                validation: matches,
+                validation_type: isElse ? 'less_or_equal' : 'greater',
+                validation: Number(decData.comparisonValue) || 0,
               };
-            } else {
+            } else if (condType === 'less') {
               validationMap[String(parentId)] = {
                 group: parentGroup,
                 is_same_group: parentGroup === currentGroup,
-                validation_type: decData.conditionType,
+                validation_type: isElse ? 'greater_or_equal' : 'less',
                 validation: Number(decData.comparisonValue) || 0,
               };
             }
@@ -225,22 +311,289 @@ export function compileFlowToSchema(
       cross_group_dependency: rawAny.cross_group_dependency ?? [],
       validation: Object.keys(validationMap).length > 0 ? validationMap : null,
       hidden: rawAny.hidden ?? (dependsOn.length > 0),
+      subsequent_questions:
+        downstreamMap[qId] && downstreamMap[qId].length > 0 ? downstreamMap[qId] : undefined,
     };
 
     questions.push(qItem);
   }
 
-  // Group jumps list
-  const groupJumps = [...meta.groupJumps];
+  // Group jumps list with explicit conditional bindings
+  const groupJumps: {
+    group_id: string;
+    group_title: string;
+    source_question_id?: number;
+    trigger_value?: string;
+    trigger_type?: string;
+    source_handle?: string;
+    source_group?: number;
+    target_question_id?: number;
+  }[] = [];
+
+  if (Array.isArray(meta.groupJumps)) {
+    groupJumps.push(...meta.groupJumps);
+  }
+
+  // 1. Process group jumps from jump nodes
   for (const jNode of jumpNodes) {
     const jData = jNode.data as unknown as GroupJumpNodeData;
     if (jData.targetGroupId) {
       const gIdStr = String(jData.targetGroupId);
-      if (!groupJumps.some((g) => g.group_id === gIdStr)) {
-        groupJumps.push({
+      const targetTitle = jData.targetGroupTitle || `Group ${gIdStr}`;
+      const jumpInEdges = edges.filter((e) => e.target === jNode.id);
+      const jOutEdge = edges.find((e) => e.source === jNode.id);
+      let targetQId: number | undefined = (jData as any)?.targetQuestionId;
+      if (!targetQId && jOutEdge) {
+        const outNode = nodes.find((n) => n.id === jOutEdge.target);
+        if (outNode?.type === 'question') {
+          targetQId = (outNode.data as any)?.question_id;
+        }
+      }
+
+      if (jumpInEdges.length > 0) {
+        for (const jEdge of jumpInEdges) {
+          const srcNode = nodes.find((n) => n.id === jEdge.source);
+          let triggerVal: string | null = null;
+          let triggerType = 'match';
+          const isElse =
+            jEdge.sourceHandle === 'else' ||
+            (typeof jEdge.label === 'string' && jEdge.label.toUpperCase().includes('ELSE'));
+
+          if (jEdge.sourceHandle && jEdge.sourceHandle.startsWith('opt-')) {
+            triggerVal = decodeURIComponent(jEdge.sourceHandle.replace('opt-', '')).trim();
+          } else if ((jEdge.data as any)?.triggerValue) {
+            triggerVal = String((jEdge.data as any).triggerValue).trim();
+          } else if (typeof jEdge.label === 'string' && !jEdge.label.startsWith('Cross-Group:')) {
+            triggerVal = jEdge.label.replace(/^IF\s*["']?|["']?$/g, '').trim();
+          }
+
+          let sourceQId: number | undefined = undefined;
+          let sourceG: number | undefined = undefined;
+
+          if (srcNode?.type === 'question') {
+            sourceQId = (srcNode.data as any)?.question_id;
+            sourceG = getNodeGroup(srcNode, srcNode.data);
+            if (isElse) {
+              triggerType = 'else';
+            }
+          } else if (srcNode?.type === 'decision') {
+            const decData = srcNode.data as unknown as DecisionNodeData;
+            const dEdges = edges.filter((e) => e.target === srcNode.id);
+            for (const de of dEdges) {
+              const dSrc = nodes.find((n) => n.id === de.source && n.type === 'question');
+              if (dSrc) {
+                sourceQId = (dSrc.data as any)?.question_id;
+                sourceG = getNodeGroup(dSrc, dSrc.data);
+                triggerVal = String(decData.comparisonValue || 'Yes');
+                const condType = decData.conditionType || 'match';
+                if (isElse) {
+                  triggerType = condType === 'match' ? 'not_match' : (condType === 'greater' ? 'less_or_equal' : 'greater_or_equal');
+                } else {
+                  triggerType = condType;
+                }
+                break;
+              }
+            }
+          }
+
+          const existingIdx = groupJumps.findIndex(
+            (g) =>
+              g.group_id === gIdStr &&
+              (!g.source_question_id || g.source_question_id === sourceQId) &&
+              (!g.trigger_value || g.trigger_value === triggerVal) &&
+              (!g.trigger_type || g.trigger_type === triggerType)
+          );
+
+          const jumpEntry = {
+            group_id: gIdStr,
+            group_title: targetTitle,
+            source_question_id: sourceQId,
+            trigger_value: triggerVal || undefined,
+            trigger_type: triggerType,
+            source_handle: jEdge.sourceHandle || undefined,
+            source_group: sourceG,
+            target_question_id: targetQId,
+          };
+
+          if (existingIdx >= 0) {
+            groupJumps[existingIdx] = { ...groupJumps[existingIdx], ...jumpEntry };
+          } else {
+            groupJumps.push(jumpEntry);
+          }
+        }
+      } else {
+        if (!groupJumps.some((g) => g.group_id === gIdStr)) {
+          groupJumps.push({
+            group_id: gIdStr,
+            group_title: targetTitle,
+            target_question_id: targetQId,
+          });
+        }
+      }
+    }
+  }
+
+  // 2. Process conditional edges directly targeting a groupFrame or groupContainer
+  for (const edge of edges) {
+    const targetNode = nodes.find((n) => n.id === edge.target);
+    if (!targetNode) continue;
+    if (targetNode.type === 'groupFrame' || targetNode.type === 'groupContainer') {
+      const targetG =
+        (targetNode.data as any)?.numericGroupId ||
+        parseInt(String((targetNode.data as any)?.groupId).replace(/\D+/g, ''), 10);
+      if (!targetG || isNaN(targetG)) continue;
+      const gIdStr = String(targetG);
+      const targetTitle =
+        (targetNode.data as any)?.title || (targetNode.data as any)?.titleBn || `Group ${targetG}`;
+
+      const srcNode = nodes.find((n) => n.id === edge.source);
+      let triggerVal: string | null = null;
+      let triggerType = 'match';
+      const isElse =
+        edge.sourceHandle === 'else' ||
+        (typeof edge.label === 'string' && edge.label.toUpperCase().includes('ELSE'));
+
+      if (edge.sourceHandle && edge.sourceHandle.startsWith('opt-')) {
+        triggerVal = decodeURIComponent(edge.sourceHandle.replace('opt-', '')).trim();
+      } else if ((edge.data as any)?.triggerValue) {
+        triggerVal = String((edge.data as any).triggerValue).trim();
+      }
+
+      let sourceQId: number | undefined = undefined;
+      let sourceG: number | undefined = undefined;
+
+      if (srcNode?.type === 'question') {
+        sourceQId = (srcNode.data as any)?.question_id;
+        sourceG = getNodeGroup(srcNode, srcNode.data);
+        if (isElse) {
+          triggerType = 'else';
+        }
+      } else if (srcNode?.type === 'decision') {
+        const decData = srcNode.data as unknown as DecisionNodeData;
+        const dEdges = edges.filter((e) => e.target === srcNode.id);
+        for (const de of dEdges) {
+          const dSrc = nodes.find((n) => n.id === de.source && n.type === 'question');
+          if (dSrc) {
+            sourceQId = (dSrc.data as any)?.question_id;
+            sourceG = getNodeGroup(dSrc, dSrc.data);
+            triggerVal = String(decData.comparisonValue || 'Yes');
+            const condType = decData.conditionType || 'match';
+            if (isElse) {
+              triggerType = condType === 'match' ? 'not_match' : (condType === 'greater' ? 'less_or_equal' : 'greater_or_equal');
+            } else {
+              triggerType = condType;
+            }
+            break;
+          }
+        }
+      }
+
+      if (sourceQId !== undefined && triggerVal !== null) {
+        const existingIdx = groupJumps.findIndex(
+          (g) =>
+            g.group_id === gIdStr &&
+            (!g.source_question_id || g.source_question_id === sourceQId) &&
+            (!g.trigger_value || g.trigger_value === triggerVal) &&
+            (!g.trigger_type || g.trigger_type === triggerType)
+        );
+        const jumpEntry = {
           group_id: gIdStr,
-          group_title: jData.targetGroupTitle || `Group ${gIdStr}`,
-        });
+          group_title: targetTitle,
+          source_question_id: sourceQId,
+          trigger_value: triggerVal,
+          trigger_type: triggerType,
+          source_handle: edge.sourceHandle || undefined,
+          source_group: sourceG,
+        };
+        if (existingIdx >= 0) {
+          groupJumps[existingIdx] = { ...groupJumps[existingIdx], ...jumpEntry };
+        } else {
+          groupJumps.push(jumpEntry);
+        }
+      }
+    }
+  }
+
+  // 3. Process conditional cross-group edges between questions or decisions from an option/decision port
+  for (const edge of edges) {
+    const srcNode = nodes.find((n) => n.id === edge.source);
+    const tgtNode = nodes.find((n) => n.id === edge.target);
+    if (!srcNode || !tgtNode) continue;
+
+    let sourceQId: number | undefined = undefined;
+    let sourceG: number | undefined = undefined;
+    let triggerVal: string | null = null;
+    let triggerType = 'match';
+    const isElse =
+      edge.sourceHandle === 'else' ||
+      (typeof edge.label === 'string' && edge.label.toUpperCase().includes('ELSE'));
+
+    if (srcNode.type === 'question') {
+      sourceQId = (srcNode.data as any)?.question_id;
+      sourceG = getNodeGroup(srcNode, srcNode.data);
+      if (edge.sourceHandle && edge.sourceHandle.startsWith('opt-')) {
+        triggerVal = decodeURIComponent(edge.sourceHandle.replace('opt-', '')).trim();
+      } else if (isElse) {
+        triggerType = 'else';
+        triggerVal = String((edge.data as any)?.triggerValue || 'else').trim();
+      } else if ((edge.data as any)?.triggerValue) {
+        triggerVal = String((edge.data as any).triggerValue).trim();
+      }
+    } else if (srcNode.type === 'decision') {
+      const decData = srcNode.data as unknown as DecisionNodeData;
+      const dEdges = edges.filter((e) => e.target === srcNode.id);
+      for (const de of dEdges) {
+        const dSrc = nodes.find((n) => n.id === de.source && n.type === 'question');
+        if (dSrc) {
+          sourceQId = (dSrc.data as any)?.question_id;
+          sourceG = getNodeGroup(dSrc, dSrc.data);
+          triggerVal = String(decData.comparisonValue || 'Yes');
+          const condType = decData.conditionType || 'match';
+          if (isElse) {
+            triggerType = condType === 'match' ? 'not_match' : (condType === 'greater' ? 'less_or_equal' : 'greater_or_equal');
+          } else {
+            triggerType = condType;
+          }
+          break;
+        }
+      }
+    }
+
+    if (sourceQId !== undefined && triggerVal !== null) {
+      const tgtGroup =
+        tgtNode.type === 'question'
+          ? getNodeGroup(tgtNode, tgtNode.data)
+          : (tgtNode.data as any)?.numericGroupId ||
+            parseInt(String((tgtNode.data as any)?.groupId).replace(/\D+/g, ''), 10);
+
+      if (sourceG !== tgtGroup && tgtGroup) {
+        const gIdStr = String(tgtGroup);
+        const targetTitle = (tgtNode.data as any)?.title || `Group ${tgtGroup}`;
+        const targetQId = tgtNode.type === 'question' ? (tgtNode.data as any)?.question_id : undefined;
+
+        const existingIdx = groupJumps.findIndex(
+          (g) =>
+            g.group_id === gIdStr &&
+            (!g.source_question_id || g.source_question_id === sourceQId) &&
+            (!g.trigger_value || g.trigger_value === triggerVal) &&
+            (!g.trigger_type || g.trigger_type === triggerType) &&
+            (!g.target_question_id || g.target_question_id === targetQId)
+        );
+        const jumpEntry = {
+          group_id: gIdStr,
+          group_title: targetTitle,
+          source_question_id: sourceQId,
+          trigger_value: triggerVal,
+          trigger_type: triggerType,
+          source_handle: edge.sourceHandle || undefined,
+          source_group: sourceG,
+          target_question_id: targetQId,
+        };
+        if (existingIdx >= 0) {
+          groupJumps[existingIdx] = { ...groupJumps[existingIdx], ...jumpEntry };
+        } else {
+          groupJumps.push(jumpEntry);
+        }
       }
     }
   }

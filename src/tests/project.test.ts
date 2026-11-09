@@ -2466,5 +2466,570 @@ assert.strictEqual(rawNestedSchema.data[0].sub_questions[0].validation['501'].va
 
 console.log('   ✅ Multi-page group separation, sub-questions nesting and cross-group links validated.');
 
-console.log('\n🎉 ALL TESTS PASSED SUCCESSFULLY! (27/27 test suites passed)\n');
+// 28. Testing Conditional Option-to-Group Navigation & Group Isolation
+console.log('\n2️⃣8️⃣ Testing Conditional Option-to-Group Navigation & Group Isolation...');
+
+const testNodesOptionJump: any[] = [
+  {
+    id: 'q-root',
+    type: 'question',
+    position: { x: 0, y: 0 },
+    data: {
+      question_id: 601,
+      group: 1,
+      question: 'Do you own cultivating land?',
+      answer_type: 'select_one',
+      options: 'Yes, No',
+    },
+  },
+  {
+    id: 'frame-grp2',
+    type: 'groupFrame',
+    position: { x: 300, y: 0 },
+    data: {
+      numericGroupId: 2,
+      groupId: 'grp-2',
+      title: 'Land Assessment',
+      questionIds: ['q-grp2-entry'],
+    },
+  },
+  {
+    id: 'q-grp2-entry',
+    type: 'question',
+    position: { x: 350, y: 50 },
+    data: {
+      question_id: 602,
+      group: 2,
+      containerId: 'frame-grp2',
+      question: 'Land Size in Decimals',
+      answer_type: 'integer',
+    },
+  },
+];
+
+const testEdgesOptionJump: any[] = [
+  {
+    id: 'edge-opt-yes-to-frame2',
+    source: 'q-root',
+    sourceHandle: 'opt-Yes',
+    target: 'frame-grp2',
+    data: { validationType: 'match', triggerValue: 'Yes' },
+  },
+];
+
+const compiledOptionJump = compileFlowToSchema(
+  testNodesOptionJump as any,
+  testEdgesOptionJump as any,
+  {
+    groupNumber: 1,
+    totalGroups: 2,
+    hasNextGroup: true,
+    instruction: '',
+    groupJumps: [],
+  }
+);
+
+// 1. Verify that groupJumps captured the conditional trigger
+assert.strictEqual(compiledOptionJump.groups_to_jump?.length, 1, 'Should compile 1 group jump');
+const jump2 = compiledOptionJump.groups_to_jump?.[0];
+assert.strictEqual(jump2?.group_id, '2', 'Target group must be 2');
+assert.strictEqual(jump2?.source_question_id, 601, 'Source question must be 601');
+assert.strictEqual(jump2?.trigger_value, 'Yes', 'Trigger value must be Yes');
+
+// 2. Verify that questions inside Group 2 inherited the conditional dependency
+const q602 = compiledOptionJump.data.find((q) => q.question_id === 602)!;
+assert.ok(q602, 'Question 602 must exist in compiled schema');
+assert.deepStrictEqual(q602.depends_on, [601], 'Question 602 must depend on Question 601');
+assert.strictEqual(q602.validation?.['601']?.validation?.['Yes'], true, 'Question 602 must only validate for Yes');
+
+console.log('   ✅ Conditional Option-to-Group link properly isolates Group 2 strictly to option "Yes".');
+
+// ============================================================================
+// 29. Testing Specific Question Target Jumps & Downstream Branch Isolation
+// ============================================================================
+console.log('\n2️⃣9️⃣ Testing Specific Question Target Jumps & Downstream Branch Isolation...');
+
+const testNodesSpecificJump: any[] = [
+  {
+    id: 'q-root-activity',
+    type: 'question',
+    position: { x: 50, y: 50 },
+    data: {
+      question_id: 701,
+      group: 1,
+      question: 'Primary Farm Activity',
+      options: 'Dairy, Fishery',
+      answer_type: 'select_one',
+    },
+  },
+  {
+    id: 'frame-grp2-branch',
+    type: 'groupFrame',
+    position: { x: 500, y: 50 },
+    data: { groupId: 2, numericGroupId: 2, title: 'Activity Specific Details' },
+  },
+  {
+    id: 'q-dairy-main',
+    type: 'question',
+    position: { x: 550, y: 80 },
+    data: {
+      question_id: 702,
+      group: 2,
+      containerId: 'frame-grp2-branch',
+      question: 'Dairy Cow Count',
+      answer_type: 'integer',
+    },
+  },
+  {
+    id: 'q-dairy-sub',
+    type: 'question',
+    position: { x: 550, y: 220 },
+    data: {
+      question_id: 704,
+      group: 2,
+      containerId: 'frame-grp2-branch',
+      question: 'Daily Milk Production (Liters)',
+      answer_type: 'integer',
+    },
+  },
+  {
+    id: 'q-fish-main',
+    type: 'question',
+    position: { x: 800, y: 80 },
+    data: {
+      question_id: 703,
+      group: 2,
+      containerId: 'frame-grp2-branch',
+      question: 'Fishery Pond Size',
+      answer_type: 'integer',
+    },
+  },
+];
+
+const testEdgesSpecificJump: any[] = [
+  // Option "Dairy" connects specifically to Q#702
+  {
+    id: 'edge-opt-dairy-to-q702',
+    source: 'q-root-activity',
+    sourceHandle: 'opt-Dairy',
+    target: 'q-dairy-main',
+    data: { validationType: 'match', triggerValue: 'Dairy' },
+  },
+  // Option "Fishery" connects specifically to Q#703
+  {
+    id: 'edge-opt-fishery-to-q703',
+    source: 'q-root-activity',
+    sourceHandle: 'opt-Fishery',
+    target: 'q-fish-main',
+    data: { validationType: 'match', triggerValue: 'Fishery' },
+  },
+  // Q#702 connects to downstream Q#704
+  {
+    id: 'edge-q702-to-q704',
+    source: 'q-dairy-main',
+    target: 'q-dairy-sub',
+  },
+];
+
+const compiledSpecificJump = compileFlowToSchema(
+  testNodesSpecificJump as any,
+  testEdgesSpecificJump as any,
+  {
+    groupNumber: 1,
+    totalGroups: 2,
+    hasNextGroup: true,
+    instruction: '',
+    groupJumps: [],
+  }
+);
+
+// 1. Both jumps targeting Group 2 must be preserved with their distinct target_question_id
+assert.strictEqual(compiledSpecificJump.groups_to_jump?.length, 2, 'Should preserve both option jumps to Group 2');
+const dairyJump = compiledSpecificJump.groups_to_jump?.find((j) => j.trigger_value === 'Dairy');
+const fishJump = compiledSpecificJump.groups_to_jump?.find((j) => j.trigger_value === 'Fishery');
+
+assert.ok(dairyJump, 'Dairy jump must exist');
+assert.strictEqual(dairyJump?.group_id, '2');
+assert.strictEqual(dairyJump?.source_question_id, 701);
+assert.strictEqual(dairyJump?.target_question_id, 702, 'Dairy jump must specifically target Q#702');
+
+assert.ok(fishJump, 'Fishery jump must exist');
+assert.strictEqual(fishJump?.group_id, '2');
+assert.strictEqual(fishJump?.source_question_id, 701);
+assert.strictEqual(fishJump?.target_question_id, 703, 'Fishery jump must specifically target Q#703');
+
+// 2. Downstream reachability: Q#702 must have subsequent_questions: [704]
+const compiledQ702 = compiledSpecificJump.data.find((q) => q.question_id === 702);
+assert.ok(compiledQ702, 'Q#702 must exist in compiled schema');
+assert.deepStrictEqual(compiledQ702?.subsequent_questions, [704], 'Q#702 must list Q#704 as subsequent question');
+
+const compiledQ703 = compiledSpecificJump.data.find((q) => q.question_id === 703);
+assert.ok(compiledQ703, 'Q#703 must exist in compiled schema');
+assert.strictEqual(compiledQ703?.subsequent_questions, undefined, 'Q#703 has no subsequent questions');
+
+console.log('   ✅ Specific question target jumps and downstream question branch isolation operating with 100% precision.');
+
+// 30: Testing Decision Node Else Condition Handling (Match/Not-Match, Numeric <= / >=, Group Jumps)
+console.log('3️⃣0️⃣ Testing Decision Node Else Condition Handling (Match/Not-Match, Numeric <= / >=, Group Jumps)...');
+
+// 1. Binary Decision Node: Match vs Else branch
+const testNodesElse: any[] = [
+  {
+    id: 'q-root-agri',
+    type: 'question',
+    position: { x: 100, y: 100 },
+    data: { question_id: 801, group: 1, question: 'Do you own agricultural land?', answer_type: 'select_one', options: 'Yes,No' },
+  },
+  {
+    id: 'dec-land-owner',
+    type: 'decision',
+    position: { x: 100, y: 200 },
+    data: { label: 'Check Ownership', conditionType: 'match', comparisonValue: 'Yes' },
+  },
+  {
+    id: 'q-land-size',
+    type: 'question',
+    position: { x: 100, y: 300 },
+    data: { question_id: 802, group: 1, question: 'Total Cultivable Land (Decimals)', answer_type: 'integer' },
+  },
+  {
+    id: 'q-land-reason',
+    type: 'question',
+    position: { x: 250, y: 300 },
+    data: { question_id: 803, group: 1, question: 'Reason for not owning land', answer_type: 'string' },
+  },
+  {
+    id: 'dec-income-num',
+    type: 'decision',
+    position: { x: 100, y: 400 },
+    data: { label: 'Income Check', conditionType: 'greater', comparisonValue: '50000' },
+  },
+  {
+    id: 'q-tax-cert',
+    type: 'question',
+    position: { x: 100, y: 500 },
+    data: { question_id: 804, group: 1, question: 'Tax Certificate Number', answer_type: 'string' },
+  },
+  {
+    id: 'q-exemption-reason',
+    type: 'question',
+    position: { x: 250, y: 500 },
+    data: { question_id: 805, group: 1, question: 'Tax Exemption Category', answer_type: 'string' },
+  },
+];
+
+const testEdgesElse: any[] = [
+  // Parent Q801 into Match Decision
+  { id: 'e-801-dec', source: 'q-root-agri', target: 'dec-land-owner' },
+  // Match handle -> Q802
+  { id: 'e-dec-match-802', source: 'dec-land-owner', sourceHandle: 'match', target: 'q-land-size' },
+  // Else handle -> Q803
+  { id: 'e-dec-else-803', source: 'dec-land-owner', sourceHandle: 'else', target: 'q-land-reason' },
+
+  // Parent Q802 into Numeric Decision
+  { id: 'e-802-dec-num', source: 'q-land-size', target: 'dec-income-num' },
+  // Match handle -> Q804 (greater)
+  { id: 'e-dec-match-804', source: 'dec-income-num', sourceHandle: 'match', target: 'q-tax-cert' },
+  // Else handle -> Q805 (less_or_equal)
+  { id: 'e-dec-else-805', source: 'dec-income-num', sourceHandle: 'else', target: 'q-exemption-reason' },
+];
+
+const compiledElseFlow = compileFlowToSchema(testNodesElse as any, testEdgesElse as any, {
+  groupNumber: 1,
+  totalGroups: 1,
+  hasNextGroup: false,
+  instruction: '',
+  groupJumps: [],
+});
+
+const q802 = compiledElseFlow.data.find((q) => q.question_id === 802);
+const q803 = compiledElseFlow.data.find((q) => q.question_id === 803);
+const q804 = compiledElseFlow.data.find((q) => q.question_id === 804);
+const q805 = compiledElseFlow.data.find((q) => q.question_id === 805);
+
+assert.ok(q802?.validation?.['801'], 'Q802 must have validation for parent 801');
+assert.strictEqual(q802?.validation?.['801']?.validation_type, 'match');
+assert.deepStrictEqual(q802?.validation?.['801']?.validation, { Yes: true });
+
+assert.ok(q803?.validation?.['801'], 'Q803 must have validation for parent 801');
+assert.strictEqual(q803?.validation?.['801']?.validation_type, 'not_match', 'Else handle must produce not_match validation');
+assert.strictEqual(q803?.validation?.['801']?.validation, 'Yes', 'Else validation must match comparisonValue');
+
+assert.ok(q804?.validation?.['802'], 'Q804 must have validation for parent 802');
+assert.strictEqual(q804?.validation?.['802']?.validation_type, 'greater');
+assert.strictEqual(q804?.validation?.['802']?.validation, 50000);
+
+assert.ok(q805?.validation?.['802'], 'Q805 must have validation for parent 802');
+assert.strictEqual(q805?.validation?.['802']?.validation_type, 'less_or_equal', 'Else on greater condition must invert to less_or_equal');
+assert.strictEqual(q805?.validation?.['802']?.validation, 50000);
+
+// Also verify with NestJS CompilerService
+const nestCompiledElse = compilerService.compile({
+  nodes: testNodesElse,
+  edges: testEdgesElse,
+  groupMeta: { groupNumber: 1, totalGroups: 1, hasNextGroup: false },
+});
+
+const nq802 = nestCompiledElse.data.find((q: any) => q.question_id === 802);
+const nq803 = nestCompiledElse.data.find((q: any) => q.question_id === 803);
+const nq805 = nestCompiledElse.data.find((q: any) => q.question_id === 805);
+
+assert.strictEqual(nq802.validation['801'].validation_type, 'match');
+assert.strictEqual(nq803.validation['801'].validation_type, 'not_match');
+assert.strictEqual(nq803.validation['801'].validation, 'Yes');
+assert.strictEqual(nq805.validation['802'].validation_type, 'less_or_equal');
+
+// Also test Decision Node Else handle connecting across groups (Group Jump)
+const testJumpNodesElse: any[] = [
+  {
+    id: 'q-root-consent',
+    type: 'question',
+    position: { x: 100, y: 100 },
+    data: { question_id: 810, group: 1, question: 'Consent Given?', answer_type: 'select_one', options: 'Yes,No' },
+  },
+  {
+    id: 'dec-consent',
+    type: 'decision',
+    position: { x: 100, y: 200 },
+    data: { label: 'Check Consent', conditionType: 'match', comparisonValue: 'Yes' },
+  },
+  {
+    id: 'frame-grp2',
+    type: 'groupFrame',
+    position: { x: 100, y: 400 },
+    data: { numericGroupId: 2, title: 'Loan Details' },
+  },
+  {
+    id: 'frame-grp3',
+    type: 'groupFrame',
+    position: { x: 400, y: 400 },
+    data: { numericGroupId: 3, title: 'Exit Interview' },
+  },
+];
+
+const testJumpEdgesElse: any[] = [
+  { id: 'e-c-dec', source: 'q-root-consent', target: 'dec-consent' },
+  { id: 'e-dec-match-g2', source: 'dec-consent', sourceHandle: 'match', target: 'frame-grp2' },
+  { id: 'e-dec-else-g3', source: 'dec-consent', sourceHandle: 'else', target: 'frame-grp3' },
+];
+
+const compiledJumpElse = compileFlowToSchema(testJumpNodesElse as any, testJumpEdgesElse as any, {
+  groupNumber: 1,
+  totalGroups: 3,
+  hasNextGroup: true,
+  instruction: '',
+  groupJumps: [],
+});
+
+const g2Jump = compiledJumpElse.groups_to_jump?.find((j) => j.group_id === '2');
+const g3Jump = compiledJumpElse.groups_to_jump?.find((j) => j.group_id === '3');
+
+assert.ok(g2Jump, 'Group 2 match jump must exist');
+assert.strictEqual(g2Jump?.source_question_id, 810);
+assert.strictEqual(g2Jump?.trigger_value, 'Yes');
+assert.strictEqual(g2Jump?.trigger_type, 'match');
+
+assert.ok(g3Jump, 'Group 3 else jump must exist');
+assert.strictEqual(g3Jump?.source_question_id, 810);
+assert.strictEqual(g3Jump?.trigger_value, 'Yes');
+assert.strictEqual(g3Jump?.trigger_type, 'not_match', 'Else handle to group must produce not_match trigger_type');
+
+console.log('   ✅ Decision node ELSE condition and negation branching compiled and validated with 100% precision.');
+
+console.log('\n3️⃣1️⃣ Testing Multi-Option Conditional Group Routing (Option e -> Group 2, Option w -> Group 3, Decision Else -> Group 3)...');
+
+const suite31Nodes: any[] = [
+  { id: 'f-1', type: 'groupFrame', position: { x: 0, y: 0 }, data: { numericGroupId: 1, title: 'Group Area 1' } },
+  { id: 'f-2', type: 'groupFrame', position: { x: 500, y: 0 }, data: { numericGroupId: 2, title: 'Group Area 2' } },
+  { id: 'f-3', type: 'groupFrame', position: { x: 1000, y: 0 }, data: { numericGroupId: 3, title: 'Group Area 3' } },
+  { id: 'q-101', type: 'question', position: { x: 10, y: 50 }, data: { question_id: 101, group: 1, containerId: 'f-1', answer_type: 'string', mandatory: true } },
+  { id: 'q-102', type: 'question', position: { x: 10, y: 150 }, data: { question_id: 102, group: 1, containerId: 'f-1', answer_type: 'string', mandatory: true } },
+  { id: 'q-103', type: 'question', position: { x: 10, y: 250 }, data: { question_id: 103, group: 1, containerId: 'f-1', answer_type: 'string', mandatory: true } },
+  { id: 'q-104', type: 'question', position: { x: 10, y: 350 }, data: { question_id: 104, group: 1, containerId: 'f-1', answer_type: 'string', mandatory: true } },
+  { id: 'dec-1', type: 'decision', position: { x: 10, y: 450 }, data: { label: 'Condition Check', conditionType: 'match', comparisonValue: 'Yes', containerId: 'f-1', group: 1 } },
+  { id: 'q-105', type: 'question', position: { x: 10, y: 550 }, data: { question_id: 105, group: 1, containerId: 'f-1', answer_type: 'select_one', options: 'w, e', mandatory: true } },
+  { id: 'jump-grp3-else', type: 'groupJump', position: { x: 300, y: 450 }, data: { targetGroupId: 3, targetGroupTitle: 'Group Area 3 (গ্রুপ এলাকা ৩)', containerId: 'f-1', group: 1 } },
+  { id: 'jump-grp3-w', type: 'groupJump', position: { x: 300, y: 550 }, data: { targetGroupId: 3, targetGroupTitle: 'Group Area 3 (গ্রুপ এলাকা ৩)', containerId: 'f-1', group: 1 } },
+  { id: 'jump-grp2-e', type: 'groupJump', position: { x: 300, y: 650 }, data: { targetGroupId: 2, targetGroupTitle: 'Group 2', containerId: 'f-1', group: 1 } },
+  { id: 'q-106', type: 'question', position: { x: 510, y: 50 }, data: { question_id: 106, group: 2, containerId: 'f-2', answer_type: 'dropdown', options: 'q, e, r, t, ty' } },
+  { id: 'q-107', type: 'question', position: { x: 510, y: 150 }, data: { question_id: 107, group: 2, containerId: 'f-2', answer_type: 'string', containerId: 'f-2' } },
+  { id: 'q-108', type: 'question', position: { x: 1010, y: 50 }, data: { question_id: 108, group: 3, containerId: 'f-3', answer_type: 'string' } },
+  { id: 'q-109', type: 'question', position: { x: 1010, y: 150 }, data: { question_id: 109, group: 3, containerId: 'f-3', answer_type: 'string' } },
+  { id: 'q-110', type: 'question', position: { x: 1010, y: 250 }, data: { question_id: 110, group: 3, containerId: 'f-3', answer_type: 'string' } },
+];
+
+const suite31Edges: any[] = [
+  { id: 'e1', source: 'q-104', target: 'dec-1' },
+  { id: 'e2', source: 'dec-1', sourceHandle: 'match', target: 'q-105' },
+  { id: 'e3', source: 'dec-1', sourceHandle: 'else', target: 'jump-grp3-else' },
+  { id: 'e4', source: 'q-105', sourceHandle: 'opt-w', target: 'jump-grp3-w' },
+  { id: 'e5', source: 'q-105', sourceHandle: 'opt-e', target: 'jump-grp2-e' },
+  { id: 'e6', source: 'q-106', sourceHandle: 'opt-q', target: 'q-109' },
+];
+
+const suite31Compiled = compileFlowToSchema(suite31Nodes as any, suite31Edges as any, {
+  groupNumber: 1,
+  totalGroups: 3,
+  hasNextGroup: true,
+  instruction: '',
+  groupJumps: [{ group_id: '3', group_title: 'Unconditional Fallback Group 3' }],
+});
+
+// Verify compiled group jumps
+const jumpOptE = suite31Compiled.groups_to_jump?.find((j) => j.group_id === '2' && j.trigger_value === 'e');
+const jumpOptW = suite31Compiled.groups_to_jump?.find((j) => j.group_id === '3' && j.trigger_value === 'w');
+const jumpElse = suite31Compiled.groups_to_jump?.find((j) => j.source_question_id === 104 && j.trigger_type === 'not_match');
+
+assert.ok(jumpOptE, "Jump to Group 2 for Option 'e' must exist");
+assert.strictEqual(jumpOptE?.source_question_id, 105);
+assert.strictEqual(jumpOptE?.trigger_value, 'e');
+
+assert.ok(jumpOptW, "Jump to Group 3 for Option 'w' must exist");
+assert.strictEqual(jumpOptW?.source_question_id, 105);
+assert.strictEqual(jumpOptW?.trigger_value, 'w');
+
+assert.ok(jumpElse, "Decision Check Else handle must exist targeting Group 3");
+assert.strictEqual(jumpElse?.group_id, '3');
+assert.strictEqual(jumpElse?.trigger_type, 'not_match');
+
+// Verify Group 2 questions resolve correctly to group 2
+const q106 = suite31Compiled.data.find((q) => q.question_id === 106);
+const q107 = suite31Compiled.data.find((q) => q.question_id === 107);
+assert.ok(q106 && q106.group === 2, 'Q#106 must belong to Group 2');
+assert.ok(q107 && q107.group === 2, 'Q#107 must belong to Group 2');
+
+// Helper to simulate MobilePreviewModal jump evaluation
+function resolveTargetGroup(answers: Record<string, string>, currentGroup: number, questions: any[], jumps: any[]): number | null {
+  let targetJumpGroup: number | null = null;
+  let fallbackGroupJump: number | null = null;
+
+  for (const q of questions) {
+    const rawAns = answers[String(q.question_id)];
+    if (!rawAns || rawAns.trim() === '') continue;
+
+    for (const j of jumps) {
+      const jId = parseInt(j.group_id, 10);
+      if (isNaN(jId) || jId === currentGroup) continue;
+
+      if (j.source_question_id !== undefined && j.source_question_id !== null) {
+        if (Number(j.source_question_id) === q.question_id) {
+          const trig = String(j.trigger_value || '').trim().toLowerCase();
+          const lowerAns = rawAns.trim().toLowerCase();
+          const trigType = j.trigger_type || 'match';
+
+          let matched = false;
+          if (trigType === 'not_match' || j.source_handle === 'else' || trigType === 'else') {
+            matched = lowerAns !== trig && !lowerAns.includes(trig);
+          } else {
+            matched = lowerAns === trig || lowerAns.includes(trig) || trig.includes(lowerAns);
+          }
+
+          if (matched) {
+            targetJumpGroup = jId;
+            break;
+          }
+        }
+      } else if (fallbackGroupJump === null) {
+        fallbackGroupJump = jId;
+      }
+    }
+    if (targetJumpGroup !== null) break;
+  }
+
+  return targetJumpGroup ?? fallbackGroupJump;
+}
+
+const g1Questions = suite31Compiled.data.filter((q) => q.group === 1);
+
+// Test Case 1: Selecting Option 'e' on Q#105 MUST navigate to Group 2
+const ansForOptionE = { '101': 'Text', '102': 'Text', '103': 'Text', '104': 'Yes', '105': 'e' };
+const destForE = resolveTargetGroup(ansForOptionE, 1, g1Questions, suite31Compiled.groups_to_jump || []);
+assert.strictEqual(destForE, 2, "Selecting option 'e' on Q#105 must target Group 2 (not Group 3)");
+
+// Test Case 2: Selecting Option 'w' on Q#105 MUST navigate to Group 3
+const ansForOptionW = { '101': 'Text', '102': 'Text', '103': 'Text', '104': 'Yes', '105': 'w' };
+const destForW = resolveTargetGroup(ansForOptionW, 1, g1Questions, suite31Compiled.groups_to_jump || []);
+assert.strictEqual(destForW, 3, "Selecting option 'w' on Q#105 must target Group 3");
+
+// Test Case 3: Condition Check failing ('No') MUST navigate to Group 3 via ELSE
+const ansForNo = { '101': 'Text', '102': 'Text', '103': 'Text', '104': 'No' };
+const destForNo = resolveTargetGroup(ansForNo, 1, g1Questions, suite31Compiled.groups_to_jump || []);
+assert.strictEqual(destForNo, 3, "Condition Check failing ('No') must target Group 3 via ELSE handle");
+
+// Test Case 4: Group 3 Question Filtering & Scope Isolation
+function simulateGroup3Questions(history: number[], answers: Record<string, string>): number[] {
+  const allMap = new Map<number, any>();
+  suite31Compiled.data.forEach((q: any) => allMap.set(q.question_id, q));
+
+  function checkVisibility(q: any, visiting: Set<number>): boolean {
+    if (visiting.has(q.question_id)) return false;
+    visiting.add(q.question_id);
+    if (!q.depends_on || q.depends_on.length === 0) return true;
+    for (const parentId of q.depends_on) {
+      const parentQ = allMap.get(parentId);
+      if (parentQ && !checkVisibility(parentQ, new Set(visiting))) return false;
+      const isCrossGroup = parentQ && parentQ.group && parentQ.group !== q.group;
+      const parentGroupVisited = parentQ?.group ? history.includes(parentQ.group) : false;
+      const parentAns = answers[String(parentId)] || '';
+      if (!parentAns || parentAns.trim() === '') {
+        if (isCrossGroup && !parentGroupVisited) continue;
+        return false;
+      }
+    }
+    return true;
+  }
+
+  const visible = new Set<number>();
+  suite31Compiled.data.forEach((q: any) => {
+    if (checkVisibility(q, new Set())) visible.add(q.question_id);
+  });
+
+  const jumpsToG3 = (suite31Compiled.groups_to_jump || []).filter((j: any) => j.group_id === '3');
+  const lastVisited = history.length > 0 ? history[history.length - 1] : undefined;
+
+  const generalJumps = jumpsToG3.filter((j: any) => !j.target_question_id);
+  const hasGeneralSatisfied = generalJumps.some((j: any) => {
+    if (j.source_group !== undefined && lastVisited !== undefined && j.source_group !== lastVisited) return false;
+    const qId = j.source_question_id;
+    if (qId !== undefined && qId !== null) {
+      const ans = (answers[String(qId)] || '').trim().toLowerCase();
+      const trig = String(j.trigger_value || '').trim().toLowerCase();
+      return j.trigger_type === 'not_match' ? (ans !== trig && !ans.includes(trig)) : ans === trig;
+    }
+    return true;
+  });
+
+  let allowedIds: Set<number> | null = null;
+  if (!hasGeneralSatisfied) {
+    const specificJumps = jumpsToG3.filter((j: any) => Boolean(j.target_question_id));
+    const satisfiedTargets = new Set<number>();
+    for (const j of specificJumps) {
+      const qId = j.source_question_id;
+      const targetQId = Number(j.target_question_id);
+      if (qId !== undefined && qId !== null) {
+        const ans = (answers[String(qId)] || '').trim().toLowerCase();
+        const trig = String(j.trigger_value || '').trim().toLowerCase();
+        if (ans === trig) satisfiedTargets.add(targetQId);
+      }
+    }
+    if (satisfiedTargets.size > 0) allowedIds = satisfiedTargets;
+  }
+
+  return suite31Compiled.data
+    .filter((q: any) => q.group === 3)
+    .filter((q: any) => (!allowedIds || allowedIds.has(q.question_id)) && visible.has(q.question_id))
+    .map((q: any) => q.question_id);
+}
+
+// 4a. Jumping directly from Group 1 to Group 3 (skipping Group 2) shows ALL questions in Group 3 [108, 109, 110]
+const g3DirectQuestions = simulateGroup3Questions([1], { '104': 'No' });
+assert.deepStrictEqual(g3DirectQuestions, [108, 109, 110], 'Direct jump from Group 1 to Group 3 must show all Group 3 questions');
+
+// 4b. Branching from Group 2 (Option q) specifically into Q#109 isolates Group 3 to ONLY Q#109
+const g3BranchQuestions = simulateGroup3Questions([1, 2], { '104': 'Yes', '105': 'e', '106': 'q' });
+assert.deepStrictEqual(g3BranchQuestions, [109], 'Specific branch from Q#106 option q must isolate Group 3 strictly to Q#109');
+
+console.log('   ✅ Multi-option branch selection, Option "e" -> Group 2 priority, and fallback isolation operating with 100% precision.');
+
+console.log('\n🎉 ALL TESTS PASSED SUCCESSFULLY! (31/31 test suites passed)\n');
 

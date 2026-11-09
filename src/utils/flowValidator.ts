@@ -35,7 +35,11 @@ export function resolveNodeGroupId(
     if (typeof d.numericGroupId === 'number' && !isNaN(d.numericGroupId) && d.numericGroupId > 0) {
       return d.numericGroupId;
     }
-    if (d.groupId) {
+    if (d.title || d.titleBn) {
+      const titleNum = parseInt(String(d.title || d.titleBn).replace(/\D+/g, ''), 10);
+      if (!isNaN(titleNum) && titleNum > 0) return titleNum;
+    }
+    if (d.groupId && !String(d.groupId).startsWith('grp-frame-')) {
       const parsed = parseInt(String(d.groupId).replace(/\D+/g, ''), 10);
       if (!isNaN(parsed) && parsed > 0) return parsed;
     }
@@ -49,7 +53,11 @@ export function resolveNodeGroupId(
       if (typeof cd?.numericGroupId === 'number' && !isNaN(cd.numericGroupId) && cd.numericGroupId > 0) {
         return cd.numericGroupId;
       }
-      if (cd?.groupId) {
+      if (cd?.title || cd?.titleBn) {
+        const titleNum = parseInt(String(cd.title || cd.titleBn).replace(/\D+/g, ''), 10);
+        if (!isNaN(titleNum) && titleNum > 0) return titleNum;
+      }
+      if (cd?.groupId && !String(cd.groupId).startsWith('grp-frame-')) {
         const parsed = parseInt(String(cd.groupId).replace(/\D+/g, ''), 10);
         if (!isNaN(parsed) && parsed > 0) return parsed;
       }
