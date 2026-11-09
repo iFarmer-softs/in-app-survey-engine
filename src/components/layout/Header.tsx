@@ -255,11 +255,11 @@ export const Header: React.FC<HeaderProps> = ({
               )}
             </div>
 
-            {/* NestJS Server Connectivity Status Pill */}
+            {/* Backend Server Connectivity Status Pill */}
             {isServerConnected ? (
               <div
                 className="header-server-status-pill connected"
-                title="Connected to NestJS Backend Server (http://localhost:3000/api)"
+                title="Connected to Spring Boot Backend Server (http://localhost:8080/api)"
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -283,12 +283,12 @@ export const Header: React.FC<HeaderProps> = ({
                     boxShadow: '0 0 6px rgba(16, 185, 129, 0.6)',
                   }}
                 />
-                <span>NestJS API</span>
+                <span>Spring Boot API</span>
               </div>
             ) : (
               <div
                 className="header-server-status-pill offline"
-                title="NestJS Backend Offline (Using Local Storage Cache)"
+                title="Backend Server Offline (Using Local Storage Cache)"
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',

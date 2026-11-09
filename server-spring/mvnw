@@ -1,0 +1,90 @@
+#!/bin/sh
+# ----------------------------------------------------------------------------
+# Maven Wrapper Script for UNIX / macOS
+# ----------------------------------------------------------------------------
+
+set -e
+
+# Resolve directory of this script
+PRG="$0"
+while [ -h "$PRG" ]; do
+  ls=`ls -ld "$PRG"`
+  link=`expr "$ls" : '.*-> \(.*\)$'`
+  if expr "$link" : '/.*' > /dev/null; then
+    PRG="$link"
+  else
+    PRG=`dirname "$PRG"`/"$link"
+  fi
+done
+BASE_DIR=`dirname "$PRG"`
+BASE_DIR=`cd "$BASE_DIR" >/dev/null; pwd`
+
+# Check JAVA_HOME or auto-detect on macOS
+if [ -z "$JAVA_HOME" ]; then
+  GRADLE_JDK="$HOME/.gradle/jdks/jetbrains_s_r_o_-21-aarch64-os_x.2/jbrsdk_jcef-21.0.10-osx-aarch64-b1163.105/Contents/Home"
+  ANDROID_JDK="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+  if [ -d "$GRADLE_JDK" ]; then
+    export JAVA_HOME="$GRADLE_JDK"
+    export PATH="$JAVA_HOME/bin:$PATH"
+  elif [ -d "$ANDROID_JDK" ]; then
+    export JAVA_HOME="$ANDROID_JDK"
+    export PATH="$JAVA_HOME/bin:$PATH"
+  elif command -v /usr/libexec/java_home >/dev/null 2>&1; then
+    DETECTED_JAVA_HOME=`/usr/libexec/java_home 2>/dev/null || true`
+    if [ -n "$DETECTED_JAVA_HOME" ]; then
+      export JAVA_HOME="$DETECTED_JAVA_HOME"
+    fi
+  fi
+fi
+
+if [ -n "$JAVA_HOME" ]; then
+  JAVACMD="$JAVA_HOME/bin/java"
+else
+  JAVACMD="java"
+fi
+
+if [ ! -x "$JAVACMD" ] && ! command -v "$JAVACMD" >/dev/null 2>&1; then
+  echo "Error: JAVA_HOME is not set and no 'java' command could be found in your PATH." >&2
+  echo "Please set JAVA_HOME or install Java 21+." >&2
+  exit 1
+fi
+
+WRAPPER_PROP="$BASE_DIR/.mvn/wrapper/maven-wrapper.properties"
+MAVEN_VERSION="3.9.9"
+DIST_URL="https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/$MAVEN_VERSION/apache-maven-$MAVEN_VERSION-bin.zip"
+
+if [ -f "$WRAPPER_PROP" ]; then
+  PROP_URL=`grep '^distributionUrl=' "$WRAPPER_PROP" | cut -d'=' -f2- | tr -d '\r'`
+  if [ -n "$PROP_URL" ]; then
+    DIST_URL="$PROP_URL"
+  fi
+fi
+
+USER_HOME="${HOME:-$USERPROFILE}"
+MAVEN_USER_HOME="${MAVEN_USER_HOME:-$USER_HOME/.m2}"
+WRAPPER_DIR="$MAVEN_USER_HOME/wrapper/dists/apache-maven-$MAVEN_VERSION"
+MAVEN_HOME="$WRAPPER_DIR/apache-maven-$MAVEN_VERSION"
+
+if [ ! -d "$MAVEN_HOME" ]; then
+  echo "Downloading Maven $MAVEN_VERSION..."
+  mkdir -p "$WRAPPER_DIR"
+  ZIP_FILE="$WRAPPER_DIR/apache-maven-$MAVEN_VERSION-bin.zip"
+  
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSL "$DIST_URL" -o "$ZIP_FILE"
+  elif command -v wget >/dev/null 2>&1; then
+    wget -q "$DIST_URL" -O "$ZIP_FILE"
+  else
+    echo "Error: Neither curl nor wget was found to download Maven." >&2
+    exit 1
+  fi
+
+  echo "Unzipping Maven to $WRAPPER_DIR..."
+  unzip -q -o "$ZIP_FILE" -d "$WRAPPER_DIR"
+  rm -f "$ZIP_FILE"
+fi
+
+MVN_EXEC="$MAVEN_HOME/bin/mvn"
+chmod +x "$MVN_EXEC"
+
+exec "$MVN_EXEC" "$@"

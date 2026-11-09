@@ -1,0 +1,39 @@
+server:
+  port: ${PORT:8080}
+
+spring:
+  application:
+    name: in-app-survey-engine-server
+
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/survey_engine}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:postgrespassword}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      connection-timeout: 20000
+      maximum-pool-size: 10
+      minimum-idle: 2
+
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+        jdbc:
+          lob:
+            non_contextual_creation: true
+
+# Survey Engine Application Configuration
+survey-engine:
+  cors:
+    allowed-origins:
+      - "http://localhost:5173"
+      - "http://localhost:3000"
+      - "http://localhost:4173"
+      - "http://127.0.0.1:5173"
+      - "http://127.0.0.1:3000"
+

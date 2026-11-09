@@ -12,7 +12,9 @@
     "server": "cd server && npm run start:dev",
     "server:build": "cd server && npm run build",
     "server:start": "cd server && npm run start",
-    "server:prod": "cd server && npm run start:prod"
+    "server:prod": "cd server && npm run start:prod",
+    "server:spring": "cd server-spring && ./mvnw spring-boot:run",
+    "server:spring:gradle": "cd server-spring && gradle bootRun"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.3.1",
