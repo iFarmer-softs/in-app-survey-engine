@@ -3,7 +3,8 @@ import { DataSource } from 'typeorm';
 import { getDatabaseConfig } from './database.config';
 import { PostgresProjectsRepository } from './repositories/postgres-projects.repository';
 import { PostgresGroupsRepository } from './repositories/postgres-groups.repository';
-import { ProjectEntity, VersionEntity, QuestionGroupEntity } from './entities';
+import { PostgresResponsesRepository } from './repositories/postgres-responses.repository';
+import { ProjectEntity, VersionEntity, QuestionGroupEntity, SurveyResponseEntity } from './entities';
 import { SEED_PROJECTS, SEED_GROUPS } from '../storage/seeds';
 
 @Injectable()
@@ -13,6 +14,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
   private isConnected = false;
   private projectsRepository: PostgresProjectsRepository | null = null;
   private groupsRepository: PostgresGroupsRepository | null = null;
+  private responsesRepository: PostgresResponsesRepository | null = null;
 
   async onModuleInit() {
     await this.initDatabase();
@@ -29,7 +31,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
 
     try {
       this.logger.log(`Attempting PostgreSQL connection to: ${config.host || 'remote'}:${config.port || '5432'}/${config.database || ''}...`);
-      
+
       const ds = new DataSource({
         ...config,
         connectTimeoutMS: 10000,
@@ -41,6 +43,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
 
       this.projectsRepository = new PostgresProjectsRepository(this.dataSource);
       this.groupsRepository = new PostgresGroupsRepository(this.dataSource);
+      this.responsesRepository = new PostgresResponsesRepository(this.dataSource);
 
       this.logger.log('🚀 Successfully connected to PostgreSQL database!');
 
@@ -51,6 +54,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       this.dataSource = null;
       this.projectsRepository = null;
       this.groupsRepository = null;
+      this.responsesRepository = null;
 
       this.logger.warn(`⚠️ PostgreSQL connection attempt failed (${err?.message || err}).`);
       this.logger.warn(`💡 Operating in local storage mode. To use PostgreSQL:`);
@@ -150,6 +154,10 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
 
   getGroupsRepo(): PostgresGroupsRepository | null {
     return this.groupsRepository;
+  }
+
+  getResponsesRepo(): PostgresResponsesRepository | null {
+    return this.responsesRepository;
   }
 
   getStatusInfo() {

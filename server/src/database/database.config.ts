@@ -1,7 +1,7 @@
 import { TypeOrmModuleOptions } from '@nestjs/typeorm';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
-import { ProjectEntity, VersionEntity, QuestionGroupEntity } from './entities';
+import { ProjectEntity, VersionEntity, QuestionGroupEntity, SurveyResponseEntity } from './entities';
 
 // Load .env
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
@@ -22,16 +22,16 @@ export function getDatabaseConfig(): TypeOrmModuleOptions {
 
   const baseConfig: Partial<TypeOrmModuleOptions> = {
     type: 'postgres',
-    entities: [ProjectEntity, VersionEntity, QuestionGroupEntity],
+    entities: [ProjectEntity, VersionEntity, QuestionGroupEntity, SurveyResponseEntity],
     synchronize: process.env.DB_SYNCHRONIZE !== 'false', // Auto create / sync schema
     logging: process.env.DB_LOGGING === 'true',
     ssl: requiresSsl ? { rejectUnauthorized: false } : false,
     extra: requiresSsl
       ? {
-          ssl: {
-            rejectUnauthorized: false,
-          },
-        }
+        ssl: {
+          rejectUnauthorized: false,
+        },
+      }
       : undefined,
   };
 

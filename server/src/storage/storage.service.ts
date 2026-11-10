@@ -10,9 +10,11 @@ export class StorageService implements OnModuleInit {
   private readonly dataDir = path.resolve(__dirname, '../../data');
   private readonly projectsFile = path.join(this.dataDir, 'projects.json');
   private readonly groupsFile = path.join(this.dataDir, 'groups.json');
+  private readonly responsesFile = path.join(this.dataDir, 'responses.json');
 
   private projects: FlowchartProject[] = [];
   private groups: ReusableQuestionGroup[] = [];
+  private responses: any[] = [];
 
   onModuleInit() {
     this.ensureDataDirectory();
@@ -60,6 +62,18 @@ export class StorageService implements OnModuleInit {
       this.persistGroups();
       this.logger.log(`Initialized reusable groups with seed data (${this.groups.length} groups).`);
     }
+    // 3. Responses
+    if (fs.existsSync(this.responsesFile)) {
+      try {
+        const raw = fs.readFileSync(this.responsesFile, 'utf-8');
+        this.responses = JSON.parse(raw);
+      } catch (err) {
+        this.responses = [];
+      }
+    } else {
+      this.responses = [];
+      this.persistResponses();
+    }
   }
 
   // --- Projects Methods ---
@@ -102,6 +116,21 @@ export class StorageService implements OnModuleInit {
 
   private persistGroups() {
     fs.writeFileSync(this.groupsFile, JSON.stringify(this.groups, null, 2), 'utf-8');
+  }
+
+  // --- Responses Methods ---
+  getAllResponses(): any[] {
+    return this.responses;
+  }
+
+  saveResponse(resp: any): any {
+    this.responses.unshift(resp);
+    this.persistResponses();
+    return resp;
+  }
+
+  private persistResponses() {
+    fs.writeFileSync(this.responsesFile, JSON.stringify(this.responses, null, 2), 'utf-8');
   }
 }
 

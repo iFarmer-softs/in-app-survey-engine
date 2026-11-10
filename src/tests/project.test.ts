@@ -3124,5 +3124,179 @@ assert.strictEqual((committedNodes.find((n) => n.id === 'sym-jump')!.data as any
 
 console.log('   ✅ Synchronized Parent Container Dragging & Universal Symbol Enclosure operating with 100% precision.');
 
-console.log('\n🎉 ALL TESTS PASSED SUCCESSFULLY! (32/32 test suites passed)\n');
+// ============================================================================
+// 33. Testing Phase 1: Survey Serving & Dynamic KYC Response Ingestion API
+// ============================================================================
+console.log('\n3️⃣3️⃣ Testing Phase 1: Survey Serving & Dynamic KYC Response Ingestion API...');
+
+const { SurveysService } = await import('../../server/src/surveys/surveys.service.js');
+
+const surveyDbMock = {
+  isPostgresConnected: () => false,
+  getProjectsRepo: () => null,
+  getGroupsRepo: () => null,
+  getResponsesRepo: () => null,
+  getStatusInfo: () => ({ connected: false, type: 'file-fallback' }),
+};
+
+const surveyProjectService = new ProjectsService(testStorage, surveyDbMock as any);
+const surveyCompilerService = new CompilerService();
+const surveysService = new SurveysService(
+  surveyProjectService,
+  surveyCompilerService,
+  surveyDbMock as any,
+  testStorage
+);
+
+// 33A: Create a test survey project with 2 groups
+const testKycSurvey = await surveyProjectService.create({
+  title: 'Potato Farmer Field KYC 2026',
+  titleBn: 'আলু চাষী মাঠ পর্যায় কেওয়াইসি ২০২৬',
+  description: 'Mobile dynamic KYC survey for agricultural micro-credit assessment.',
+  totalGroups: 2,
+  nodes: [
+    {
+      id: 'q-node-101',
+      type: 'question',
+      position: { x: 100, y: 100 },
+      data: {
+        question_id: 101,
+        question: 'Do you cultivate potato this season?',
+        question_bn: 'আপনি কি এই মৌসুমে আলু চাষ করেছেন?',
+        answer_type: 'select_one',
+        options: 'হ্যাঁ, না',
+        mandatory: true,
+        group: 1,
+      },
+    },
+    {
+      id: 'q-node-102',
+      type: 'question',
+      position: { x: 100, y: 250 },
+      data: {
+        question_id: 102,
+        question: 'Total Land Acreage for Potato',
+        question_bn: 'আলু চাষকৃত জমির পরিমাণ (একর)',
+        answer_type: 'float',
+        mandatory: true,
+        group: 1,
+      },
+    },
+    {
+      id: 'q-node-201',
+      type: 'question',
+      position: { x: 400, y: 100 },
+      data: {
+        question_id: 201,
+        question: 'Expected Harvest Month',
+        question_bn: 'প্রত্যাশিত ফসল তোলার মাস',
+        answer_type: 'dropdown',
+        options: 'জানুয়ারি, ফেব্রুয়ারি, মার্চ',
+        mandatory: true,
+        group: 2,
+      },
+    },
+  ],
+  edges: [
+    {
+      id: 'e-101-102',
+      source: 'q-node-101',
+      sourceHandle: 'opt-হ্যাঁ',
+      target: 'q-node-102',
+      data: { validationType: 'match', triggerValue: 'হ্যাঁ' },
+    },
+  ],
+  groupMeta: {
+    groupNumber: 1,
+    totalGroups: 2,
+    hasNextGroup: true,
+    instruction: 'কৃষকের আলু চাষ ও ফলন সংক্রান্ত তথ্য সংগ্রহ করুন।',
+    groupJumps: [{ group_id: '2', group_title: 'মৌসুম ও ফলন তথ্য' }],
+  },
+});
+
+// 33B: Test listSurveys()
+const surveyList = await surveysService.listSurveys();
+assert.ok(surveyList.length >= 1, 'Survey list must contain created survey');
+const createdHeader = surveyList.find((s) => s.id === testKycSurvey.id);
+assert.ok(createdHeader, 'Created survey must be found in survey list');
+assert.strictEqual(createdHeader?.title, 'Potato Farmer Field KYC 2026');
+assert.strictEqual(createdHeader?.totalGroups, 2);
+
+// 33C: Test getSurveyGroup(1) for mobile runtime
+const group1Schema = await surveysService.getSurveyGroup(testKycSurvey.id, 1);
+assert.strictEqual(group1Schema.current_group, 1);
+assert.strictEqual(group1Schema.total_groups, 2);
+assert.strictEqual(group1Schema.next, true, 'Next group must be available since group 2 exists');
+assert.strictEqual(group1Schema.data.length, 2, 'Group 1 must contain 2 questions');
+assert.strictEqual(group1Schema.data[0].question_id, 101);
+assert.strictEqual(group1Schema.data[1].question_id, 102);
+assert.deepStrictEqual(group1Schema.data[1].depends_on, [101], 'Question 102 must depend on Question 101');
+
+// 33D: Test getSurveyGroup(2) for mobile runtime
+const group2Schema = await surveysService.getSurveyGroup(testKycSurvey.id, 2);
+assert.strictEqual(group2Schema.current_group, 2);
+assert.strictEqual(group2Schema.next, false, 'Group 2 is final group so next must be false');
+assert.strictEqual(group2Schema.data.length, 1, 'Group 2 must contain 1 question');
+assert.strictEqual(group2Schema.data[0].question_id, 201);
+
+// 33E: Test submitResponse() for Group 1 with answers & GPS location
+const submittedGroup1 = await surveysService.submitResponse(testKycSurvey.id, {
+  groupNumber: 1,
+  respondentId: 'farmer-karim-007',
+  surveyorId: 'agent-shafiq-10',
+  latitude: 24.3745,
+  longitude: 88.6042,
+  isGroupJumped: false,
+  answers: {
+    '101': 'হ্যাঁ',
+    '102': '2.5',
+  },
+});
+
+assert.ok(submittedGroup1.id.startsWith('resp-'));
+assert.strictEqual(submittedGroup1.groupNumber, 1);
+assert.strictEqual(submittedGroup1.respondentId, 'farmer-karim-007');
+assert.strictEqual(submittedGroup1.surveyorId, 'agent-shafiq-10');
+assert.strictEqual(submittedGroup1.latitude, 24.3745);
+assert.strictEqual(submittedGroup1.longitude, 88.6042);
+assert.strictEqual((submittedGroup1.answers as any)['101'], 'হ্যাঁ');
+assert.strictEqual((submittedGroup1.answers as any)['102'], '2.5');
+
+// 33F: Test Resumption & Coordinator Review / Modify Pre-fill: getSurveyGroup(1, 'farmer-karim-007')
+const resumedGroup1 = await surveysService.getSurveyGroup(testKycSurvey.id, 1, 'farmer-karim-007');
+assert.strictEqual(resumedGroup1.data[0].value, 'হ্যাঁ', 'Question 101 must be pre-filled with previous answer');
+assert.strictEqual(resumedGroup1.data[1].value, '2.5', 'Question 102 must be pre-filled with previous answer');
+
+// 33G: Test submitResponse() for Group 2
+const submittedGroup2 = await surveysService.submitResponse(testKycSurvey.id, {
+  groupNumber: 2,
+  respondentId: 'farmer-karim-007',
+  surveyorId: 'agent-shafiq-10',
+  latitude: 24.3750,
+  longitude: 88.6045,
+  isGroupJumped: false,
+  answers: [
+    { questionId: 201, answer: 'ফেব্রুয়ারি' },
+  ],
+});
+assert.strictEqual(submittedGroup2.groupNumber, 2);
+
+// 33H: Test getRespondentSummary() for Coordinator / Supervisor View
+const summary = await surveysService.getRespondentSummary(testKycSurvey.id, 'farmer-karim-007');
+assert.strictEqual(summary.respondentId, 'farmer-karim-007');
+assert.strictEqual(summary.completedGroupsCount, 2, 'Farmer Karim must have 2 completed group submissions');
+assert.strictEqual(summary.answers['101'], 'হ্যাঁ');
+assert.strictEqual(summary.answers['102'], '2.5');
+assert.strictEqual(summary.answers['201'], 'ফেব্রুয়ারি');
+assert.strictEqual(summary.lastLocation.lat, 24.3750);
+assert.strictEqual(summary.lastLocation.lng, 88.6045);
+
+// Clean up test survey
+await surveyProjectService.delete(testKycSurvey.id);
+
+console.log('   ✅ Survey Serving (GET /api/surveys/:id/groups/:g) & Ingestion (POST /responses) verified with 100% precision.');
+console.log('   ✅ Resumption & Coordinator Review pre-fill (ModifyCreditScoreKycActivity flow) verified with 100% precision.');
+
+console.log('\n🎉 ALL TESTS PASSED SUCCESSFULLY! (33/33 test suites passed)\n');
 
