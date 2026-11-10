@@ -127,12 +127,21 @@ export class SurveysService {
       });
     const hasNext = targetGroup < totalGroups || Boolean(hasSubsequentJump);
 
+    const normalizedJumps = compiled.groups_to_jump
+      ? compiled.groups_to_jump.map((j: any) => ({
+          ...j,
+          group_id: String(j.group_id ?? j.target_group_id ?? ''),
+          target_group_id: String(j.target_group_id ?? j.group_id ?? ''),
+        }))
+      : undefined;
+
     return {
       ...compiled,
       total_groups: totalGroups,
       current_group: targetGroup,
       next: Boolean(hasNext),
       data: filteredQuestions,
+      groups_to_jump: normalizedJumps,
     };
   }
 

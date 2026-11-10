@@ -138,18 +138,26 @@ public class SurveyService {
         // Compute navigation flags
         int totalGroups = compiled.total_groups();
         boolean hasSubsequentJump = false;
+        List<Map<String, Object>> normalizedJumps = null;
         if (compiled.groups_to_jump() != null) {
+            normalizedJumps = new ArrayList<>();
             for (Map<String, Object> j : compiled.groups_to_jump()) {
+                Map<String, Object> copy = new LinkedHashMap<>(j);
                 Object gObj = j.get("group_id");
+                if (gObj == null) {
+                    gObj = j.get("target_group_id");
+                }
                 if (gObj != null) {
+                    copy.put("group_id", String.valueOf(gObj));
+                    copy.put("target_group_id", String.valueOf(gObj));
                     try {
                         int jGroup = Integer.parseInt(String.valueOf(gObj));
                         if (jGroup > targetGroup) {
                             hasSubsequentJump = true;
-                            break;
                         }
                     } catch (NumberFormatException ignored) {}
                 }
+                normalizedJumps.add(copy);
             }
         }
         boolean hasNext = (targetGroup < totalGroups) || hasSubsequentJump;
@@ -161,7 +169,7 @@ public class SurveyService {
                 compiled.instruction(),
                 filteredQuestions,
                 compiled.groups(),
-                compiled.groups_to_jump()
+                normalizedJumps
         );
     }
 
