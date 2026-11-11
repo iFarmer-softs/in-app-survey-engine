@@ -234,6 +234,7 @@ export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
     >
       {/* Sidebar Header: Pure Inspector */}
       <div className="sidebar-header">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 6px' }}>
             <Sliders size={15} style={{ color: 'var(--primary-color, #10b981)' }} />
             <span style={{ fontSize: 13, fontWeight: 700, color: '#f8fafc', letterSpacing: '0.2px' }}>
@@ -248,29 +249,8 @@ export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
                         ? 'Jump Inspector'
                         : 'Node Inspector'
                 : selectedEdge
-                  ? 'Rule Inspector'
-                  : 'Group Settings'}
-              ? 'Rule Link Inspector'
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 6px' }}>
-                  <Sliders size={15} style={{ color: 'var(--primary-color, #10b981)' }} />
-                  <span style={{ fontSize: 13, fontWeight: 700, color: '#f8fafc', letterSpacing: '0.2px' }}>
-                    {selectedNode
-                      ? selectedNode.type === 'question'
-                        ? 'Question Inspector'
-                        : selectedNode.type === 'groupContainer' || selectedNode.type === 'groupFrame'
-                          ? 'Question Group Inspector'
-                          : selectedNode.type === 'decision'
-                            ? 'Decision Inspector'
-                            : selectedNode.type === 'groupJump'
-                              ? 'Jump Inspector'
-                              : 'Node Inspector'
-                      : selectedEdge
-                        ? 'Rule Link Inspector'
-                        : 'Survey Group Settings'}
-                  </span>
-                </button>
-              </div>
+                  ? 'Rule Link Inspector'
+                  : 'Survey Group Settings'}
             </span>
           </div>
 
@@ -286,88 +266,12 @@ export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
             </button>
           )}
         </div>
-        {onToggleCollapse && (
-          <button
-            type="button"
-            className="sidebar-collapse-btn"
-            onClick={onToggleCollapse}
-            title="Collapse Inspector (Ctrl+J)"
-            style={{ marginLeft: 'auto' }}
-          >
-            <PanelRightClose size={15} />
-          </button>
-        )}
       </div>
-    </div>
 
-        {/* Tab 1: Input Type Views Palette */ }
-  {
-    activeTab === 'widgets' && (
-      <div className="palette-container">
-        <div className="palette-intro">
-          <span className="intro-title">Question Input Widgets</span>
-          <span className="intro-sub">
-            Drag onto the canvas to add an input view, or click to apply to selected question.
-          </span>
-        </div>
-
-        <div className="input-types-grid">
-          {INPUT_TYPE_VIEWS.map((item) => (
-            <div
-              key={item.type}
-              className={`input-type-card ${selectedNode &&
-                selectedNode.type === 'question' &&
-                (selectedNode.data as any).answer_type === item.type
-                ? 'is-current-type'
-                : ''
-                }`}
-              draggable
-              onDragStart={(e) => onDragStart(e, item)}
-              onClick={() => handleApplyAnswerType(item)}
-              title="Drag onto canvas or click to apply to selected question"
-            >
-              <div className="card-drag-indicator">
-                <GripVertical size={12} />
-              </div>
-
-              <div
-                className="input-type-icon-box"
-                style={{ color: item.color, backgroundColor: `${item.color}15` }}
-              >
-                {item.icon}
-              </div>
-
-              <div className="input-type-info">
-                <div className="input-type-name-row">
-                  <span className="input-type-name">{item.title}</span>
-                  <span
-                    className="input-type-badge"
-                    style={{ color: item.color, backgroundColor: `${item.color}15` }}
-                  >
-                    {item.badge}
-                  </span>
-                </div>
-                <span className="input-type-bn">{item.titleBn}</span>
-                <span className="input-type-desc">{item.description}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    )
-  }
-
-  {/* Tab 2: Property Inspector */ }
-  {
-    activeTab === 'inspector' && (
+      {/* Property Inspector Content */}
       <div className="inspector-content">
-        {/* Property Inspector Content */}
-        <div className="inspector-content">
-          {/* If Edge Selected */}
-          {/* Property Inspector Content */}
-          <div className="inspector-content">
-            {/* If Edge Selected */}
-            {selectedEdge && (() => {
+        {/* If Edge Selected */}
+        {selectedEdge && (() => {
               const edgeData = (selectedEdge.data as any) || {};
 
               return (
@@ -2146,11 +2050,7 @@ export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
                 </div>
               </div>
             )}
-          </div>
-      )}
-        </aside>
-        );
       </div>
-    </aside >
+    </aside>
   );
 };
