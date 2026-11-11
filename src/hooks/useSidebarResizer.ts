@@ -4,13 +4,13 @@ const STORAGE_KEY_LEFT_WIDTH = 'survey_left_sidebar_width';
 const STORAGE_KEY_RIGHT_WIDTH = 'survey_right_sidebar_width';
 const STORAGE_KEY_BOTTOM_HEIGHT = 'survey_bottom_dock_height';
 
-const DEFAULT_LEFT_WIDTH = 290;
-const MIN_LEFT_WIDTH = 210;
-const MAX_LEFT_WIDTH = 520;
+const DEFAULT_LEFT_WIDTH = 240;
+const MIN_LEFT_WIDTH = 180;
+const MAX_LEFT_WIDTH = 480;
 
-const DEFAULT_RIGHT_WIDTH = 340;
-const MIN_RIGHT_WIDTH = 260;
-const MAX_RIGHT_WIDTH = 640;
+const DEFAULT_RIGHT_WIDTH = 300;
+const MIN_RIGHT_WIDTH = 240;
+const MAX_RIGHT_WIDTH = 600;
 
 const DEFAULT_BOTTOM_HEIGHT = 260;
 const MIN_BOTTOM_HEIGHT = 160;
@@ -24,7 +24,7 @@ export function useSidebarResizer() {
       if (!isNaN(parsed) && parsed >= MIN_LEFT_WIDTH && parsed <= MAX_LEFT_WIDTH) {
         return parsed;
       }
-    } catch {}
+    } catch { }
     return DEFAULT_LEFT_WIDTH;
   });
 
@@ -35,7 +35,7 @@ export function useSidebarResizer() {
       if (!isNaN(parsed) && parsed >= MIN_RIGHT_WIDTH && parsed <= MAX_RIGHT_WIDTH) {
         return parsed;
       }
-    } catch {}
+    } catch { }
     return DEFAULT_RIGHT_WIDTH;
   });
 
@@ -46,7 +46,7 @@ export function useSidebarResizer() {
       if (!isNaN(parsed) && parsed >= MIN_BOTTOM_HEIGHT && parsed <= MAX_BOTTOM_HEIGHT) {
         return parsed;
       }
-    } catch {}
+    } catch { }
     return DEFAULT_BOTTOM_HEIGHT;
   });
 
@@ -98,7 +98,7 @@ export function useSidebarResizer() {
     setLeftWidth(DEFAULT_LEFT_WIDTH);
     try {
       localStorage.setItem(STORAGE_KEY_LEFT_WIDTH, String(DEFAULT_LEFT_WIDTH));
-    } catch {}
+    } catch { }
     setTimeout(() => window.dispatchEvent(new Event('resize')), 50);
   }, []);
 
@@ -106,7 +106,7 @@ export function useSidebarResizer() {
     setRightWidth(DEFAULT_RIGHT_WIDTH);
     try {
       localStorage.setItem(STORAGE_KEY_RIGHT_WIDTH, String(DEFAULT_RIGHT_WIDTH));
-    } catch {}
+    } catch { }
     setTimeout(() => window.dispatchEvent(new Event('resize')), 50);
   }, []);
 
@@ -114,7 +114,7 @@ export function useSidebarResizer() {
     setBottomHeight(DEFAULT_BOTTOM_HEIGHT);
     try {
       localStorage.setItem(STORAGE_KEY_BOTTOM_HEIGHT, String(DEFAULT_BOTTOM_HEIGHT));
-    } catch {}
+    } catch { }
     setTimeout(() => window.dispatchEvent(new Event('resize')), 50);
   }, []);
 
@@ -154,21 +154,21 @@ export function useSidebarResizer() {
             localStorage.setItem(STORAGE_KEY_LEFT_WIDTH, String(w));
             return w;
           });
-        } catch {}
+        } catch { }
       } else if (resizingSide === 'right') {
         try {
           setRightWidth((w) => {
             localStorage.setItem(STORAGE_KEY_RIGHT_WIDTH, String(w));
             return w;
           });
-        } catch {}
+        } catch { }
       } else if (resizingSide === 'bottom') {
         try {
           setBottomHeight((h) => {
             localStorage.setItem(STORAGE_KEY_BOTTOM_HEIGHT, String(h));
             return h;
           });
-        } catch {}
+        } catch { }
       }
 
       setResizingSide(null);

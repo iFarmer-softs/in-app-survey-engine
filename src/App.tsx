@@ -2904,10 +2904,10 @@ const FlowEditor: React.FC = () => {
                   type="button"
                   className="floating-sidebar-toggle left-dock"
                   onClick={toggleLeftSidebar}
-                  title="Expand Symbols & Question Groups (Ctrl+B)"
+                  title="Expand Survey Elements Toolbox (Ctrl+B)"
                 >
                   <PanelLeftOpen size={14} />
-                  <span className="dock-label">Symbols</span>
+                  <span className="dock-label">Toolbox</span>
                 </button>
               )}
 
@@ -2923,13 +2923,14 @@ const FlowEditor: React.FC = () => {
                 </button>
               )}
 
-              {/* LEFT PANEL: Flowchart Symbols & Reusable Groups */}
+              {/* LEFT PANEL: Survey Elements Toolbox (Logic & Question Types) */}
               <FlowchartSymbolsPanel
                 isOpen={isLeftSidebarOpen}
                 width={leftWidth}
                 isResizing={resizingSide === 'left'}
                 onToggleCollapse={toggleLeftSidebar}
                 onAddSymbol={handleAddSymbol}
+                onAddQuestion={handleAddQuestionFromWidget}
                 groups={groups}
                 onInsertGroup={(grp) => handleInsertGroupIntoCanvas(grp)}
                 onDeleteGroup={handleDeleteGroup}

@@ -2,54 +2,37 @@ import React, { useState, useMemo } from 'react';
 import {
   Search,
   GripVertical,
-  Network,
+  GitBranch,
   X,
   PanelLeftClose,
+  Sparkles,
+  Layers,
 } from 'lucide-react';
-import type { FlowNodeType } from '../../types/survey';
+import type { FlowNodeType, AnswerType } from '../../types/survey';
 import type { ReusableQuestionGroup } from '../../types/group';
+import { INPUT_TYPE_VIEWS, type InputTypeItem } from './InputTypeViewsPanel';
 
-interface FlowchartSymbol {
+interface FlowLogicItem {
   id: string;
-  name: string;
-  nameBn: string;
-  standardSymbol: string;
   nodeType: FlowNodeType;
+  title: string;
+  titleBn: string;
+  badge: string;
+  icon: React.ReactNode;
   color: string;
   description: string;
-  svgShape: React.ReactNode;
 }
 
-const FLOWCHART_SYMBOLS: FlowchartSymbol[] = [
+const FLOW_LOGIC_ITEMS: FlowLogicItem[] = [
   {
-    id: 'symbol-data',
-    name: 'Input / Question Data',
-    nameBn: 'ইনপুট / ডেটা প্রশ্ন (সামান্তরিক)',
-    standardSymbol: 'Data / Input (Parallelogram)',
-    nodeType: 'question',
-    color: '#0284c7',
-    description: 'Captures farmer survey inputs and measurements',
-    svgShape: (
-      <svg viewBox="0 0 44 26" className="symbol-svg" fill="none">
-        <polygon points="10,3 42,3 34,23 2,23" stroke="currentColor" strokeWidth="2" fill="currentColor" fillOpacity="0.15" />
-        <line x1="12" y1="13" x2="30" y2="13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-      </svg>
-    ),
-  },
-  {
-    id: 'symbol-decision',
-    name: 'Decision / Branch',
-    nameBn: 'শর্ত / লজিক্যাল শাখা (হীরক/ডায়মন্ড)',
-    standardSymbol: 'Decision (Diamond)',
+    id: 'decision-branch',
     nodeType: 'decision',
+    title: 'Condition / Branch',
+    titleBn: 'শর্ত / লজিক্যাল শাখা',
+    badge: 'if / else',
+    icon: <GitBranch size={16} />,
     color: '#f59e0b',
-    description: 'Evaluates conditional logic (Match, Greater, Less)',
-    svgShape: (
-      <svg viewBox="0 0 44 26" className="symbol-svg" fill="none">
-        <polygon points="22,2 41,13 22,24 3,13" stroke="currentColor" strokeWidth="2" fill="currentColor" fillOpacity="0.15" />
-        <circle cx="22" cy="13" r="2.5" fill="currentColor" />
-      </svg>
-    ),
+    description: 'Evaluates conditional logic (Match, Greater, Less) based on answer',
   },
 ];
 
@@ -59,6 +42,7 @@ interface FlowchartSymbolsPanelProps {
   isResizing?: boolean;
   onToggleCollapse?: () => void;
   onAddSymbol?: (nodeType: FlowNodeType, name: string, nameBn: string) => void;
+  onAddQuestion?: (answerType: AnswerType, name: string, nameBn: string, options?: string) => void;
   groups?: ReusableQuestionGroup[];
   onInsertGroup?: (group: ReusableQuestionGroup) => void;
   onNavigateToGroups?: () => void;
@@ -71,62 +55,92 @@ export const FlowchartSymbolsPanel: React.FC<FlowchartSymbolsPanelProps> = ({
   isResizing,
   onToggleCollapse,
   onAddSymbol,
+  onAddQuestion,
 }) => {
   const [search, setSearch] = useState('');
 
-  const onDragStartSymbol = (
+  const onDragStartLogic = (
     event: React.DragEvent,
-    nodeType: FlowNodeType,
-    name: string,
-    nameBn: string
+    item: FlowLogicItem
   ) => {
-    const payload = JSON.stringify({
-      nodeType,
-      name,
-      nameBn,
-    });
-    event.dataTransfer.setData('application/reactflow-node', payload);
-    event.dataTransfer.setData('text/plain', payload);
-    event.dataTransfer.effectAllowed = 'copyMove';
-  };
+      const payload = JSON.stringify({
+        nodeType: item.nodeType,
+        name: item.title,
+        nameBn: item.titleBn,
+      });
+      event.dataTransfer.setData('application/reactflow-node', payload);
+      event.dataTransfer.setData('text/plain', payload);
+      event.dataTransfer.effectAllowed = 'copyMove';
+    };
 
-  const filteredSymbols = useMemo(() => {
-    if (!search.trim()) return FLOWCHART_SYMBOLS;
-    const q = search.toLowerCase().trim();
-    return FLOWCHART_SYMBOLS.filter(
-      (s) =>
-        s.name.toLowerCase().includes(q) ||
-        (s.nameBn && s.nameBn.includes(search.trim())) ||
-        s.standardSymbol.toLowerCase().includes(q) ||
-        s.description.toLowerCase().includes(q)
-    );
-  }, [search]);
+    const onDragStartQuestion = (
+      event: React.DragEvent,
+      item: InputTypeItem
+    ) => {
+      const payload = JSON.stringify({
+        nodeType: 'question',
+        answerType: item.type,
+        name: item.title,
+        nameBn: item.titleBn,
+        options: item.defaultOptions || '',
+      });
+      event.dataTransfer.setData('application/reactflow-node', payload);
+      event.dataTransfer.setData('text/plain', payload);
+      event.dataTransfer.effectAllowed = 'copyMove';
+    };
 
-  return (
-    <aside
-      className={`sidebar left-sidebar flowchart-symbols-sidebar ${!isOpen ? 'is-collapsed' : ''} ${isResizing ? 'is-resizing' : ''
-        }`}
-      style={isOpen && width ? { width: `${width}px`, minWidth: `${width}px` } : undefined}
-    >
-      {/* Top Header */}
-      <div className="left-panel-tab-switcher" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+    const filteredLogicItems = useMemo(() => {
+      if (!search.trim()) return FLOW_LOGIC_ITEMS;
+      const q = search.toLowerCase().trim();
+    return FLOW_LOGIC_ITEMS.filter(
+            (item) =>
+              item.title.toLowerCase().includes(q) ||
+              (item.titleBn && item.titleBn.toLowerCase().includes(q)) ||
+              item.badge.toLowerCase().includes(q) ||
+              item.description.toLowerCase().includes(q)
+          );
+    }, [search]);
+
+    const filteredQuestionTypes = useMemo(() => {
+      if (!search.trim()) return INPUT_TYPE_VIEWS;
+      const q = search.toLowerCase().trim();
+      return INPUT_TYPE_VIEWS.filter(
+        (item) =>
+          item.title.toLowerCase().includes(q) ||
+          (item.titleBn && item.titleBn.toLowerCase().includes(q)) ||
+          item.badge.toLowerCase().includes(q) ||
+          item.type.toLowerCase().includes(q) ||
+          item.description.toLowerCase().includes(q)
+      );
+    }, [search]);
+
+    const totalResults = filteredLogicItems.length + filteredQuestionTypes.length;
+
+    return (
+      <aside
+        className={`sidebar left-sidebar flowchart-symbols-sidebar ${!isOpen ? 'is-collapsed' : ''} ${isResizing ? 'is-resizing' : ''
+          }`}
+        style={isOpen && width ? { width: `${width}px`, minWidth: `${width}px` } : undefined}
+      >
+        {/* Top Header */}
+        <div className="left-panel-tab-switcher" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 6px' }}>
-            <Network size={15} style={{ color: 'var(--primary-color, #10b981)' }} />
+            <Layers size={16} style={{ color: 'var(--primary-color, #10b981)' }} />
             <span style={{ fontSize: 13, fontWeight: 700, color: '#f8fafc', letterSpacing: '0.2px' }}>
-              Flowchart Symbols
+              Survey Toolbox
             </span>
           </div>
 
-          {onToggleCollapse && (
-            <button
-              type="button"
-              className="sidebar-collapse-btn"
-              onClick={onToggleCollapse}
-              title="Collapse Sidebar (Ctrl+B)"
-            >
-              <PanelLeftClose size={15} />
-            </button>
-          )}
+            { onToggleCollapse && (
+              <button
+                type="button"
+                className="sidebar-collapse-btn"
+                onClick={onToggleCollapse}
+                title="Collapse Toolbox (Ctrl+B)"
+              >
+                <PanelLeftClose size={15} />
+              </button>
+            )}
         </div>
 
         {/* Scoped Sidebar Search Input */}
@@ -135,7 +149,7 @@ export const FlowchartSymbolsPanel: React.FC<FlowchartSymbolsPanelProps> = ({
             <Search size={14} className="sidebar-search-icon" />
             <input
               type="text"
-              placeholder="Filter symbols (name, type)..."
+              placeholder="Search logic or question types..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="sidebar-search-input"
@@ -153,64 +167,139 @@ export const FlowchartSymbolsPanel: React.FC<FlowchartSymbolsPanelProps> = ({
           </div>
         </div>
 
-                {/* FLOWCHART SYMBOLS */}
-                <div className="palette-container">
-                  <div className="symbols-list">
-                    {filteredSymbols.length === 0 ? (
-                      <div className="sidebar-search-empty">
-                        <Network size={26} className="empty-search-icon" />
-                        <span className="empty-search-title">No symbols found</span>
-                        <span className="empty-search-sub">No results for "{search}"</span>
-                        <button
-                          type="button"
-                          className="btn-clear-filter"
-                          onClick={() => setSearch('')}
-                        >
-                          Clear search
-                        </button>
-                      </div>
-                  ) : (
-            filteredSymbols.map((item) => (
-                  <div
-                    key={item.id}
-                    className="flowchart-symbol-card"
-                    draggable
-                    onDragStart={(e) =>
-                      onDragStartSymbol(e, item.nodeType, item.name, item.nameBn)
-                    }
-                    onClick={() => onAddSymbol?.(item.nodeType, item.name, item.nameBn)}
-                    title={`${item.standardSymbol}: ${item.description} (Drag or Click to add)`}
+            {/* TOOLBOX PALETTE */}
+            <div className="palette-container" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {totalResults === 0 ? (
+                <div className="sidebar-search-empty">
+                  <Layers size={26} className="empty-search-icon" />
+                  <span className="empty-search-title">No elements found</span>
+                  <span className="empty-search-sub">No results for "{search}"</span>
+                  <button
+                    type="button"
+                    className="btn-clear-filter"
+                    onClick={() => setSearch('')}
                   >
-                    <div className="card-drag-indicator">
-                      <GripVertical size={12} />
-                    </div>
-
-                              <div
-                                className="symbol-shape-wrapper"
-                                style={{ color: item.color }}
-                              >
-                                {item.svgShape}
-                              </div>
-
-                                  <div className="symbol-details">
-                                    <span className="symbol-standard-tag" style={{ color: item.color }}>
-                                      {item.standardSymbol}
-                                    </span>
-                                    <span className="symbol-primary-name">{item.name}</span>
-                                    <span className="symbol-bn-name">{item.nameBn}</span>
-                                  </div>
-                              </div>
-                              ))
-          )}
-                            </div>
-
-                        <div className="flowchart-guide-card">
-                          <div className="guide-title">Standard Notation:</div>
-                          <ul className="guide-list">
-                            <li><strong>Parallelogram:</strong> Farmer question input</li>
-                            <li><strong>Diamond:</strong> Conditional branch (Match/&gt;/&lt;)</li>
-                          </ul>
+                    Clear search
+                  </button>
+                </div>
+            ) : (
+          <>
+              {/* Section 1: Logic & Branching */}
+              {filteredLogicItems.length > 0 && (
+                <div className="toolbox-section">
+                  <div className="toolbox-section-title">LOGIC & BRANCHES</div>
+                  <div className="input-types-grid">
+                    {filteredLogicItems.map((item) => (
+                      <div
+                        key={item.id}
+                        className="input-type-card"
+                        draggable
+                        onDragStart={(e) => onDragStartLogic(e, item)}
+                        onClick={() => onAddSymbol?.(item.nodeType, item.title, item.titleBn)}
+                        title={`${item.title}: ${item.description} (Drag or Click to add)`}
+                      >
+                        <div className="card-drag-indicator">
+                          <GripVertical size={12} />
                         </div>
+
+                                <div
+                                  className="input-type-icon-box"
+                                  style={{ color: item.color, backgroundColor: `${item.color}18` }}
+                                >
+                                  {item.icon}
+                                </div>
+
+                                    <div className="input-type-info">
+                                      <div className="input-type-name-row">
+                                        <span className="input-type-name">{item.title}</span>
+                                        <span
+                                          className="input-type-badge"
+                                          style={{ color: item.color, backgroundColor: `${item.color}15` }}
+                                        >
+                                          {item.badge}
+                                        </span>
+                                      </div>
+                                      <span className="input-type-bn">{item.titleBn}</span>
+                                      <span className="input-type-desc">{item.description}</span>
+                                    </div>
+                                  </div>
+                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Section 2: Question Input Types */}
+                            {filteredQuestionTypes.length > 0 && (
+                              <div className="toolbox-section">
+                                <div className="toolbox-section-title">
+                                  QUESTION TYPES ({filteredQuestionTypes.length})
+                                </div>
+                                <div className="input-types-grid">
+                                  {filteredQuestionTypes.map((item) => (
+                                    <div
+                                      key={item.type}
+                                      className="input-type-card"
+                                      draggable
+                                      onDragStart={(e) => onDragStartQuestion(e, item)}
+                                      onClick={() => {
+                                        if (onAddQuestion) {
+                                          onAddQuestion(item.type, item.title, item.titleBn, item.defaultOptions);
+                                        } else if (onAddSymbol) {
+                                          onAddSymbol('question', item.title, item.titleBn);
+                                        }
+                                      }}
+                                      title={`${item.title}: ${item.description} (Drag or Click to add)`}
+                                    >
+                                      <div className="card-drag-indicator">
+                                        <GripVertical size={12} />
+                                      </div>
+
+                                <div
+                                  className="input-type-icon-box"
+                                  style={{ color: item.color, backgroundColor: `${item.color}15` }}
+                                >
+                                  {item.icon}
+                                </div>
+
+                                  <div className="input-type-info">
+                                    <div className="input-type-name-row">
+                                      <span className="input-type-name">{item.title}</span>
+                                      <span
+                                        className="input-type-badge"
+                                        style={{ color: item.color, backgroundColor: `${item.color}15` }}
+                                      >
+                                        {item.badge}
+                                      </span>
+                                    </div>
+                                    <span className="input-type-bn">{item.titleBn}</span>
+                                    <span className="input-type-desc">{item.description}</span>
+                                  </div>
+                                </div>
+                  ))}
+                              </div>
+              </div>
+            )}
+
+                          {/* Quick Helper Tip */}
+                          <div
+                            style={{
+                              marginTop: 6,
+                              padding: '10px 12px',
+                              background: 'rgba(0, 0, 0, 0.2)',
+                              borderRadius: 8,
+                              border: '1px solid var(--border-subtle)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 8,
+                            }}
+                          >
+                            <Sparkles size={14} style={{ color: '#10b981', flexShrink: 0 }} />
+                            <span style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.4 }}>
+                              Drag elements directly onto canvas, or click once to add into the active Group Area.
+                            </span>
+                          </div>
+                        </>
+        )}
                       </div>
     </aside>
                   );

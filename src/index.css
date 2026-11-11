@@ -2417,7 +2417,23 @@ body.is-resizing-sidebar * {
 
 /* Flowchart Symbols Left Sidebar */
 .flowchart-symbols-sidebar {
-  width: 290px;
+  width: 240px;
+}
+
+.toolbox-section {
+  display: flex;
+  flex-direction: column;
+}
+
+.toolbox-section-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+  margin-top: 4px;
+  margin-bottom: 6px;
+  padding-left: 2px;
 }
 
 .symbols-list {
@@ -2532,7 +2548,7 @@ body.is-resizing-sidebar * {
 
 /* Input Type Views Right Sidebar */
 .input-types-sidebar {
-  width: 330px;
+  width: 300px;
 }
 
 .input-panel-tabs {
