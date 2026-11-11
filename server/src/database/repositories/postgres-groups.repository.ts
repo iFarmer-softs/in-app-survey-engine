@@ -19,7 +19,17 @@ export class PostgresGroupsRepository {
   }
 
   async findOne(id: string): Promise<ReusableQuestionGroup> {
-    const group = await this.groupRepo.findOne({ where: { id } });
+    let group = await this.groupRepo.findOne({ where: { id } });
+    if (!group) {
+      const altId = id.startsWith('grp-') ? id.slice(4) : `grp-${id}`;
+      group = await this.groupRepo.findOne({ where: { id: altId } });
+    }
+    if (!group) {
+      const num = parseInt(id.replace(/\D+/g, ''), 10);
+      if (!isNaN(num)) {
+        group = await this.groupRepo.findOne({ where: { groupId: num } });
+      }
+    }
     if (!group) {
       throw new NotFoundException(`Question group with ID "${id}" not found in PostgreSQL`);
     }
@@ -38,7 +48,18 @@ export class PostgresGroupsRepository {
     flowEdges?: any[];
   }): Promise<ReusableQuestionGroup> {
     const now = new Date().toISOString();
-    const id = `grp-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    const existing = await this.groupRepo.find();
+    let maxGroupId = 0;
+    for (const g of existing) {
+      if (g.groupId && g.groupId > maxGroupId) maxGroupId = g.groupId;
+      const match = g.id.match(/^grp-(\d+)$/) || g.id.match(/^(\d+)$/);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (!isNaN(num) && num < 1000000 && num > maxGroupId) maxGroupId = num;
+      }
+    }
+    const assignedGroupId = dto.groupId && dto.groupId > 0 ? dto.groupId : maxGroupId + 1;
+    const id = `grp-${assignedGroupId}`;
 
     const entity = this.groupRepo.create({
       id,

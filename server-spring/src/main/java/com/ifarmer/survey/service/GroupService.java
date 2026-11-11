@@ -15,6 +15,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -37,7 +38,23 @@ public class GroupService {
 
     @Transactional(readOnly = true)
     public QuestionGroupDto findOne(String id) {
-        return groupRepository.findById(id)
+        Optional<QuestionGroupEntity> found = groupRepository.findById(id);
+        if (found.isEmpty()) {
+            if (id.startsWith("grp-")) {
+                found = groupRepository.findById(id.substring(4));
+            } else {
+                found = groupRepository.findById("grp-" + id);
+            }
+        }
+        if (found.isEmpty()) {
+            try {
+                int numericG = Integer.parseInt(id.replaceAll("\\D+", ""));
+                found = groupRepository.findAll().stream()
+                        .filter(g -> g.getGroupId() != null && g.getGroupId() == numericG)
+                        .findFirst();
+            } catch (Exception ignored) {}
+        }
+        return found
                 .map(this::mapToDto)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Question group with ID '" + id + "' not found"));
     }
@@ -45,11 +62,29 @@ public class GroupService {
     @Transactional
     public QuestionGroupDto create(CreateGroupRequest req) {
         Instant now = Instant.now();
-        String id = "grp-" + System.currentTimeMillis() + "-" + UUID.randomUUID().toString().substring(0, 4);
+        List<QuestionGroupEntity> all = groupRepository.findAll();
+        int maxGroupId = 0;
+        for (QuestionGroupEntity g : all) {
+            if (g.getGroupId() != null && g.getGroupId() > maxGroupId) {
+                maxGroupId = g.getGroupId();
+            }
+            String gid = g.getId();
+            if (gid != null) {
+                if (gid.startsWith("grp-")) {
+                    String suffix = gid.substring(4);
+                    try {
+                        int num = Integer.parseInt(suffix);
+                        if (num < 1000000 && num > maxGroupId) maxGroupId = num;
+                    } catch (NumberFormatException ignored) {}
+                }
+            }
+        }
+        int assignedGroupId = (req.groupId() != null && req.groupId() > 0) ? req.groupId() : maxGroupId + 1;
+        String id = "grp-" + assignedGroupId;
 
         QuestionGroupEntity entity = new QuestionGroupEntity();
         entity.setId(id);
-        entity.setGroupId(req.groupId());
+        entity.setGroupId(assignedGroupId);
         entity.setName(req.name());
         entity.setNameBn(req.nameBn() != null && !req.nameBn().isBlank() ? req.nameBn() : req.name());
         entity.setDescription(req.description() != null ? req.description() : "");

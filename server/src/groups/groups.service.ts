@@ -8,7 +8,7 @@ export class GroupsService {
   constructor(
     private readonly storageService: StorageService,
     private readonly databaseService: DatabaseService
-  ) {}
+  ) { }
 
   async findAll(): Promise<ReusableQuestionGroup[]> {
     const pgRepo = this.databaseService.getGroupsRepo();
@@ -47,11 +47,22 @@ export class GroupsService {
     }
 
     const now = new Date().toISOString();
-    const id = `grp-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    const existing = this.storageService.getAllGroups();
+    let maxGroupId = 0;
+    for (const g of existing) {
+      if (g.groupId && g.groupId > maxGroupId) maxGroupId = g.groupId;
+      const match = g.id.match(/^grp-(\d+)$/) || g.id.match(/^(\d+)$/);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (!isNaN(num) && num < 1000000 && num > maxGroupId) maxGroupId = num;
+      }
+    }
+    const assignedGroupId = dto.groupId && dto.groupId > 0 ? dto.groupId : maxGroupId + 1;
+    const id = `grp-${assignedGroupId}`;
 
     const newGroup: ReusableQuestionGroup = {
       id,
-      groupId: dto.groupId,
+      groupId: assignedGroupId,
       name: dto.name,
       nameBn: dto.nameBn || dto.name,
       description: dto.description || '',

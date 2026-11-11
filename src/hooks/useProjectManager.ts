@@ -104,7 +104,7 @@ export function useProjectManager() {
       totalGroups: number,
       onLoaded?: (newProj: FlowchartProject) => void
     ) => {
-      const newProj = createBlankProject(title, titleBn, description, totalGroups);
+      const newProj = createBlankProject(title, titleBn, description, totalGroups, projects);
       const updated = [newProj, ...projects];
       setProjects(updated);
       saveAllProjects(updated);
@@ -115,7 +115,7 @@ export function useProjectManager() {
 
       if (isServerConnected) {
         try {
-          await apiClient.createProject({
+          const serverProj = await apiClient.createProject({
             title: newProj.title,
             titleBn: newProj.titleBn,
             description: newProj.description,
@@ -124,6 +124,16 @@ export function useProjectManager() {
             edges: newProj.edges,
             groupMeta: newProj.groupMeta,
           });
+          if (serverProj && serverProj.id && serverProj.id !== newProj.id) {
+            setProjects((prev) => {
+              const replaced = prev.map((p) => (p.id === newProj.id ? serverProj : p));
+              saveAllProjects(replaced);
+              return replaced;
+            });
+            setActiveProjectIdState(serverProj.id);
+            persistActiveProjectId(serverProj.id);
+            onLoaded?.(serverProj);
+          }
         } catch (err) {
           console.error('Failed to create project on NestJS server:', err);
         }
@@ -137,14 +147,21 @@ export function useProjectManager() {
       const source = projects.find((p) => p.id === id);
       if (!source) return;
 
-      const cloned = duplicateProject(source);
+      const cloned = duplicateProject(source, projects);
       const updated = [cloned, ...projects];
       setProjects(updated);
       saveAllProjects(updated);
 
       if (isServerConnected) {
         try {
-          await apiClient.duplicateProject(id);
+          const serverCloned = await apiClient.duplicateProject(id);
+          if (serverCloned && serverCloned.id && serverCloned.id !== cloned.id) {
+            setProjects((prev) => {
+              const replaced = prev.map((p) => (p.id === cloned.id ? serverCloned : p));
+              saveAllProjects(replaced);
+              return replaced;
+            });
+          }
         } catch (err) {
           console.error('Failed to duplicate project on NestJS server:', err);
         }

@@ -599,20 +599,24 @@ export function compileFlowToSchema(
   }
 
   // Calculate actual total groups and whether a next group exists
-  const detectedGroupNumbers = new Set<number>();
-  if (meta.groupNumber) detectedGroupNumbers.add(meta.groupNumber);
-  if (meta.totalGroups) detectedGroupNumbers.add(meta.totalGroups);
-  for (const q of questions) {
-    if (q.group) detectedGroupNumbers.add(q.group);
+  const frameNodes = nodes.filter((n) => n.type === 'groupFrame' || n.type === 'groupContainer');
+  const distinctQuestionGroups = new Set(
+    questions
+      .map((q) => q.group)
+      .filter((g): g is number => typeof g === 'number' && g > 0)
+  );
+
+  let totalGroups: number;
+  if (frameNodes.length > 0) {
+    // 1. Explicit visual group frames on canvas: total groups is strictly the count of frames (NOT the group IDs)
+    totalGroups = frameNodes.length;
+  } else if (distinctQuestionGroups.size > 1) {
+    // 2. Questions partitioned across multiple groups without frames: count of distinct groups
+    totalGroups = distinctQuestionGroups.size;
+  } else {
+    // 3. Single-group canvas (e.g. Group 1 of an N-group survey): rely on meta.totalGroups
+    totalGroups = meta.totalGroups || 1;
   }
-  for (const n of nodes) {
-    if (n.type === 'groupFrame' || n.type === 'groupContainer') {
-      const g = (n.data as any)?.numericGroupId || parseInt(String((n.data as any)?.groupId).replace(/\D+/g, ''), 10);
-      if (g && !isNaN(g)) detectedGroupNumbers.add(g);
-    }
-  }
-  const maxGroupNum = detectedGroupNumbers.size > 0 ? Math.max(...detectedGroupNumbers) : (meta.totalGroups || 1);
-  const totalGroups = Math.max(meta.totalGroups || 1, maxGroupNum);
   const currentGroup = meta.groupNumber || 1;
   const hasNext = Boolean(meta.hasNextGroup || currentGroup < totalGroups || groupJumps.length > 0);
 

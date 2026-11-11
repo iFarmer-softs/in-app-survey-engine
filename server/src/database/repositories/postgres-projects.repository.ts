@@ -22,10 +22,18 @@ export class PostgresProjectsRepository {
   }
 
   async findOne(id: string): Promise<FlowchartProject> {
-    const project = await this.projectRepo.findOne({
+    let project = await this.projectRepo.findOne({
       where: { id },
       relations: ['versions'],
     });
+
+    if (!project) {
+      const altId = id.startsWith('proj-') ? id.slice(5) : `proj-${id}`;
+      project = await this.projectRepo.findOne({
+        where: { id: altId },
+        relations: ['versions'],
+      });
+    }
 
     if (!project) {
       throw new NotFoundException(`Project with ID "${id}" not found in PostgreSQL`);
@@ -44,7 +52,16 @@ export class PostgresProjectsRepository {
     groupMeta?: any;
   }): Promise<FlowchartProject> {
     const now = new Date().toISOString();
-    const id = `proj-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const existing = await this.projectRepo.find();
+    let maxNum = 0;
+    for (const p of existing) {
+      const match = p.id.match(/^proj-(\d+)$/) || p.id.match(/^(\d+)$/);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (!isNaN(num) && num < 1000000 && num > maxNum) maxNum = num;
+      }
+    }
+    const id = `proj-${maxNum + 1}`;
     const totalGroups = dto.totalGroups || 1;
 
     const initialNodes = dto.nodes || [];
@@ -136,7 +153,16 @@ export class PostgresProjectsRepository {
   async duplicate(id: string): Promise<FlowchartProject> {
     const source = await this.findOne(id);
     const now = new Date().toISOString();
-    const newId = `proj-copy-${Date.now()}`;
+    const existing = await this.projectRepo.find();
+    let maxNum = 0;
+    for (const p of existing) {
+      const match = p.id.match(/^proj-(\d+)$/) || p.id.match(/^(\d+)$/);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (!isNaN(num) && num < 1000000 && num > maxNum) maxNum = num;
+      }
+    }
+    const newId = `proj-${maxNum + 1}`;
 
     const newVersion = this.versionRepo.create({
       id: `ver-init-${newId}`,

@@ -501,20 +501,23 @@ export class CompilerService {
       }
     }
 
-    const detectedGroupNumbers = new Set<number>();
-    if (groupMeta?.groupNumber) detectedGroupNumbers.add(groupMeta.groupNumber);
-    if (groupMeta?.totalGroups) detectedGroupNumbers.add(groupMeta.totalGroups);
-    for (const q of questions) {
-      if (q.group) detectedGroupNumbers.add(q.group);
+    const frameNodes = nodes.filter((n) => n.type === 'groupFrame' || n.type === 'groupContainer');
+    const distinctQuestionGroups = new Set(
+      questions
+        .map((q) => q.group)
+        .filter((g): g is number => typeof g === 'number' && g > 0)
+    );
+
+    let totalGroups: number;
+    if (frameNodes.length > 0) {
+      // Total groups is strictly the count of group frames on canvas, NOT the group IDs
+      totalGroups = frameNodes.length;
+    } else if (distinctQuestionGroups.size > 1) {
+      // Total groups is the count of distinct groups among questions
+      totalGroups = distinctQuestionGroups.size;
+    } else {
+      totalGroups = groupMeta?.totalGroups || 1;
     }
-    for (const n of nodes) {
-      if (n.type === 'groupFrame' || n.type === 'groupContainer') {
-        const g = (n.data as any)?.numericGroupId || parseInt(String((n.data as any)?.groupId).replace(/\D+/g, ''), 10);
-        if (g && !isNaN(g)) detectedGroupNumbers.add(g);
-      }
-    }
-    const maxGroupNum = detectedGroupNumbers.size > 0 ? Math.max(...detectedGroupNumbers) : (groupMeta?.totalGroups || 1);
-    const totalGroups = Math.max(groupMeta?.totalGroups || 1, maxGroupNum);
     const currentGroup = groupMeta?.groupNumber || 1;
     const hasNext = Boolean(groupMeta?.hasNextGroup || currentGroup < totalGroups || groupJumps.length > 0);
 

@@ -346,7 +346,32 @@ export function useGroupContainers({
           }
         });
 
-        return currentNodes.filter((n) => !deletedNodeIds.has(n.id));
+        const remainingNodes = currentNodes.filter((n) => !deletedNodeIds.has(n.id));
+
+        const remainingFrames = remainingNodes.filter(
+          (n) => n.type === 'groupFrame' || n.type === 'groupContainer'
+        );
+        const remainingQuestionGroups = new Set(
+          remainingNodes
+            .filter((n) => n.type === 'question')
+            .map((n) => Number((n.data as any)?.group))
+            .filter((g) => !isNaN(g) && g > 0)
+        );
+
+        let newTotal = 1;
+        if (remainingFrames.length > 0) {
+          newTotal = remainingFrames.length;
+        } else if (remainingQuestionGroups.size > 1) {
+          newTotal = remainingQuestionGroups.size;
+        }
+
+        setGroupMeta?.((prev) => ({
+          ...prev,
+          totalGroups: newTotal,
+          hasNextGroup: newTotal > (prev.groupNumber || 1),
+        }));
+
+        return remainingNodes;
       });
 
       setEdges((currentEdges) => {
@@ -360,7 +385,7 @@ export function useGroupContainers({
 
       setSelectedNodeId(null);
     },
-    [setNodes, setEdges, setSelectedNodeId]
+    [setNodes, setEdges, setSelectedNodeId, setGroupMeta]
   );
 
   // Insert Question Group into canvas wrapped in a modern Figma-style GroupFrameNode
@@ -381,17 +406,23 @@ export function useGroupContainers({
       const existingFrames = nodes.filter(
         (n) => n.type === 'groupFrame' || n.type === 'groupContainer'
       );
-      const existingGroupNumbers = existingFrames
-        .map((f) => (f.data as any)?.numericGroupId || parseInt((f.data as any)?.groupId) || 1)
-        .filter((g) => !isNaN(g) && g > 0);
-      const nextGroupNumber =
-        existingGroupNumbers.length > 0 ? Math.max(...existingGroupNumbers) + 1 : 1;
+      const existingGroupIds = new Set(
+        existingFrames
+          .map((f) => (f.data as any)?.numericGroupId || parseInt((f.data as any)?.groupId))
+          .filter((g) => !isNaN(g) && g > 0)
+      );
 
-      // Assign non-colliding numeric group number
-      const assignedGroupNumber =
-        group.groupId && !existingGroupNumbers.includes(group.groupId)
-          ? group.groupId
-          : nextGroupNumber;
+      // Preserve template's groupId if specified and not colliding; otherwise assign next unused positive ID
+      let assignedGroupNumber: number;
+      if (group.groupId && !existingGroupIds.has(group.groupId)) {
+        assignedGroupNumber = group.groupId;
+      } else {
+        let candidate = 1;
+        while (existingGroupIds.has(candidate)) {
+          candidate++;
+        }
+        assignedGroupNumber = candidate;
+      }
 
       const GROUP_PALETTE = ['#0284c7', '#8b5cf6', '#10b981', '#f59e0b', '#ec4899', '#06b6d4'];
       const frameColor =
@@ -717,9 +748,11 @@ export function useGroupContainers({
       setNodes((nds) => nds.concat(containerNode).concat(newNodes));
       setEdges((eds) => eds.concat(newEdges));
 
+      const newTotalGroups = existingFrames.length + 1;
       setGroupMeta?.((prev) => ({
         ...prev,
-        totalGroups: Math.max(prev.totalGroups, assignedGroupNumber),
+        totalGroups: newTotalGroups,
+        hasNextGroup: newTotalGroups > (prev.groupNumber || 1),
       }));
 
       setSelectedNodeId(frameId);

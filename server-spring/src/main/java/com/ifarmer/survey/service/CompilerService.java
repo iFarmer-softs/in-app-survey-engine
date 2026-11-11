@@ -541,32 +541,32 @@ public class CompilerService {
             }
         }
 
-        Set<Integer> detectedGroupNumbers = new HashSet<>();
-        if (groupMeta != null) {
-            if (groupMeta.has("groupNumber")) detectedGroupNumbers.add(groupMeta.path("groupNumber").asInt());
-            if (groupMeta.has("totalGroups")) detectedGroupNumbers.add(groupMeta.path("totalGroups").asInt());
-        }
-        for (Map<String, Object> q : questions) {
-            Object g = q.get("group");
-            if (g instanceof Number) detectedGroupNumbers.add(((Number) g).intValue());
-        }
+        int frameCount = 0;
         for (JsonNode n : nodes) {
             String type = n.path("type").asText();
             if ("groupFrame".equals(type) || "groupContainer".equals(type)) {
-                JsonNode d = n.path("data");
-                if (d.has("numericGroupId")) {
-                    detectedGroupNumbers.add(d.path("numericGroupId").asInt());
-                } else if (d.has("groupId")) {
-                    int parsed = extractNumber(d.path("groupId").asText(), -1);
-                    if (parsed > 0) detectedGroupNumbers.add(parsed);
-                }
+                frameCount++;
             }
         }
 
-        int maxGroupNum = detectedGroupNumbers.isEmpty() ? 1 : Collections.max(detectedGroupNumbers);
-        int totalGroups = groupMeta != null && groupMeta.has("totalGroups")
-                ? Math.max(groupMeta.path("totalGroups").asInt(1), maxGroupNum)
-                : Math.max(1, maxGroupNum);
+        Set<Integer> distinctQuestionGroups = new HashSet<>();
+        for (Map<String, Object> q : questions) {
+            Object g = q.get("group");
+            if (g instanceof Number && ((Number) g).intValue() > 0) {
+                distinctQuestionGroups.add(((Number) g).intValue());
+            }
+        }
+
+        int totalGroups;
+        if (frameCount > 0) {
+            totalGroups = frameCount;
+        } else if (distinctQuestionGroups.size() > 1) {
+            totalGroups = distinctQuestionGroups.size();
+        } else {
+            totalGroups = (groupMeta != null && groupMeta.has("totalGroups") && groupMeta.path("totalGroups").asInt(0) > 0)
+                    ? groupMeta.path("totalGroups").asInt(1)
+                    : 1;
+        }
 
         int currentGroup = groupMeta != null && groupMeta.has("groupNumber") ? groupMeta.path("groupNumber").asInt(1) : 1;
         boolean hasNext = (groupMeta != null && groupMeta.path("hasNextGroup").asBoolean(false))

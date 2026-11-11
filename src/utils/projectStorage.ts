@@ -11,7 +11,7 @@ export function countQuestionsInNodes(nodes: Node[]): number {
 
 export function ensureProjectVersions(project: FlowchartProject): FlowchartProject {
   const currentVersion = project.currentVersion || (project.status === 'published' ? '1.0.0' : '0.1.0');
-  
+
   if (Array.isArray(project.versions) && project.versions.length > 0) {
     return {
       ...project,
@@ -99,6 +99,9 @@ export function getInitialSeedProjects(): FlowchartProject[] {
 
 export function loadAllProjects(): FlowchartProject[] {
   try {
+    if (typeof localStorage === 'undefined') {
+      return getInitialSeedProjects();
+    }
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
       const seed = getInitialSeedProjects();
@@ -113,13 +116,13 @@ export function loadAllProjects(): FlowchartProject[] {
     saveAllProjects(seed);
     return seed;
   } catch (err) {
-    console.error('Failed to load projects from localStorage:', err);
     return getInitialSeedProjects();
   }
 }
 
 export function saveAllProjects(projects: FlowchartProject[]): void {
   try {
+    if (typeof localStorage === 'undefined') return;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
   } catch (err) {
     console.error('Failed to save projects to localStorage:', err);
@@ -171,13 +174,27 @@ export function getNextVersion(
   return `${major}.${minor}.${patch}`;
 }
 
+export function getNextSequentialProjectId(existingProjects?: FlowchartProject[]): string {
+  const projects = existingProjects || loadAllProjects();
+  let maxNum = 0;
+  for (const p of projects) {
+    const match = p.id.match(/^proj-(\d+)$/) || p.id.match(/^(\d+)$/);
+    if (match) {
+      const num = parseInt(match[1], 10);
+      if (!isNaN(num) && num < 1000000 && num > maxNum) maxNum = num;
+    }
+  }
+  return `proj-${maxNum + 1}`;
+}
+
 export function createBlankProject(
   title: string,
   titleBn?: string,
   description?: string,
-  totalGroups: number = 1
+  totalGroups: number = 1,
+  existingProjects?: FlowchartProject[]
 ): FlowchartProject {
-  const newId = `proj-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+  const newId = getNextSequentialProjectId(existingProjects);
   const now = new Date().toISOString();
 
   const nodes: Node[] = [];
@@ -227,8 +244,15 @@ export function createBlankProject(
   return project;
 }
 
-export function duplicateProject(source: FlowchartProject): FlowchartProject {
-  const newId = `proj-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+export function duplicateProject(
+  source: FlowchartProject,
+  existingProjects?: FlowchartProject[]
+): FlowchartProject {
+  const projects = existingProjects ? [...existingProjects] : loadAllProjects();
+  if (!projects.some((p) => p.id === source.id)) {
+    projects.push(source);
+  }
+  const newId = getNextSequentialProjectId(projects);
   const now = new Date().toISOString();
   const normalized = ensureProjectVersions(source);
 

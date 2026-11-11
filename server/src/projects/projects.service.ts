@@ -45,7 +45,16 @@ export class ProjectsService {
     }
 
     const now = new Date().toISOString();
-    const id = `proj-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const existing = this.storageService.getAllProjects();
+    let maxNum = 0;
+    for (const p of existing) {
+      const match = p.id.match(/^proj-(\d+)$/) || p.id.match(/^(\d+)$/);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (!isNaN(num) && num < 1000000 && num > maxNum) maxNum = num;
+      }
+    }
+    const id = `proj-${maxNum + 1}`;
     const totalGroups = dto.totalGroups || 1;
 
     const initialNodes = dto.nodes || [
@@ -146,6 +155,7 @@ export class ProjectsService {
       throw new NotFoundException(`Project with ID "${id}" not found`);
     }
 
+    this.storageService.deleteResponsesBySurveyId(id);
     this.storageService.saveProjects(filtered);
     return { success: true, id };
   }
@@ -158,7 +168,16 @@ export class ProjectsService {
 
     const source = await this.findOne(id);
     const now = new Date().toISOString();
-    const newId = `proj-copy-${Date.now()}`;
+    const existing = this.storageService.getAllProjects();
+    let maxNum = 0;
+    for (const p of existing) {
+      const match = p.id.match(/^proj-(\d+)$/) || p.id.match(/^(\d+)$/);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (!isNaN(num) && num < 1000000 && num > maxNum) maxNum = num;
+      }
+    }
+    const newId = `proj-${maxNum + 1}`;
 
     const cloned: FlowchartProject = {
       ...JSON.parse(JSON.stringify(source)),

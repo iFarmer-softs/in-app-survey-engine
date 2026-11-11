@@ -205,6 +205,20 @@ export function saveAllGroups(groups: ReusableQuestionGroup[]): void {
   }
 }
 
+export function getNextSequentialGroupId(existingGroups?: ReusableQuestionGroup[]): number {
+  const groups = existingGroups || loadAllGroups();
+  let maxId = 0;
+  for (const g of groups) {
+    if (typeof g.groupId === 'number' && g.groupId > maxId) maxId = g.groupId;
+    const match = g.id.match(/^grp-(\d+)$/) || g.id.match(/^(\d+)$/);
+    if (match) {
+      const num = parseInt(match[1], 10);
+      if (!isNaN(num) && num < 1000000 && num > maxId) maxId = num;
+    }
+  }
+  return maxId + 1;
+}
+
 export function createNewQuestionGroup(
   name: string,
   nameBn: string,
@@ -217,11 +231,11 @@ export function createNewQuestionGroup(
   flowEdges?: any[]
 ): ReusableQuestionGroup {
   const groups = loadAllGroups();
-  const maxGroupId = groups.reduce((max, g) => (g.groupId && g.groupId > max ? g.groupId : max), 0);
-  const assignedGroupId = groupId && groupId > 0 ? groupId : maxGroupId + 1;
+  const nextSeqId = getNextSequentialGroupId(groups);
+  const assignedGroupId = groupId && groupId > 0 ? groupId : nextSeqId;
 
   const newGroup: ReusableQuestionGroup = {
-    id: `grp-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+    id: `grp-${assignedGroupId}`,
     groupId: assignedGroupId,
     name,
     nameBn: nameBn || name,

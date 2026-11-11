@@ -43,7 +43,15 @@ public class ProjectService {
 
     @Transactional(readOnly = true)
     public ProjectDto findOne(String id) {
-        return projectRepository.findByIdWithVersions(id)
+        Optional<ProjectEntity> found = projectRepository.findByIdWithVersions(id);
+        if (found.isEmpty()) {
+            if (id.startsWith("proj-")) {
+                found = projectRepository.findByIdWithVersions(id.substring(5));
+            } else {
+                found = projectRepository.findByIdWithVersions("proj-" + id);
+            }
+        }
+        return found
                 .map(this::mapToDto)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Project with ID '" + id + "' not found"));
     }
@@ -51,7 +59,26 @@ public class ProjectService {
     @Transactional
     public ProjectDto create(CreateProjectRequest req) {
         Instant now = Instant.now();
-        String id = "proj-" + System.currentTimeMillis() + "-" + UUID.randomUUID().toString().substring(0, 5);
+        List<ProjectEntity> all = projectRepository.findAll();
+        int maxId = 0;
+        for (ProjectEntity p : all) {
+            String pid = p.getId();
+            if (pid != null) {
+                if (pid.startsWith("proj-")) {
+                    String suffix = pid.substring(5);
+                    try {
+                        int num = Integer.parseInt(suffix);
+                        if (num < 1000000 && num > maxId) maxId = num;
+                    } catch (NumberFormatException ignored) {}
+                } else {
+                    try {
+                        int num = Integer.parseInt(pid);
+                        if (num < 1000000 && num > maxId) maxId = num;
+                    } catch (NumberFormatException ignored) {}
+                }
+            }
+        }
+        String id = "proj-" + (maxId + 1);
         int totalGroups = (req.totalGroups() != null && req.totalGroups() > 0) ? req.totalGroups() : 1;
 
         JsonNode initialNodes = (req.nodes() != null && req.nodes().isArray()) ? req.nodes() : objectMapper.createArrayNode();
@@ -141,7 +168,26 @@ public class ProjectService {
     public ProjectDto duplicate(String id) {
         ProjectDto source = findOne(id);
         Instant now = Instant.now();
-        String newId = "proj-copy-" + System.currentTimeMillis();
+        List<ProjectEntity> all = projectRepository.findAll();
+        int maxId = 0;
+        for (ProjectEntity p : all) {
+            String pid = p.getId();
+            if (pid != null) {
+                if (pid.startsWith("proj-")) {
+                    String suffix = pid.substring(5);
+                    try {
+                        int num = Integer.parseInt(suffix);
+                        if (num < 1000000 && num > maxId) maxId = num;
+                    } catch (NumberFormatException ignored) {}
+                } else {
+                    try {
+                        int num = Integer.parseInt(pid);
+                        if (num < 1000000 && num > maxId) maxId = num;
+                    } catch (NumberFormatException ignored) {}
+                }
+            }
+        }
+        String newId = "proj-" + (maxId + 1);
 
         VersionEntity newVersion = new VersionEntity();
         newVersion.setId("ver-init-" + newId);

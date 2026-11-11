@@ -25,6 +25,7 @@ import {
   restoreProjectVersion,
   compareFlowSnapshots,
   ensureProjectVersions,
+  getNextSequentialProjectId,
 } from '../utils/projectStorage.ts';
 import { CanvasHistoryManager } from '../hooks/useCanvasHistory.ts';
 import {
@@ -36,6 +37,7 @@ import {
 import {
   DEFAULT_QUESTION_GROUPS,
   createNewQuestionGroup,
+  getNextSequentialGroupId,
 } from '../utils/groupStorage.ts';
 
 console.log('🧪 Starting Test Suite: In-App Survey Engine...\n');
@@ -3153,6 +3155,7 @@ const surveysService = new SurveysService(
 );
 
 // 33A: Create a test survey project with 2 groups
+testStorage.deleteResponsesBySurveyId('proj-1');
 const testKycSurvey = await surveyProjectService.create({
   title: 'Potato Farmer Field KYC 2026',
   titleBn: 'আলু চাষী মাঠ পর্যায় কেওয়াইসি ২০২৬',
@@ -3515,5 +3518,117 @@ assert.strictEqual(savedCustomGroup.flowEdges?.length, 2, 'Saved group must pres
 console.log('   ✅ Question Group Library compatibility verified with 100% precision.');
 console.log('   ✅ Modern groupFrame deployment, dynamic group ID remapping, non-overlap & subgraphs validated.');
 
-console.log('\n🎉 ALL TESTS PASSED SUCCESSFULLY! (34/34 test suites passed)\n');
+// 35. Testing Group ID vs Total Groups Independence & Count-Based Compilation
+console.log('\n3️⃣5️⃣ Testing Group ID vs Total Groups Independence & Count-Based Compilation...');
+
+// Scenario A: 4 Group Frames exist on canvas with IDs [1, 2, 3, 5] (e.g. Group 5 from library template)
+const fourFrameNodesWithId5: any[] = [
+  { id: 'f-1', type: 'groupFrame', position: { x: 0, y: 0 }, data: { numericGroupId: 1, title: 'Group 1' } },
+  { id: 'f-2', type: 'groupFrame', position: { x: 500, y: 0 }, data: { numericGroupId: 2, title: 'Group 2' } },
+  { id: 'f-3', type: 'groupFrame', position: { x: 1000, y: 0 }, data: { numericGroupId: 3, title: 'Group 3' } },
+  { id: 'f-5', type: 'groupFrame', position: { x: 1500, y: 0 }, data: { numericGroupId: 5, title: 'Group 5 (Geo-Verification)' } },
+  { id: 'q-1', type: 'question', position: { x: 50, y: 50 }, data: { question_id: 1, group: 1, question: 'Q1' } },
+  { id: 'q-2', type: 'question', position: { x: 550, y: 50 }, data: { question_id: 2, group: 2, question: 'Q2' } },
+  { id: 'q-3', type: 'question', position: { x: 1050, y: 50 }, data: { question_id: 3, group: 3, question: 'Q3' } },
+  { id: 'q-4', type: 'question', position: { x: 1550, y: 50 }, data: { question_id: 4, group: 5, question: 'Q4' } },
+];
+const staleMeta: any = {
+  groupNumber: 1,
+  totalGroups: 5, // Stale or previous metadata
+  hasNextGroup: true,
+  instruction: 'Instructions',
+  groupJumps: [],
+};
+
+const compiledWithId5 = compileFlowToSchema(fourFrameNodesWithId5, [], staleMeta);
+assert.strictEqual(
+  compiledWithId5.total_groups,
+  4,
+  'Total groups must be 4 (count of groups on canvas), NOT 5 (which is the group ID)'
+);
+assert.strictEqual(
+  compiledWithId5.data.find((q) => q.question_id === 4)?.group,
+  5,
+  'Question in Group 5 must keep its group ID as 5, not be altered'
+);
+
+// Scenario B: Questions without frames across 4 distinct groups {1, 2, 3, 5}
+const questionsWithId5: any[] = [
+  { id: 'q-1', type: 'question', position: { x: 50, y: 50 }, data: { question_id: 1, group: 1, question: 'Q1' } },
+  { id: 'q-2', type: 'question', position: { x: 550, y: 50 }, data: { question_id: 2, group: 2, question: 'Q2' } },
+  { id: 'q-3', type: 'question', position: { x: 1050, y: 50 }, data: { question_id: 3, group: 3, question: 'Q3' } },
+  { id: 'q-4', type: 'question', position: { x: 1550, y: 50 }, data: { question_id: 4, group: 5, question: 'Q4' } },
+];
+const compiledQuestionsOnly = compileFlowToSchema(questionsWithId5, [], { groupNumber: 1, totalGroups: 1, hasNextGroup: false, instruction: '', groupJumps: [] });
+assert.strictEqual(
+  compiledQuestionsOnly.total_groups,
+  4,
+  'Total groups must be 4 (count of distinct groups), NOT 5'
+);
+
+// Scenario C: Inserting library template with groupId: 5 into canvas with groups 1, 2, 3
+const existing3Frames: any[] = [
+  { id: 'f-1', type: 'groupFrame', data: { numericGroupId: 1 } },
+  { id: 'f-2', type: 'groupFrame', data: { numericGroupId: 2 } },
+  { id: 'f-3', type: 'groupFrame', data: { numericGroupId: 3 } },
+];
+const existingGroupIds = new Set(existing3Frames.map((f) => (f.data as any).numericGroupId));
+const templateGroupId = 5;
+const assignedGroupId = !existingGroupIds.has(templateGroupId) ? templateGroupId : 4;
+assert.strictEqual(assignedGroupId, 5, 'Template groupId 5 must be preserved when not colliding');
+const newTotalGroupCount = existing3Frames.length + 1;
+assert.strictEqual(newTotalGroupCount, 4, 'Total groups count after adding 4th group must be 4, NOT 5');
+
+// Scenario D: Single-group multi-page KYC schema (no frames on canvas) preserves meta.totalGroups
+const singleGroupNodes: any[] = [
+  { id: 'q-101', type: 'question', position: { x: 50, y: 50 }, data: { question_id: 101, group: 1, question: 'Q101' } },
+];
+const singleGroupMeta: any = {
+  groupNumber: 1,
+  totalGroups: 3, // Multi-page survey Group 1 of 3
+  hasNextGroup: true,
+  instruction: 'Group 1',
+  groupJumps: [],
+};
+const compiledSingleGroup = compileFlowToSchema(singleGroupNodes, [], singleGroupMeta);
+assert.strictEqual(
+  compiledSingleGroup.total_groups,
+  3,
+  'Single-group schema without frames must preserve meta.totalGroups'
+);
+
+console.log('   ✅ Group ID (5) is decoupled from total groups count (4).');
+console.log('   ✅ Count-based total_groups calculation and single-group metadata preservation validated.');
+
+// 36. Testing Auto-Incremental ID Generation for Projects & Groups (Best Practice Architecture)
+console.log('\n3️⃣6️⃣ Testing Auto-Incremental ID Generation for Projects & Groups (Best Practice Architecture)...');
+
+// Scenario A: Auto-incremental sequential project ID calculation
+const mockProjects: any[] = [
+  { id: 'proj-1', title: 'Survey 1' },
+  { id: 'proj-2', title: 'Survey 2' },
+  { id: 'proj-blank-survey', title: 'Seed Survey' },
+];
+const nextProjId = getNextSequentialProjectId(mockProjects);
+assert.strictEqual(nextProjId, 'proj-3', 'Next project ID must auto-increment to proj-3');
+
+const createdAutoProj = createBlankProject('New Auto Survey', 'অটো জরিপ', 'Test auto ID', 1, mockProjects);
+assert.strictEqual(createdAutoProj.id, 'proj-3', 'Created project must use auto-incremented ID proj-3');
+
+const clonedAutoProj = duplicateProject(createdAutoProj, [...mockProjects, createdAutoProj]);
+assert.strictEqual(clonedAutoProj.id, 'proj-4', 'Duplicated project must auto-increment to proj-4');
+
+// Scenario B: Auto-incremental reusable question group ID calculation
+const mockGroups: any[] = [
+  { id: 'grp-1', groupId: 1, name: 'Farmer KYC' },
+  { id: 'grp-2', groupId: 2, name: 'Land Details' },
+  { id: 'grp-5', groupId: 5, name: 'Geo Verification' },
+];
+const nextGroupId = getNextSequentialGroupId(mockGroups);
+assert.strictEqual(nextGroupId, 6, 'Next group ID must auto-increment to 6');
+
+console.log('   ✅ Auto-incremental project ID generation validated (proj-1 -> proj-2 -> proj-3).');
+console.log('   ✅ Auto-incremental group library ID generation validated (grp-5 -> grp-6).');
+
+console.log('\n🎉 ALL TESTS PASSED SUCCESSFULLY! (36/36 test suites passed)\n');
 

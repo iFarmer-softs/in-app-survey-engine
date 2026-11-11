@@ -283,6 +283,34 @@ const FlowEditor: React.FC = () => {
     handleRedo(nodes, edges, groupMeta);
   }, [handleRedo, nodes, edges, groupMeta]);
 
+  // Auto-synchronize groupMeta.totalGroups with the actual count of groups on canvas (NOT group IDs)
+  useEffect(() => {
+    const frameNodes = nodes.filter(
+      (n) => n.type === 'groupFrame' || n.type === 'groupContainer'
+    );
+    const questionGroups = new Set(
+      nodes
+        .filter((n) => n.type === 'question')
+        .map((n) => Number((n.data as any)?.group))
+        .filter((g) => !isNaN(g) && g > 0)
+    );
+
+    let actualGroupCount = 0;
+    if (frameNodes.length > 0) {
+      actualGroupCount = frameNodes.length;
+    } else if (questionGroups.size > 1) {
+      actualGroupCount = questionGroups.size;
+    }
+
+    if (actualGroupCount > 0 && actualGroupCount !== groupMeta.totalGroups) {
+      setGroupMeta((prev) => ({
+        ...prev,
+        totalGroups: actualGroupCount,
+        hasNextGroup: actualGroupCount > (prev.groupNumber || 1),
+      }));
+    }
+  }, [nodes, groupMeta.totalGroups]);
+
   // Global Undo / Redo keyboard listener (Cmd/Ctrl + Z, Cmd/Ctrl + Shift + Z, Cmd/Ctrl + Y)
   useEffect(() => {
     const handleUndoRedoKeys = (e: KeyboardEvent) => {
@@ -782,7 +810,14 @@ const FlowEditor: React.FC = () => {
     const frameW = Math.max(340, maxX - minX + padding * 2);
     const frameH = Math.max(220, maxY - minY + 55 + padding);
 
-    const nextGrpId = groupMeta.groupNumber + 1;
+    const existingFrames = nodes.filter(
+      (n) => n.type === 'groupFrame' || n.type === 'groupContainer'
+    );
+    const existingGroupNumbers = existingFrames
+      .map((f) => (f.data as any)?.numericGroupId || parseInt((f.data as any)?.groupId) || 1)
+      .filter((g) => !isNaN(g) && g > 0);
+    const nextGrpId =
+      existingGroupNumbers.length > 0 ? Math.max(...existingGroupNumbers) + 1 : 1;
     const newFrameId = `grp-frame-${Date.now().toString().slice(-4)}`;
 
     const newFrame: Node = {
@@ -822,8 +857,15 @@ const FlowEditor: React.FC = () => {
       return [newFrame, ...updated];
     });
 
+    const newTotal = existingFrames.length + 1;
+    setGroupMeta((prev) => ({
+      ...prev,
+      totalGroups: newTotal,
+      hasNextGroup: newTotal > (prev.groupNumber || 1),
+    }));
+
     setSelectedNodeId(newFrameId);
-  }, [selectedQuestionNodes, groupMeta, nodes, edges, recordSnapshot, setNodes]);
+  }, [selectedQuestionNodes, groupMeta, nodes, edges, recordSnapshot, setNodes, setGroupMeta]);
 
   // Global Figma-style Hotkeys: V (Select), H (Hand), F (Draw Area), Space (Hold for Hand), Cmd+G (Wrap)
   useEffect(() => {
@@ -1021,9 +1063,11 @@ const FlowEditor: React.FC = () => {
       recordSnapshot(nodes, edges, groupMeta);
       setNodes((nds) => nds.concat(newFrame));
       setSelectedNodeId(frameId);
+      const newTotal = existingFrames.length + 1;
       setGroupMeta((prev) => ({
         ...prev,
-        totalGroups: Math.max(prev.totalGroups, nextGroupNumber),
+        totalGroups: newTotal,
+        hasNextGroup: newTotal > (prev.groupNumber || 1),
       }));
     },
     [nodes, edges, groupMeta, recordSnapshot, setNodes, setSelectedNodeId, setGroupMeta]
@@ -1228,9 +1272,11 @@ const FlowEditor: React.FC = () => {
       });
 
       setSelectedNodeId(frameId);
+      const newTotal = existingFrames.length + 1;
       setGroupMeta((prev) => ({
         ...prev,
-        totalGroups: Math.max(prev.totalGroups, nextGroupNumber),
+        totalGroups: newTotal,
+        hasNextGroup: newTotal > (prev.groupNumber || 1),
       }));
 
       setActiveToolMode('select');
@@ -1884,9 +1930,11 @@ const FlowEditor: React.FC = () => {
         recordSnapshot(nodes, edges, groupMeta);
         setNodes((nds) => nds.concat(newFrameNode, newNode));
         setSelectedNodeId(newNodeId);
+        const newTotal = existingFrames.length + 1;
         setGroupMeta((prev) => ({
           ...prev,
-          totalGroups: Math.max(prev.totalGroups, nextGroupNumber),
+          totalGroups: newTotal,
+          hasNextGroup: newTotal > (prev.groupNumber || 1),
         }));
         return;
       }

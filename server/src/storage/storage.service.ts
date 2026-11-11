@@ -82,7 +82,10 @@ export class StorageService implements OnModuleInit {
   }
 
   getProjectById(id: string): FlowchartProject | undefined {
-    return this.projects.find((p) => p.id === id);
+    return (
+      this.projects.find((p) => p.id === id) ||
+      this.projects.find((p) => (id.startsWith('proj-') ? p.id === id.slice(5) : p.id === `proj-${id}`))
+    );
   }
 
   saveProjects(projects: FlowchartProject[]) {
@@ -100,7 +103,11 @@ export class StorageService implements OnModuleInit {
   }
 
   getGroupById(id: string): ReusableQuestionGroup | undefined {
-    return this.groups.find((g) => g.id === id);
+    return (
+      this.groups.find((g) => g.id === id) ||
+      this.groups.find((g) => (id.startsWith('grp-') ? g.id === id.slice(4) : g.id === `grp-${id}`)) ||
+      this.groups.find((g) => g.groupId === parseInt(id.replace(/\D+/g, ''), 10))
+    );
   }
 
   saveGroups(groups: ReusableQuestionGroup[]) {
@@ -127,6 +134,11 @@ export class StorageService implements OnModuleInit {
     this.responses.unshift(resp);
     this.persistResponses();
     return resp;
+  }
+
+  deleteResponsesBySurveyId(surveyId: string): void {
+    this.responses = this.responses.filter((r) => r.surveyId !== surveyId);
+    this.persistResponses();
   }
 
   private persistResponses() {
