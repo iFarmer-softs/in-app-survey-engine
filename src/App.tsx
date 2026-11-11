@@ -87,6 +87,8 @@ import { useFlowCanvasConnections } from './hooks/useFlowCanvasConnections';
 import { useSidebarResizer } from './hooks/useSidebarResizer';
 import { useTheme } from './hooks/useTheme';
 import { useCanvasHistory } from './hooks/useCanvasHistory';
+import { createNewQuestionGroup, loadAllGroups } from './utils/groupStorage';
+import { apiClient } from './services/api';
 
 const baseNodeTypes = {
   question: QuestionNode,
@@ -330,6 +332,7 @@ const FlowEditor: React.FC = () => {
   // 3. Group template studio hook
   const {
     groups,
+    setGroups,
     refreshGroups,
     handleDeleteGroup,
     handleResetDefaultGroups,
@@ -370,6 +373,7 @@ const FlowEditor: React.FC = () => {
     setSelectedNodeId,
     setActiveView,
     setCenter,
+    setGroupMeta,
   });
 
   const handleToggleGroupCollapse = useCallback(
@@ -402,6 +406,60 @@ const FlowEditor: React.FC = () => {
       baseInsertGroupIntoCanvas(group, position);
     },
     [baseInsertGroupIntoCanvas, recordSnapshot, nodes, edges, groupMeta]
+  );
+
+  // Save an entire Group Area Frame and all its enclosed symbols into the Question Group Library
+  const handleSaveGroupAreaToLibrary = useCallback(
+    (containerNode: Node) => {
+      const cData = containerNode.data as any;
+      const childNodes = nodes.filter((n) => isNodeInContainer(n, containerNode, nodes));
+      const childNodeIds = new Set(childNodes.map((n) => n.id));
+      childNodeIds.add(containerNode.id);
+
+      const childEdges = edges.filter(
+        (e) => childNodeIds.has(e.source) && childNodeIds.has(e.target)
+      );
+
+      const questionNodes = childNodes
+        .filter((n) => n.type === 'question')
+        .sort((a, b) => a.position.y - b.position.y);
+
+      const questionTemplates: GroupQuestionTemplate[] = questionNodes.map((n) => {
+        const qd = n.data as any;
+        return {
+          question: qd.question || 'Untitled Question',
+          question_bn: qd.question_bn || qd.question || '',
+          answer_type: qd.answer_type || 'string',
+          mandatory: qd.mandatory ?? true,
+          editable: qd.editable ?? true,
+          placeholder: qd.placeholder || '',
+          hint: qd.hint || '',
+          options: qd.options || '',
+        };
+      });
+
+      const groupTitle = cData.title || `Group Area ${cData.numericGroupId || 1}`;
+      const groupTitleBn = cData.titleBn || groupTitle;
+
+      const newGroup = createNewQuestionGroup(
+        groupTitle,
+        groupTitleBn,
+        `Reusable group template saved from Group Area #${cData.numericGroupId || 1}`,
+        cData.category || 'custom',
+        cData.color || '#8b5cf6',
+        questionTemplates,
+        cData.numericGroupId,
+        [containerNode, ...childNodes],
+        childEdges
+      );
+
+      if (apiClient.isOnline()) {
+        apiClient.createGroup(newGroup).catch(console.error);
+      }
+      setGroups(loadAllGroups());
+      alert(`"${groupTitle}" has been saved to your Question Group Library!`);
+    },
+    [nodes, edges, setGroups]
   );
 
   const handleNodesChange = useCallback(
@@ -3091,6 +3149,7 @@ const FlowEditor: React.FC = () => {
                 onAddEdge={handleAddEdge}
                 onDeleteEdge={activeDeleteEdge}
                 onFocusNode={handleFocusDiagnosticNode}
+                onSaveGroupToLibrary={handleSaveGroupAreaToLibrary}
               />
             </div>
           </div>

@@ -38,6 +38,7 @@ import {
   Link2,
   GitFork,
   Layers,
+  BookmarkPlus,
 } from 'lucide-react';
 import type {
   AnswerType,
@@ -195,6 +196,7 @@ interface InputTypeViewsPanelProps {
   onAddEdge?: (edge: Edge) => void;
   onDeleteEdge?: (edgeId: string) => void;
   onFocusNode?: (nodeId: string) => void;
+  onSaveGroupToLibrary?: (node: Node) => void;
 }
 
 export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
@@ -218,6 +220,7 @@ export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
   onAddEdge,
   onDeleteEdge,
   onFocusNode,
+  onSaveGroupToLibrary,
 }) => {
   // Store active tab and track selection transitions during render
   const [tab, setTab] = useState<'widgets' | 'inspector'>(
@@ -1808,6 +1811,30 @@ export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
                     </button>
                   )}
                 </div>
+
+                {onSaveGroupToLibrary && (
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 6,
+                      marginTop: 10,
+                      width: '100%',
+                      backgroundColor: `${activeColor}15`,
+                      borderColor: `${activeColor}40`,
+                      color: activeColor,
+                      fontWeight: 600,
+                    }}
+                    onClick={() => onSaveGroupToLibrary(selectedNode)}
+                    title="Save this entire Group Area to the Question Group Library"
+                  >
+                    <BookmarkPlus size={14} />
+                    <span>Save Group to Library</span>
+                  </button>
+                )}
 
                 {/* Child Elements Preview List */}
                 {childQuestions.length > 0 && (

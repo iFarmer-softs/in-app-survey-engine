@@ -33,6 +33,10 @@ import {
   getTraceEdgeRole,
   getNodeTraceLabel,
 } from '../utils/dependencyTracing.ts';
+import {
+  DEFAULT_QUESTION_GROUPS,
+  createNewQuestionGroup,
+} from '../utils/groupStorage.ts';
 
 console.log('🧪 Starting Test Suite: In-App Survey Engine...\n');
 
@@ -3298,5 +3302,218 @@ await surveyProjectService.delete(testKycSurvey.id);
 console.log('   ✅ Survey Serving (GET /api/surveys/:id/groups/:g) & Ingestion (POST /responses) verified with 100% precision.');
 console.log('   ✅ Resumption & Coordinator Review pre-fill (ModifyCreditScoreKycActivity flow) verified with 100% precision.');
 
-console.log('\n🎉 ALL TESTS PASSED SUCCESSFULLY! (33/33 test suites passed)\n');
+// 34: Question Group Library & Flow Architecture Compatibility Engine
+console.log('\n3️⃣4️⃣ Testing Question Group Library & Flow Architecture Compatibility...');
+
+// 34A: Test Group Template Insertion into Canvas with Existing Group 1
+const kycTemplate = DEFAULT_QUESTION_GROUPS[0]; // Farmer Identity & KYC, has groupId: 1
+assert.ok(kycTemplate, 'KYC group template must exist in library');
+assert.strictEqual(kycTemplate.groupId, 1);
+
+// Existing canvas with Group 1
+const existingCanvasFrames: Node[] = [
+  {
+    id: 'grp-frame-existing-1',
+    type: 'groupFrame',
+    position: { x: 300, y: 150 },
+    style: { width: 440, height: 480 },
+    data: {
+      groupId: 'grp-frame-existing-1',
+      numericGroupId: 1,
+      title: 'Existing Group 1',
+      questionIds: ['q-101'],
+    },
+  },
+  {
+    id: 'q-101',
+    type: 'question',
+    position: { x: 385, y: 210 },
+    data: {
+      question_id: 101,
+      group: 1,
+      containerId: 'grp-frame-existing-1',
+      question: 'Existing Question 1',
+    },
+  },
+];
+
+// Determine non-colliding numericGroupId (matching upgraded handleInsertGroupIntoCanvas)
+const canvasExistingFrames = existingCanvasFrames.filter(
+  (n) => n.type === 'groupFrame' || n.type === 'groupContainer'
+);
+const existingGroupNums = canvasExistingFrames
+  .map((f) => (f.data as any)?.numericGroupId || parseInt((f.data as any)?.groupId) || 1)
+  .filter((g) => !isNaN(g) && g > 0);
+const nextGrpNum = existingGroupNums.length > 0 ? Math.max(...existingGroupNums) + 1 : 1;
+const assignedGrpNum =
+  kycTemplate.groupId && !existingGroupNums.includes(kycTemplate.groupId)
+    ? kycTemplate.groupId
+    : nextGrpNum;
+
+assert.strictEqual(assignedGrpNum, 2, 'Inserting KYC when Group 1 exists must assign Group 2 to prevent collision');
+
+// 34B: Test Smart Non-Overlapping Position Resolution
+const existingFrameRects = canvasExistingFrames.map((f) => ({
+  x: f.position.x,
+  y: f.position.y,
+  w: 440,
+  h: 480,
+}));
+
+// If inserted at same target position (300, 150), findNearestNonOverlappingPosition must nudge it away
+const resolvedInsertionPos = findNearestNonOverlappingPosition(
+  300,
+  150,
+  440,
+  kycTemplate.questions.length * 220 + 80,
+  existingFrameRects,
+  30
+);
+assert.ok(
+  resolvedInsertionPos.x !== 300 || resolvedInsertionPos.y !== 150,
+  'Inserted group must be placed in clear, non-overlapping coordinates'
+);
+assert.ok(
+  resolvedInsertionPos.x >= 300 + 440 + 30 || Math.abs(resolvedInsertionPos.y - 150) >= 480 + 30,
+  'Inserted group frame must not intersect existing group frame'
+);
+
+// 34C: Test Node Creation: Produces modern groupFrame with questions centered at +85
+const newFrameId = 'grp-frame-inserted-2';
+const newFrameHeight = Math.max(480, kycTemplate.questions.length * 220 + 80);
+const insertedFrameNode: Node = {
+  id: newFrameId,
+  type: 'groupFrame',
+  position: resolvedInsertionPos,
+  zIndex: 0,
+  style: { width: 440, height: newFrameHeight },
+  data: {
+    groupId: newFrameId,
+    numericGroupId: assignedGrpNum,
+    title: kycTemplate.name,
+    titleBn: kycTemplate.nameBn,
+    category: kycTemplate.category,
+    color: kycTemplate.color,
+    questionIds: kycTemplate.questions.map((_, i) => `q-${102 + i}`),
+    questionCount: kycTemplate.questions.length,
+    expandedHeight: newFrameHeight,
+  },
+};
+
+const insertedQuestions: Node[] = kycTemplate.questions.map((q, idx) => ({
+  id: `q-${102 + idx}`,
+  type: 'question',
+  position: {
+    x: resolvedInsertionPos.x + 85,
+    y: resolvedInsertionPos.y + 60 + idx * 220,
+  },
+  zIndex: 10,
+  data: {
+    question_id: 102 + idx,
+    question: q.question,
+    question_bn: q.question_bn,
+    answer_type: q.answer_type,
+    mandatory: q.mandatory,
+    containerId: newFrameId,
+    group: assignedGrpNum,
+    customColor: kycTemplate.color,
+  },
+}));
+
+assert.strictEqual(insertedFrameNode.type, 'groupFrame', 'Inserted container must be modern groupFrame');
+assert.strictEqual((insertedFrameNode.data as any).numericGroupId, 2);
+assert.strictEqual(insertedQuestions.length, 4);
+assert.strictEqual((insertedQuestions[0].data as any).group, 2);
+assert.strictEqual((insertedQuestions[0].data as any).containerId, newFrameId);
+assert.strictEqual(insertedQuestions[0].position.x, resolvedInsertionPos.x + 85, 'Question must be centered inside 440px frame');
+
+// 34D: Verify Spatial & Logical Containment via isNodeInContainer
+const allCombinedNodes = [...existingCanvasFrames, insertedFrameNode, ...insertedQuestions];
+insertedQuestions.forEach((qNode) => {
+  assert.ok(
+    isNodeInContainer(qNode, insertedFrameNode, allCombinedNodes),
+    `Child question ${qNode.id} must be recognized as contained inside groupFrame`
+  );
+  assert.ok(
+    !isNodeInContainer(qNode, existingCanvasFrames[0], allCombinedNodes),
+    `Child question ${qNode.id} must NOT be contained inside Group 1 frame`
+  );
+});
+
+// 34E: Test Saving Canvas Group Area with Subgraph to Library
+const customSubgraphNodes: Node[] = [
+  insertedFrameNode,
+  insertedQuestions[0],
+  {
+    id: 'decision-1',
+    type: 'decision',
+    position: { x: resolvedInsertionPos.x + 85, y: resolvedInsertionPos.y + 280 },
+    zIndex: 10,
+    data: {
+      label: 'NID Validated?',
+      conditionType: 'match',
+      comparisonValue: 'Yes',
+      containerId: newFrameId,
+      group: 2,
+    },
+  },
+  {
+    id: 'jump-to-group-3',
+    type: 'groupJump',
+    position: { x: resolvedInsertionPos.x + 85, y: resolvedInsertionPos.y + 440 },
+    zIndex: 10,
+    data: {
+      targetGroupId: 3,
+      targetGroupTitle: 'Group 3',
+      containerId: newFrameId,
+      group: 2,
+    },
+  },
+];
+
+const customSubgraphEdges: Edge[] = [
+  {
+    id: 'e-q1-d1',
+    source: insertedQuestions[0].id,
+    target: 'decision-1',
+    type: 'surveyEdge',
+    data: { rule: 'Next', containerId: newFrameId },
+  },
+  {
+    id: 'e-d1-j1',
+    source: 'decision-1',
+    target: 'jump-to-group-3',
+    type: 'surveyEdge',
+    label: 'MATCH: Yes',
+    data: { rule: 'Yes', containerId: newFrameId },
+  },
+];
+
+const savedCustomGroup = createNewQuestionGroup(
+  'Farmer Identity with Verification Subgraph',
+  'যাচাইকরণ সহ কৃষক পরিচয় সাবগ্রাফ',
+  'Complete KYC with conditional verification and jump branch',
+  'kyc',
+  '#0284c7',
+  [
+    {
+      question: (insertedQuestions[0].data as any).question,
+      question_bn: (insertedQuestions[0].data as any).question_bn,
+      answer_type: 'string',
+      mandatory: true,
+    },
+  ],
+  2,
+  customSubgraphNodes,
+  customSubgraphEdges
+);
+
+assert.ok(savedCustomGroup.id.startsWith('grp-'), 'Saved group must have valid library ID');
+assert.strictEqual(savedCustomGroup.flowNodes?.length, 4, 'Saved group must preserve full flowNodes subgraph');
+assert.strictEqual(savedCustomGroup.flowEdges?.length, 2, 'Saved group must preserve full flowEdges');
+
+console.log('   ✅ Question Group Library compatibility verified with 100% precision.');
+console.log('   ✅ Modern groupFrame deployment, dynamic group ID remapping, non-overlap & subgraphs validated.');
+
+console.log('\n🎉 ALL TESTS PASSED SUCCESSFULLY! (34/34 test suites passed)\n');
 

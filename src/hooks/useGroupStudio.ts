@@ -97,7 +97,7 @@ export function useGroupStudio({
           return;
         }
       }
-    } catch {}
+    } catch { }
     setGroups(loadAllGroups());
   }, []);
 
@@ -143,6 +143,8 @@ export function useGroupStudio({
       };
 
       const count = Math.max(1, meta.initialQuestionCount || 1);
+      const frameId = `grp-frame-studio-${Date.now().toString().slice(-4)}`;
+      const frameHeight = Math.max(480, count * 220 + 80);
       const initialNodes: Node[] = [];
       const initialEdges: Edge[] = [];
 
@@ -151,10 +153,13 @@ export function useGroupStudio({
         initialNodes.push({
           id: qId,
           type: 'question',
-          position: { x: 350, y: 150 + i * 180 },
+          position: { x: 385, y: 160 + i * 220 },
+          zIndex: 10,
           data: {
             question_id: i + 1,
-            group: meta.groupId,
+            group: meta.groupId || 1,
+            containerId: frameId,
+            customColor: meta.color,
             question: count === 1 ? meta.name : `${meta.name} - Question ${i + 1}`,
             question_bn: count === 1 ? meta.nameBn : `${meta.nameBn} - প্রশ্ন ${i + 1}`,
             answer_type: 'string',
@@ -177,14 +182,33 @@ export function useGroupStudio({
               width: 16,
               height: 16,
             },
-            data: { rule: 'Next' },
+            data: { rule: 'Next', containerId: frameId },
           });
         }
       }
 
-      setNodes(initialNodes);
+      const frameNode: Node = {
+        id: frameId,
+        type: 'groupFrame',
+        position: { x: 300, y: 100 },
+        zIndex: 0,
+        style: { width: 440, height: frameHeight },
+        data: {
+          groupId: frameId,
+          numericGroupId: meta.groupId || 1,
+          title: meta.name,
+          titleBn: meta.nameBn || meta.name,
+          category: meta.category,
+          color: meta.color,
+          questionIds: initialNodes.map((n) => n.id),
+          questionCount: initialNodes.length,
+          expandedHeight: frameHeight,
+        },
+      };
+
+      setNodes([frameNode, ...initialNodes]);
       setEdges(initialEdges);
-      setSelectedNodeId('q-1');
+      setSelectedNodeId(frameId);
       setGroupDesignSession(session);
       setActiveView('editor');
       setTimeout(() => fitView({ padding: 0.35, duration: 400 }), 80);
@@ -209,185 +233,227 @@ export function useGroupStudio({
         backupGroupMeta: groupMeta,
       };
 
-      const templateNodes: Node[] = group.questions.map((q, idx) => ({
-        id: `q-${idx + 1}`,
-        type: 'question',
-        position: { x: 350, y: 150 + idx * 170 },
-        data: {
-          question_id: idx + 1,
-          question: q.question,
-          question_bn: q.question_bn,
-          answer_type: q.answer_type,
-          mandatory: q.mandatory ?? true,
-          editable: q.editable ?? true,
-          placeholder: q.placeholder || '',
-          hint: q.hint || '',
-          options: q.options || '',
-        },
-      }));
+      if (group.flowNodes && group.flowNodes.length > 0) {
+        setNodes(group.flowNodes);
+        setEdges(group.flowEdges || []);
+        const frameNode = group.flowNodes.find(
+          (n) => n.type === 'groupFrame' || n.type === 'groupContainer'
+        );
+        setSelectedNodeId(frameNode ? frameNode.id : group.flowNodes[0].id);
+      } else {
+        const frameId = `grp-frame-studio-${Date.now().toString().slice(-4)}`;
+        const count = group.questions.length;
+        const frameHeight = Math.max(480, count * 220 + 80);
 
-      const templateEdges: Edge[] = [];
-      for (let i = 0; i < templateNodes.length - 1; i++) {
-        templateEdges.push({
-          id: `edge-${templateNodes[i].id}-${templateNodes[i + 1].id}`,
-          source: templateNodes[i].id,
-          target: templateNodes[i + 1].id,
-          type: 'surveyEdge',
-          markerEnd: {
-            type: MarkerType.ArrowClosed,
-            width: 16,
-            height: 16,
-          },
-          data: {
-            rule: 'Next',
-          },
-        });
+              const templateNodes: Node[] = group.questions.map((q, idx) => ({
+                id: `q-${idx + 1}`,
+                type: 'question',
+                position: { x: 385, y: 160 + idx * 220 },
+                zIndex: 10,
+                data: {
+                  question_id: idx + 1,
+                  group: group.groupId || 1,
+                  containerId: frameId,
+                  customColor: group.color,
+                  question: q.question,
+                  question_bn: q.question_bn,
+                  answer_type: q.answer_type,
+                  mandatory: q.mandatory ?? true,
+                  editable: q.editable ?? true,
+                  placeholder: q.placeholder || '',
+                  hint: q.hint || '',
+                  options: q.options || '',
+                },
+              }));
+
+              const templateEdges: Edge[] = [];
+              for(let i = 0; i<templateNodes.length - 1; i++) {
+            templateEdges.push({
+              id: `edge-${templateNodes[i].id}-${templateNodes[i + 1].id}`,
+              source: templateNodes[i].id,
+              target: templateNodes[i + 1].id,
+              type: 'surveyEdge',
+              markerEnd: {
+                type: MarkerType.ArrowClosed,
+                width: 16,
+                height: 16,
+              },
+              data: {
+                rule: 'Next',
+                containerId: frameId,
+              },
+            });
+          }
+
+          const frameNode: Node = {
+            id: frameId,
+            type: 'groupFrame',
+            position: { x: 300, y: 100 },
+            zIndex: 0,
+            style: { width: 440, height: frameHeight },
+            data: {
+              groupId: frameId,
+              numericGroupId: group.groupId || 1,
+              title: group.name,
+              titleBn: group.nameBn || group.name,
+              category: group.category,
+              color: group.color,
+              questionIds: templateNodes.map((n) => n.id),
+              questionCount: templateNodes.length,
+              expandedHeight: frameHeight,
+            },
+};
+
+setNodes([frameNode, ...templateNodes]);
+setEdges(templateEdges);
+setSelectedNodeId(frameId);
       }
 
-      setNodes(templateNodes);
-      setEdges(templateEdges);
-      if (templateNodes.length > 0) {
-        setSelectedNodeId(templateNodes[0].id);
-      }
-      setGroupDesignSession(session);
-      setActiveView('editor');
-      setTimeout(() => fitView({ padding: 0.3, duration: 400 }), 80);
+setGroupDesignSession(session);
+setActiveView('editor');
+setTimeout(() => fitView({ padding: 0.3, duration: 400 }), 80);
     },
-    [activeProjectId, nodes, edges, groupMeta, setNodes, setEdges, setSelectedNodeId, setActiveView, fitView]
+[activeProjectId, nodes, edges, groupMeta, setNodes, setEdges, setSelectedNodeId, setActiveView, fitView]
   );
 
-  // Group Template Studio: Exit without saving changes
-  const handleExitGroupDesignSession = useCallback(() => {
-    if (!groupDesignSession) return;
-    setNodes(groupDesignSession.backupNodes);
-    setEdges(groupDesignSession.backupEdges);
-    setGroupMeta(groupDesignSession.backupGroupMeta);
-    setGroupDesignSession(null);
-    setSelectedNodeId(null);
-    setSelectedEdgeId(null);
-    setActiveView('groups');
-  }, [groupDesignSession, setNodes, setEdges, setGroupMeta, setSelectedNodeId, setSelectedEdgeId, setActiveView]);
+// Group Template Studio: Exit without saving changes
+const handleExitGroupDesignSession = useCallback(() => {
+  if (!groupDesignSession) return;
+  setNodes(groupDesignSession.backupNodes);
+  setEdges(groupDesignSession.backupEdges);
+  setGroupMeta(groupDesignSession.backupGroupMeta);
+  setGroupDesignSession(null);
+  setSelectedNodeId(null);
+  setSelectedEdgeId(null);
+  setActiveView('groups');
+}, [groupDesignSession, setNodes, setEdges, setGroupMeta, setSelectedNodeId, setSelectedEdgeId, setActiveView]);
 
-  // Group Template Studio: Save canvas questions back into group storage
-  const handleSaveGroupDesignSession = useCallback(() => {
-    if (!groupDesignSession) return;
+// Group Template Studio: Save canvas questions back into group storage
+const handleSaveGroupDesignSession = useCallback(() => {
+  if (!groupDesignSession) return;
 
-    const questionNodes = nodes
-      .filter((n) => n.type === 'question')
-      .sort((a, b) => a.position.y - b.position.y);
+  const questionNodes = nodes
+    .filter((n) => n.type === 'question')
+    .sort((a, b) => a.position.y - b.position.y);
 
-    if (questionNodes.length === 0) {
-      alert('A question group must contain at least one question node.');
-      return;
-    }
+  if (questionNodes.length === 0) {
+    alert('A question group must contain at least one question node.');
+    return;
+  }
 
-    const questionTemplates: GroupQuestionTemplate[] = questionNodes.map((n) => {
-      const data = n.data as any;
-      return {
-        question: data.question || 'Untitled Question',
-        question_bn: data.question_bn || data.question || '',
-        answer_type: data.answer_type || 'string',
-        mandatory: data.mandatory ?? true,
-        editable: data.editable ?? true,
-        placeholder: data.placeholder || '',
-        hint: data.hint || '',
-        options: data.options || '',
-      };
+  const questionTemplates: GroupQuestionTemplate[] = questionNodes.map((n) => {
+    const data = n.data as any;
+    return {
+      question: data.question || 'Untitled Question',
+      question_bn: data.question_bn || data.question || '',
+      answer_type: data.answer_type || 'string',
+      mandatory: data.mandatory ?? true,
+      editable: data.editable ?? true,
+      placeholder: data.placeholder || '',
+      hint: data.hint || '',
+      options: data.options || '',
+    };
+  });
+
+  if (groupDesignSession.groupId) {
+    updateQuestionGroup(groupDesignSession.groupId, {
+      name: groupDesignSession.name,
+      nameBn: groupDesignSession.nameBn,
+      description: groupDesignSession.description,
+      category: groupDesignSession.category,
+      color: groupDesignSession.color,
+      questions: questionTemplates,
+      flowNodes: nodes,
+      flowEdges: edges,
+      ...(groupDesignSession.numericGroupId ? { groupId: groupDesignSession.numericGroupId } : {}),
     });
-
-    if (groupDesignSession.groupId) {
-      updateQuestionGroup(groupDesignSession.groupId, {
+    if (apiClient.isOnline()) {
+      apiClient.updateGroup(groupDesignSession.groupId, {
         name: groupDesignSession.name,
         nameBn: groupDesignSession.nameBn,
         description: groupDesignSession.description,
         category: groupDesignSession.category,
         color: groupDesignSession.color,
         questions: questionTemplates,
+        flowNodes: nodes,
+        flowEdges: edges,
         ...(groupDesignSession.numericGroupId ? { groupId: groupDesignSession.numericGroupId } : {}),
-      });
-      if (apiClient.isOnline()) {
-        apiClient.updateGroup(groupDesignSession.groupId, {
-          name: groupDesignSession.name,
-          nameBn: groupDesignSession.nameBn,
-          description: groupDesignSession.description,
-          category: groupDesignSession.category,
-          color: groupDesignSession.color,
-          questions: questionTemplates,
-          ...(groupDesignSession.numericGroupId ? { groupId: groupDesignSession.numericGroupId } : {}),
-        }).catch(console.error);
-      }
-    } else {
-      const created = createNewQuestionGroup(
-        groupDesignSession.name,
-        groupDesignSession.nameBn,
-        groupDesignSession.description,
-        groupDesignSession.category,
-        groupDesignSession.color,
-        questionTemplates,
-        groupDesignSession.numericGroupId
-      );
-      if (apiClient.isOnline()) {
-        apiClient.createGroup(created).catch(console.error);
-      }
+      }).catch(console.error);
     }
+  } else {
+    const created = createNewQuestionGroup(
+      groupDesignSession.name,
+      groupDesignSession.nameBn,
+      groupDesignSession.description,
+      groupDesignSession.category,
+      groupDesignSession.color,
+      questionTemplates,
+        groupDesignSession.numericGroupId,
+      nodes,
+      edges
+    );
+    if (apiClient.isOnline()) {
+      apiClient.createGroup(created).catch(console.error);
+    }
+  }
+
+  setGroups(loadAllGroups());
+
+  // Restore canvas to active project
+  setNodes(groupDesignSession.backupNodes);
+  setEdges(groupDesignSession.backupEdges);
+  setGroupMeta(groupDesignSession.backupGroupMeta);
+  setGroupDesignSession(null);
+  setSelectedNodeId(null);
+  setSelectedEdgeId(null);
+  setActiveView('groups');
+}, [groupDesignSession, nodes, setNodes, setEdges, setGroupMeta, setSelectedNodeId, setSelectedEdgeId, setActiveView]);
+
+// "Save Selection as Group": Bundle selected canvas question nodes
+const handleSaveSelectionAsGroup = useCallback(
+  (
+    meta: {
+      groupId: number;
+      name: string;
+      nameBn: string;
+      description: string;
+      category: GroupCategory;
+      color: string;
+    },
+    selectedTemplates: GroupQuestionTemplate[],
+    onSuccess?: () => void
+  ) => {
+    if (selectedTemplates.length === 0) return;
+
+    createNewQuestionGroup(
+      meta.name,
+      meta.nameBn,
+      meta.description,
+      meta.category,
+      meta.color,
+      selectedTemplates,
+      meta.groupId
+    );
 
     setGroups(loadAllGroups());
+    onSuccess?.();
+  },
+  []
+);
 
-    // Restore canvas to active project
-    setNodes(groupDesignSession.backupNodes);
-    setEdges(groupDesignSession.backupEdges);
-    setGroupMeta(groupDesignSession.backupGroupMeta);
-    setGroupDesignSession(null);
-    setSelectedNodeId(null);
-    setSelectedEdgeId(null);
-    setActiveView('groups');
-  }, [groupDesignSession, nodes, setNodes, setEdges, setGroupMeta, setSelectedNodeId, setSelectedEdgeId, setActiveView]);
-
-  // "Save Selection as Group": Bundle selected canvas question nodes
-  const handleSaveSelectionAsGroup = useCallback(
-    (
-      meta: {
-        groupId: number;
-        name: string;
-        nameBn: string;
-        description: string;
-        category: GroupCategory;
-        color: string;
-      },
-      selectedTemplates: GroupQuestionTemplate[],
-      onSuccess?: () => void
-    ) => {
-      if (selectedTemplates.length === 0) return;
-
-      createNewQuestionGroup(
-        meta.name,
-        meta.nameBn,
-        meta.description,
-        meta.category,
-        meta.color,
-        selectedTemplates,
-        meta.groupId
-      );
-
-      setGroups(loadAllGroups());
-      onSuccess?.();
-    },
-    []
-  );
-
-  return {
-    groups,
-    setGroups,
-    refreshGroups,
-    handleDeleteGroup,
-    handleResetDefaultGroups,
-    groupDesignSession,
-    setGroupDesignSession,
-    handleStartNewGroupInStudio,
-    handleEditGroupInStudio,
-    handleExitGroupDesignSession,
-    handleSaveGroupDesignSession,
-    handleSaveSelectionAsGroup,
-  };
+return {
+  groups,
+  setGroups,
+  refreshGroups,
+  handleDeleteGroup,
+  handleResetDefaultGroups,
+  groupDesignSession,
+  setGroupDesignSession,
+  handleStartNewGroupInStudio,
+  handleEditGroupInStudio,
+  handleExitGroupDesignSession,
+  handleSaveGroupDesignSession,
+  handleSaveSelectionAsGroup,
+};
 }
 

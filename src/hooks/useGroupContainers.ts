@@ -2,8 +2,13 @@ import { useCallback } from 'react';
 import { MarkerType } from '@xyflow/react';
 import type { Node, Edge, NodeChange } from '@xyflow/react';
 import type { ReusableQuestionGroup } from '../types/group';
-import { calculateGroupQuestionLayout } from '../utils/flowLayout';
+import {
+  calculateGroupQuestionLayout,
+  findNearestNonOverlappingPosition,
+  type FrameRect,
+} from '../utils/flowLayout';
 import { isNodeInContainer } from '../utils/flowValidator';
+import type { GroupMeta } from '../utils/schemaCompiler';
 
 interface UseGroupContainersProps {
   nodes: Node[];
@@ -14,6 +19,7 @@ interface UseGroupContainersProps {
   setSelectedNodeId: (id: string | null) => void;
   setActiveView: (view: 'editor' | 'list' | 'groups') => void;
   setCenter: (x: number, y: number, options?: { zoom?: number; duration?: number }) => void;
+  setGroupMeta?: (meta: GroupMeta | ((m: GroupMeta) => GroupMeta)) => void;
 }
 
 export function useGroupContainers({
@@ -25,6 +31,7 @@ export function useGroupContainers({
   setSelectedNodeId,
   setActiveView,
   setCenter,
+  setGroupMeta,
 }: UseGroupContainersProps) {
   // Synchronized node dragging & cascading deletion: moving/deleting a group container cascades to all child questions
   const handleNodesChange = useCallback(
@@ -356,7 +363,7 @@ export function useGroupContainers({
     [setNodes, setEdges, setSelectedNodeId]
   );
 
-  // Insert Question Group into canvas wrapped in a collapsible GroupContainerNode
+  // Insert Question Group into canvas wrapped in a modern Figma-style GroupFrameNode
   const handleInsertGroupIntoCanvas = useCallback(
     (
       group: ReusableQuestionGroup,
@@ -370,16 +377,93 @@ export function useGroupContainers({
         return max;
       }, 100);
 
-      const lastNode = nodes[nodes.length - 1];
-      const startX = targetPos ? targetPos.x : (lastNode ? lastNode.position.x : 350);
-      const startY = targetPos ? targetPos.y : (lastNode ? lastNode.position.y + 180 : 150);
+      // 1. Identify all existing group frames & avoid numeric group ID collisions
+      const existingFrames = nodes.filter(
+        (n) => n.type === 'groupFrame' || n.type === 'groupContainer'
+      );
+      const existingGroupNumbers = existingFrames
+        .map((f) => (f.data as any)?.numericGroupId || parseInt((f.data as any)?.groupId) || 1)
+        .filter((g) => !isNaN(g) && g > 0);
+      const nextGroupNumber =
+        existingGroupNumbers.length > 0 ? Math.max(...existingGroupNumbers) + 1 : 1;
 
-      // If group has a full flowchart node graph (decisions, processes, start/end, documents, groupFrames, edges)
+      // Assign non-colliding numeric group number
+      const assignedGroupNumber =
+        group.groupId && !existingGroupNumbers.includes(group.groupId)
+          ? group.groupId
+          : nextGroupNumber;
+
+      const GROUP_PALETTE = ['#0284c7', '#8b5cf6', '#10b981', '#f59e0b', '#ec4899', '#06b6d4'];
+      const frameColor =
+        group.color || GROUP_PALETTE[(assignedGroupNumber - 1) % GROUP_PALETTE.length];
+
+      // Prepare other frames rectangles for collision avoidance
+      const otherFrames: FrameRect[] = existingFrames.map((f) => {
+        const fW =
+          (f.style?.width ? parseInt(String(f.style.width), 10) : 0) ||
+          f.measured?.width ||
+          440;
+        const fH =
+          (f.style?.height ? parseInt(String(f.style.height), 10) : 0) ||
+          f.measured?.height ||
+          480;
+        return { x: f.position.x, y: f.position.y, w: fW, h: fH };
+      });
+
+      // 2. If group has a full flowchart node graph (decisions, processes, terminals, groupFrames, edges)
       if (group.flowNodes && group.flowNodes.length > 0) {
         const minX = Math.min(...group.flowNodes.map((n: Node) => n.position.x));
         const minY = Math.min(...group.flowNodes.map((n: Node) => n.position.y));
-        const offsetX = startX - minX;
-        const offsetY = startY - minY;
+        const maxX = Math.max(
+          ...group.flowNodes.map(
+            (n: Node) =>
+              n.position.x +
+              ((n.style?.width ? parseInt(String(n.style.width), 10) : 0) || n.measured?.width || 270)
+          )
+        );
+        const maxY = Math.max(
+          ...group.flowNodes.map(
+            (n: Node) =>
+              n.position.y +
+              ((n.style?.height ? parseInt(String(n.style.height), 10) : 0) || n.measured?.height || 140)
+          )
+        );
+        const totalW = Math.max(440, maxX - minX);
+        const totalH = Math.max(480, maxY - minY);
+
+        let resolvedPos: { x: number; y: number };
+        if (targetPos) {
+          resolvedPos = findNearestNonOverlappingPosition(
+            targetPos.x,
+            targetPos.y,
+            totalW,
+            totalH,
+            otherFrames,
+            30
+          );
+        } else {
+          const lastFrame = existingFrames[existingFrames.length - 1];
+          const fallbackPos = lastFrame
+            ? {
+              x:
+                lastFrame.position.x +
+                ((lastFrame.style?.width ? parseInt(String(lastFrame.style.width), 10) : 0) || 440) +
+                60,
+              y: lastFrame.position.y,
+            }
+            : { x: 300, y: 150 };
+          resolvedPos = findNearestNonOverlappingPosition(
+            fallbackPos.x,
+            fallbackPos.y,
+            totalW,
+            totalH,
+            otherFrames,
+            30
+          );
+        }
+
+        const offsetX = resolvedPos.x - minX;
+        const offsetY = resolvedPos.y - minY;
 
         let nextQId = currentHighestId + 1;
         const idMap = new Map<string, string>();
@@ -420,14 +504,24 @@ export function useGroupContainers({
             );
           }
 
+          const isFrame = wn.type === 'groupFrame' || wn.type === 'groupContainer';
+
           return {
             ...wn,
             id: newId,
+            type: isFrame ? 'groupFrame' : wn.type,
             position: {
               x: Math.round(wn.position.x + offsetX),
               y: Math.round(wn.position.y + offsetY),
             },
-            selected: wn.type === 'groupFrame' || wn.type === 'groupContainer',
+            zIndex: isFrame ? 0 : 10,
+            style: isFrame
+              ? {
+                width: (wn.style?.width ? parseInt(String(wn.style.width), 10) : 0) || 440,
+                height: (wn.style?.height ? parseInt(String(wn.style.height), 10) : 0) || 480,
+              }
+              : wn.style,
+            selected: isFrame,
             data: {
               ...wn.data,
               ...(newContainerId ? { containerId: newContainerId } : {}),
@@ -435,6 +529,25 @@ export function useGroupContainers({
               ...(updatedQuestionIds
                 ? { questionIds: updatedQuestionIds, questionCount: updatedQuestionIds.length }
                 : {}),
+              ...(isFrame
+                ? {
+                  groupId: newId,
+                  numericGroupId: assignedGroupNumber,
+                  title: (wn.data as any)?.title || group.name,
+                  titleBn: (wn.data as any)?.titleBn || group.nameBn || group.name,
+                  category: (wn.data as any)?.category || group.category || 'custom',
+                  color: (wn.data as any)?.color || frameColor,
+                  onToggleCollapse: handleToggleGroupCollapse,
+                  onUngroup: handleUngroup,
+                  onDeleteGroup: handleDeleteGroupContainer,
+                  onDeleteFrame: handleDeleteGroupContainer,
+                }
+                : {
+                  group: assignedGroupNumber,
+                  ...(wn.type === 'question'
+                    ? { customColor: (wn.data as any)?.customColor || frameColor }
+                    : {}),
+                }),
             },
           };
         });
@@ -442,20 +555,31 @@ export function useGroupContainers({
         const deployedEdges: Edge[] = (group.flowEdges || []).map((we: Edge) => {
           const newSource = idMap.get(we.source) || we.source;
           const newTarget = idMap.get(we.target) || we.target;
+          const newEdgeContainerId = (we.data as any)?.containerId
+            ? idMap.get((we.data as any).containerId) || (we.data as any).containerId
+            : undefined;
           return {
             ...we,
             id: `edge-${newSource}-${newTarget}-${Date.now().toString().slice(-4)}`,
             source: newSource,
             target: newTarget,
-            data: { ...we.data },
+            data: {
+              ...we.data,
+              ...(newEdgeContainerId ? { containerId: newEdgeContainerId } : {}),
+            },
           };
         });
 
         setNodes((nds) => nds.concat(deployedNodes));
         setEdges((eds) => eds.concat(deployedEdges));
 
+        setGroupMeta?.((prev) => ({
+          ...prev,
+          totalGroups: Math.max(prev.totalGroups, assignedGroupNumber),
+        }));
+
         const focusNode =
-          deployedNodes.find((n) => n.type === 'groupFrame' || n.type === 'groupContainer') ||
+          deployedNodes.find((n) => n.type === 'groupFrame') ||
           deployedNodes[0];
         if (focusNode) {
           setSelectedNodeId(focusNode.id);
@@ -470,39 +594,76 @@ export function useGroupContainers({
         return;
       }
 
-      const containerId = `grp-container-${Date.now().toString().slice(-5)}`;
+      // 3. Standard Template: Insert questions nested neatly inside a 440px wide GroupFrameNode
+      const frameId = `grp-frame-${Date.now().toString().slice(-4)}-${Math.random().toString(36).slice(2, 5)}`;
+      const frameWidth = 440;
+      const questionCount = group.questions?.length || 0;
+      const frameHeight = Math.max(480, questionCount * 220 + 80);
+
+      let resolvedPos: { x: number; y: number };
+      if (targetPos) {
+        resolvedPos = findNearestNonOverlappingPosition(
+          targetPos.x,
+          targetPos.y,
+          frameWidth,
+          frameHeight,
+          otherFrames,
+          30
+        );
+      } else {
+        const lastFrame = existingFrames[existingFrames.length - 1];
+        const fallbackPos = lastFrame
+          ? {
+            x:
+              lastFrame.position.x +
+              ((lastFrame.style?.width ? parseInt(String(lastFrame.style.width), 10) : 0) || 440) +
+              60,
+            y: lastFrame.position.y,
+          }
+          : { x: 300, y: 150 };
+        resolvedPos = findNearestNonOverlappingPosition(
+          fallbackPos.x,
+          fallbackPos.y,
+          frameWidth,
+          frameHeight,
+          otherFrames,
+          30
+        );
+      }
+
       const questionNodeIds: string[] = [];
       const newNodes: Node[] = [];
       const newEdges: Edge[] = [];
-
-      const { offsets, totalExpandedHeight } = calculateGroupQuestionLayout(group.questions);
 
       group.questions.forEach((q, idx) => {
         const qId = currentHighestId + 1 + idx;
         const nodeId = `q-${qId}`;
         questionNodeIds.push(nodeId);
 
+        // Center questions inside 440px frame (440 - 270) / 2 = 85px offset
         newNodes.push({
           id: nodeId,
           type: 'question',
           position: {
-            x: startX + 40,
-            y: startY + offsets[idx],
+            x: resolvedPos.x + 85,
+            y: resolvedPos.y + 60 + idx * 220,
           },
+          zIndex: 10,
           hidden: startCollapsed,
           data: {
             question_id: qId,
             question: q.question,
-            question_bn: q.question_bn,
+            question_bn: q.question_bn || q.question,
             answer_type: q.answer_type,
             mandatory: q.mandatory ?? true,
             editable: q.editable ?? true,
             placeholder: q.placeholder || '',
             hint: q.hint || '',
             options: q.options || '',
-            containerId,
-            group: group.groupId || 1,
+            containerId: frameId,
+            group: assignedGroupNumber,
             group_name: group.name,
+            customColor: frameColor,
           },
         });
 
@@ -521,49 +682,68 @@ export function useGroupContainers({
             },
             data: {
               rule: 'Next',
-              containerId,
+              containerId: frameId,
             },
           });
         }
       });
 
-      // The Group Container Node (framing header with collapse/expand toggle)
+      // The modern Figma-style Group Area Frame Node
       const containerNode: Node = {
-        id: containerId,
-        type: 'groupContainer',
-        position: { x: startX, y: startY },
+        id: frameId,
+        type: 'groupFrame',
+        position: resolvedPos,
+        zIndex: 0,
+        style: { width: frameWidth, height: frameHeight },
+        selected: true,
         data: {
-          groupId: group.id,
-          numericGroupId: group.groupId || 1,
+          groupId: frameId,
+          numericGroupId: assignedGroupNumber,
           title: group.name,
-          titleBn: group.nameBn,
-          category: group.category,
-          color: group.color,
+          titleBn: group.nameBn || group.name,
+          category: group.category || 'custom',
+          color: frameColor,
           isCollapsed: startCollapsed,
           questionIds: questionNodeIds,
-          questionCount: group.questions.length,
-          expandedHeight: totalExpandedHeight,
-          childOffsets: offsets,
+          questionCount: questionCount,
+          expandedHeight: frameHeight,
           onToggleCollapse: handleToggleGroupCollapse,
           onUngroup: handleUngroup,
           onDeleteGroup: handleDeleteGroupContainer,
+          onDeleteFrame: handleDeleteGroupContainer,
         },
       };
 
       setNodes((nds) => nds.concat(containerNode).concat(newNodes));
       setEdges((eds) => eds.concat(newEdges));
 
-      setSelectedNodeId(containerId);
+      setGroupMeta?.((prev) => ({
+        ...prev,
+        totalGroups: Math.max(prev.totalGroups, assignedGroupNumber),
+      }));
+
+      setSelectedNodeId(frameId);
       setActiveView('editor');
 
       setTimeout(() => {
-        setCenter(startX + 140, startY + 90, {
-          zoom: 0.9,
+          setCenter(resolvedPos.x + 220, resolvedPos.y + 200, {
+          zoom: 0.85,
           duration: 500,
         });
       }, 100);
     },
-    [nodes, setNodes, setEdges, setCenter, setSelectedNodeId, setActiveView, handleToggleGroupCollapse, handleUngroup, handleDeleteGroupContainer]
+    [
+    nodes,
+    setNodes,
+    setEdges,
+    setCenter,
+    setSelectedNodeId,
+    setActiveView,
+    setGroupMeta,
+    handleToggleGroupCollapse,
+    handleUngroup,
+    handleDeleteGroupContainer,
+    ]
   );
 
   return {

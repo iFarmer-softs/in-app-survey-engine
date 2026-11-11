@@ -179,6 +179,7 @@ export const DEFAULT_QUESTION_GROUPS: ReusableQuestionGroup[] = [
 
 export function loadAllGroups(): ReusableQuestionGroup[] {
   try {
+    if (typeof localStorage === 'undefined') return DEFAULT_QUESTION_GROUPS;
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw === null) {
       saveAllGroups(DEFAULT_QUESTION_GROUPS);
@@ -197,6 +198,7 @@ export function loadAllGroups(): ReusableQuestionGroup[] {
 
 export function saveAllGroups(groups: ReusableQuestionGroup[]): void {
   try {
+    if (typeof localStorage === 'undefined') return;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(groups));
   } catch (err) {
     console.error('Failed to save reusable question groups to storage', err);
@@ -210,7 +212,9 @@ export function createNewQuestionGroup(
   category: GroupCategory,
   color: string,
   questions: GroupQuestionTemplate[],
-  groupId?: number
+  groupId?: number,
+  flowNodes?: any[],
+  flowEdges?: any[]
 ): ReusableQuestionGroup {
   const groups = loadAllGroups();
   const maxGroupId = groups.reduce((max, g) => (g.groupId && g.groupId > max ? g.groupId : max), 0);
@@ -227,6 +231,8 @@ export function createNewQuestionGroup(
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     questions,
+    ...(flowNodes && flowNodes.length > 0 ? { flowNodes } : {}),
+    ...(flowEdges && flowEdges.length > 0 ? { flowEdges } : {}),
   };
 
   const updated = [newGroup, ...groups];
