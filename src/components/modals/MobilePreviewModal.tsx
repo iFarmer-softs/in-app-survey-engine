@@ -539,15 +539,8 @@ export const MobilePreviewModal: React.FC<MobilePreviewModalProps> = ({
           return false;
         }
 
-        const isCrossGroup = parentQ && parentQ.group && parentQ.group !== q.group;
-        const parentGroupVisited = parentQ?.group ? history.includes(parentQ.group) : false;
-
         const parentAns = answers[String(parentId)] || '';
         if (!parentAns || parentAns.trim() === '') {
-          // If the parent question is in a different group that was never visited (e.g. bypassed via jump), do not block this question
-          if (isCrossGroup && !parentGroupVisited) {
-            continue;
-          }
           return false;
         }
 
@@ -569,7 +562,7 @@ export const MobilePreviewModal: React.FC<MobilePreviewModalProps> = ({
     });
 
     return visible;
-  }, [normalized.questions, answers, history]);
+  }, [normalized.questions, answers]);
 
   // Helper to determine the allowed question IDs for a group based on specific option targets and reachability
   const getEligibleQuestionIdsForGroup = useCallback(
@@ -579,39 +572,62 @@ export const MobilePreviewModal: React.FC<MobilePreviewModalProps> = ({
         return jId === gNum;
       });
 
-      // 1. If any general jump targeting the entire group is satisfied, all questions in this group are eligible
-      const lastVisitedGroup = history.length > 0 ? history[history.length - 1] : undefined;
-      const generalJumps = jumpsToG.filter(
-        (j: any) => j.target_question_id === undefined || j.target_question_id === null
-      );
-      const hasGeneralJumpSatisfied = generalJumps.some((j: any) => {
-        if (j.source_group !== undefined && lastVisitedGroup !== undefined && j.source_group !== lastVisitedGroup) {
-          return false;
-        }
-        const qId = j.source_question_id;
-        if (qId !== undefined && qId !== null) {
-          const rawAns = answers[String(qId)] || '';
-          return evaluateJumpTrigger(j, rawAns);
-        }
-        return true;
-      });
-
-      if (hasGeneralJumpSatisfied) {
-        return null;
-      }
-
-      // 2. Filter jumps that have target_question_id specified
+      // Filter jumps that have target_question_id specified
       const specificTargetJumps = jumpsToG.filter(
         (j: any) => j.target_question_id !== undefined && j.target_question_id !== null
       );
 
-      // If no jump targets a specific question in this group, then all questions in this group are eligible
-      if (specificTargetJumps.length === 0) {
+      const allQMap = new Map<number, DynamicKycQuestion>();
+      normalized.questions.forEach((q) => allQMap.set(q.question_id, q));
+
+      const groupQuestions = normalized.questions.filter(
+        (q) => (q.group || normalized.currentGroup || 1) === gNum
+      );
+
+      // Collect all question IDs in this group that are specific targets of cross-group links / jumps
+      const specificTargetQIds = new Set<number>();
+      specificTargetJumps.forEach((j: any) => {
+        const tId = Number(j.target_question_id);
+        specificTargetQIds.add(tId);
+        const q = allQMap.get(tId);
+        if (q?.subsequent_questions && Array.isArray(q.subsequent_questions)) {
+          q.subsequent_questions.forEach((sqId) => specificTargetQIds.add(sqId));
+        }
+      });
+
+      // Also check questions with cross-group depends_on
+      groupQuestions.forEach((q) => {
+        if (q.depends_on && q.depends_on.length > 0) {
+          const hasCrossGroupParent = q.depends_on.some((parentId) => {
+            const p = allQMap.get(parentId);
+            return p && p.group && p.group !== gNum;
+          });
+          if (hasCrossGroupParent) {
+            specificTargetQIds.add(q.question_id);
+            if (q.subsequent_questions && Array.isArray(q.subsequent_questions)) {
+              q.subsequent_questions.forEach((sqId) => specificTargetQIds.add(sqId));
+            }
+          }
+        }
+      });
+
+      // If no question in this group is targeted by a cross-group link, all questions are eligible by default
+      if (specificTargetQIds.size === 0) {
         return null; // null means no specific restriction
       }
 
+      // Default questions of this group are questions that are NOT cross-group targets
+      const allowed = new Set<number>();
+      groupQuestions.forEach((q) => {
+        if (!specificTargetQIds.has(q.question_id)) {
+          allowed.add(q.question_id);
+        }
+      });
+
       // Check which specific target jumps have their condition satisfied by current answers
+      const lastVisitedGroup = history.length > 0 ? history[history.length - 1] : undefined;
       const satisfiedTargets = new Set<number>();
+
       for (const j of specificTargetJumps) {
         if (j.source_group !== undefined && lastVisitedGroup !== undefined && j.source_group !== lastVisitedGroup) {
           continue;
@@ -628,15 +644,25 @@ export const MobilePreviewModal: React.FC<MobilePreviewModalProps> = ({
         }
       }
 
-      // If no specific jump was satisfied, no specific restriction applies (e.g. navigated sequentially)
-      if (satisfiedTargets.size === 0) {
-        return null;
-      }
+      // Also check if any cross-group dependent question has its depends_on rule satisfied
+      groupQuestions.forEach((q) => {
+        if (specificTargetQIds.has(q.question_id) && !satisfiedTargets.has(q.question_id)) {
+          if (q.depends_on && q.depends_on.length > 0) {
+            const isAllSatisfied = q.depends_on.every((parentId) => {
+              const parentAns = answers[String(parentId)] || '';
+              if (!parentAns || parentAns.trim() === '') return false;
+              const rule = q.validation ? q.validation[String(parentId)] || (q.validation as any)[parentId] : null;
+              if (rule && !evaluateRule(rule, parentAns)) return false;
+              return true;
+            });
+            if (isAllSatisfied) {
+              satisfiedTargets.add(q.question_id);
+            }
+          }
+        }
+      });
 
-      const allowed = new Set<number>();
-      const allQMap = new Map<number, DynamicKycQuestion>();
-      normalized.questions.forEach((q) => allQMap.set(q.question_id, q));
-
+      // Add satisfied target questions and their downstream questions to allowed set
       satisfiedTargets.forEach((tId) => {
         allowed.add(tId);
         const q = allQMap.get(tId);
@@ -672,28 +698,34 @@ export const MobilePreviewModal: React.FC<MobilePreviewModalProps> = ({
       // 1. If explicitly jumped to, it is eligible
       if (currentTargetJump === gNum) return true;
 
-      // 2. Check if this group is targeted by any conditional jumps
-      const conditionalJumpsToG = ((normalized.groupJumps as any[]) || []).filter((j: any) => {
+      // 2. Check if this group is targeted by any conditional jumps targeting the whole group
+      const lastVisitedGroup = history.length > 0 ? history[history.length - 1] : undefined;
+      const groupLevelJumpsToG = ((normalized.groupJumps as any[]) || []).filter((j: any) => {
         const jId = parseInt(j.group_id, 10);
         return (
           jId === gNum &&
+          (j.target_question_id === undefined || j.target_question_id === null) &&
           (j.trigger_value || j.source_question_id !== undefined || j.trigger_type || j.source_handle)
         );
       });
 
-      if (conditionalJumpsToG.length > 0) {
-        // A conditional jump targeting this group exists! Check if any condition is satisfied
-        const isSatisfied = conditionalJumpsToG.some((j: any) => {
-          const qId = j.source_question_id;
-          if (qId !== undefined && qId !== null) {
-            const rawAns = answers[String(qId)] || '';
-            return evaluateJumpTrigger(j, rawAns);
-          }
-          return false;
-        });
+      if (groupLevelJumpsToG.length > 0) {
+        const relevantJumps = groupLevelJumpsToG.filter(
+          (j: any) => j.source_group === undefined || lastVisitedGroup === undefined || j.source_group === lastVisitedGroup
+        );
+        if (relevantJumps.length > 0) {
+          const isSatisfied = relevantJumps.some((j: any) => {
+            const qId = j.source_question_id;
+            if (qId !== undefined && qId !== null) {
+              const rawAns = answers[String(qId)] || '';
+              return evaluateJumpTrigger(j, rawAns);
+            }
+            return false;
+          });
 
-        if (!isSatisfied) {
-          return false;
+          if (!isSatisfied) {
+            return false;
+          }
         }
       }
 
@@ -726,6 +758,7 @@ export const MobilePreviewModal: React.FC<MobilePreviewModalProps> = ({
       answers,
       visibleQuestions,
       getEligibleQuestionIdsForGroup,
+      history,
     ]
   );
 

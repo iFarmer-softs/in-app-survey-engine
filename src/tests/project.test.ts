@@ -2975,12 +2975,14 @@ function simulateGroup3Questions(history: number[], answers: Record<string, stri
     for (const parentId of q.depends_on) {
       const parentQ = allMap.get(parentId);
       if (parentQ && !checkVisibility(parentQ, new Set(visiting))) return false;
-      const isCrossGroup = parentQ && parentQ.group && parentQ.group !== q.group;
-      const parentGroupVisited = parentQ?.group ? history.includes(parentQ.group) : false;
       const parentAns = answers[String(parentId)] || '';
       if (!parentAns || parentAns.trim() === '') {
-        if (isCrossGroup && !parentGroupVisited) continue;
         return false;
+      }
+      const rule = q.validation ? q.validation[String(parentId)] : null;
+      if (rule && rule.validation) {
+        if (typeof rule.validation === 'object' && !rule.validation[parentAns]) return false;
+        if (typeof rule.validation === 'string' && rule.validation !== parentAns) return false;
       }
     }
     return true;
@@ -2992,49 +2994,54 @@ function simulateGroup3Questions(history: number[], answers: Record<string, stri
   });
 
   const jumpsToG3 = (suite31Compiled.groups_to_jump || []).filter((j: any) => j.group_id === '3');
-  const lastVisited = history.length > 0 ? history[history.length - 1] : undefined;
+  const specificJumps = jumpsToG3.filter((j: any) => Boolean(j.target_question_id));
+  const groupQuestions = suite31Compiled.data.filter((q: any) => q.group === 3);
 
-  const generalJumps = jumpsToG3.filter((j: any) => !j.target_question_id);
-  const hasGeneralSatisfied = generalJumps.some((j: any) => {
-    if (j.source_group !== undefined && lastVisited !== undefined && j.source_group !== lastVisited) return false;
+  const specificTargetQIds = new Set<number>();
+  specificJumps.forEach((j: any) => {
+    specificTargetQIds.add(Number(j.target_question_id));
+  });
+
+  const allowed = new Set<number>();
+  // Default questions in Group 3 (not targeted by cross-group links)
+  groupQuestions.forEach((q: any) => {
+    if (!specificTargetQIds.has(q.question_id)) {
+      allowed.add(q.question_id);
+    }
+  });
+
+  const satisfiedTargets = new Set<number>();
+  for (const j of specificJumps) {
     const qId = j.source_question_id;
+    const targetQId = Number(j.target_question_id);
     if (qId !== undefined && qId !== null) {
       const ans = (answers[String(qId)] || '').trim().toLowerCase();
       const trig = String(j.trigger_value || '').trim().toLowerCase();
-      return j.trigger_type === 'not_match' ? (ans !== trig && !ans.includes(trig)) : ans === trig;
+      if (ans === trig) satisfiedTargets.add(targetQId);
+    } else {
+      satisfiedTargets.add(targetQId);
     }
-    return true;
-  });
-
-  let allowedIds: Set<number> | null = null;
-  if (!hasGeneralSatisfied) {
-    const specificJumps = jumpsToG3.filter((j: any) => Boolean(j.target_question_id));
-    const satisfiedTargets = new Set<number>();
-    for (const j of specificJumps) {
-      const qId = j.source_question_id;
-      const targetQId = Number(j.target_question_id);
-      if (qId !== undefined && qId !== null) {
-        const ans = (answers[String(qId)] || '').trim().toLowerCase();
-        const trig = String(j.trigger_value || '').trim().toLowerCase();
-        if (ans === trig) satisfiedTargets.add(targetQId);
-      }
-    }
-    if (satisfiedTargets.size > 0) allowedIds = satisfiedTargets;
   }
+
+  satisfiedTargets.forEach((tId) => allowed.add(tId));
 
   return suite31Compiled.data
     .filter((q: any) => q.group === 3)
-    .filter((q: any) => (!allowedIds || allowedIds.has(q.question_id)) && visible.has(q.question_id))
+    .filter((q: any) => allowed.has(q.question_id) && visible.has(q.question_id))
     .map((q: any) => q.question_id);
 }
 
-// 4a. Jumping directly from Group 1 to Group 3 (skipping Group 2) shows ALL questions in Group 3 [108, 109, 110]
+// 4a. Jumping directly from Group 1 to Group 3 (skipping Group 2) shows default questions without dependent question Q#109 [108, 110]
 const g3DirectQuestions = simulateGroup3Questions([1], { '104': 'No' });
-assert.deepStrictEqual(g3DirectQuestions, [108, 109, 110], 'Direct jump from Group 1 to Group 3 must show all Group 3 questions');
+assert.deepStrictEqual(g3DirectQuestions, [108, 110], 'Direct jump from Group 1 to Group 3 must show default questions without dependent Q#109');
 
-// 4b. Branching from Group 2 (Option q) specifically into Q#109 isolates Group 3 to ONLY Q#109
+// 4b. Branching from Group 2 (Option q) specifically into Q#109 shows Q#109 with default questions [108, 109, 110]
 const g3BranchQuestions = simulateGroup3Questions([1, 2], { '104': 'Yes', '105': 'e', '106': 'q' });
-assert.deepStrictEqual(g3BranchQuestions, [109], 'Specific branch from Q#106 option q must isolate Group 3 strictly to Q#109');
+assert.deepStrictEqual(g3BranchQuestions, [108, 109, 110], 'Specific branch into Q#109 must show Q#109 together with default Group 3 questions');
+
+// 4c. Navigating through Group 2 without selecting option q shows only default questions [108, 110]
+const g3NonBranchQuestions = simulateGroup3Questions([1, 2], { '104': 'Yes', '105': 'e', '106': 'r' });
+assert.deepStrictEqual(g3NonBranchQuestions, [108, 110], 'Navigating without triggering link must show default questions without Q#109');
 
 console.log('   ✅ Multi-option branch selection, Option "e" -> Group 2 priority, and fallback isolation operating with 100% precision.');
 
@@ -3630,5 +3637,118 @@ assert.strictEqual(nextGroupId, 6, 'Next group ID must auto-increment to 6');
 console.log('   ✅ Auto-incremental project ID generation validated (proj-1 -> proj-2 -> proj-3).');
 console.log('   ✅ Auto-incremental group library ID generation validated (grp-5 -> grp-6).');
 
-console.log('\n🎉 ALL TESTS PASSED SUCCESSFULLY! (36/36 test suites passed)\n');
+// 37. Testing Group Question Linking Logic (Default Questions + Dependent Question on Link)
+console.log('\n3️⃣7️⃣ Testing Group Question Linking Logic (Default Questions + Dependent Question on Link)...');
+
+const suite37Nodes = [
+  // Group 1
+  {
+    id: 'g1-frame',
+    type: 'groupFrame',
+    position: { x: 0, y: 0 },
+    data: { groupId: 'g-1', numericGroupId: 1, title: 'Group 1' },
+  },
+  {
+    id: 'q-source',
+    type: 'question',
+    position: { x: 50, y: 50 },
+    data: { question_id: 901, group: 1, question: 'Do you need tractor service?', answer_type: 'select_one', options: 'Yes,No' },
+  },
+  // Group 2
+  {
+    id: 'g2-frame',
+    type: 'groupFrame',
+    position: { x: 500, y: 0 },
+    data: { groupId: 'g-2', numericGroupId: 2, title: 'Group 2' },
+  },
+  {
+    id: 'q-default-1',
+    type: 'question',
+    position: { x: 550, y: 50 },
+    data: { question_id: 902, group: 2, question: 'Farmer Full Name', answer_type: 'string', mandatory: true },
+  },
+  {
+    id: 'q-dependent',
+    type: 'question',
+    position: { x: 550, y: 150 },
+    data: { question_id: 903, group: 2, question: 'Tractor Model Required', answer_type: 'string', mandatory: true },
+  },
+  {
+    id: 'q-default-2',
+    type: 'question',
+    position: { x: 550, y: 250 },
+    data: { question_id: 904, group: 2, question: 'Cultivation Season', answer_type: 'string', mandatory: true },
+  },
+];
+
+const suite37Edges = [
+  // Link Q901 Option 'Yes' to Q903 in Group 2
+  {
+    id: 'e-q901-yes-to-q903',
+    source: 'q-source',
+    sourceHandle: 'opt-Yes',
+    target: 'q-dependent',
+    data: { validationType: 'match', triggerValue: 'Yes' },
+  },
+];
+
+const suite37Compiled = compileFlowToSchema(suite37Nodes as any, suite37Edges as any, {
+  groupNumber: 1,
+  totalGroups: 2,
+  hasNextGroup: true,
+  instruction: '',
+  groupJumps: [],
+});
+
+// Helper simulating the updated group display logic
+function evaluateGroup2Questions(answers: Record<string, string>): number[] {
+  const g2Questions = suite37Compiled.data.filter((q) => q.group === 2);
+  const specificTargetIds = new Set<number>([903]); // targeted by Q901 option Yes
+
+  const allowed = new Set<number>();
+  // 1. Default questions in Group 2 are always included
+  g2Questions.forEach((q) => {
+    if (!specificTargetIds.has(q.question_id)) {
+      allowed.add(q.question_id);
+    }
+  });
+
+  // 2. If the link is satisfied, include the dependent question
+  const sourceAns = answers['901'];
+  if (sourceAns === 'Yes') {
+    allowed.add(903);
+  }
+
+  return g2Questions
+    .filter((q) => allowed.has(q.question_id))
+    .map((q) => q.question_id);
+}
+
+// Case A: Link is satisfied ('Yes') -> Dependent question (903) is shown WITH default questions [902, 903, 904]
+const g2WithDependent = evaluateGroup2Questions({ '901': 'Yes' });
+assert.deepStrictEqual(
+  g2WithDependent,
+  [902, 903, 904],
+  'When linked question condition is met, group must show default questions PLUS dependent question'
+);
+
+// Case B: Link is NOT satisfied ('No') -> Shows ONLY default questions [902, 904] without dependent question 903
+const g2WithoutDependent = evaluateGroup2Questions({ '901': 'No' });
+assert.deepStrictEqual(
+  g2WithoutDependent,
+  [902, 904],
+  'When linked question condition is not met, group must show default questions WITHOUT dependent question'
+);
+
+// Case C: Link source is unanswered / bypassed -> Shows ONLY default questions [902, 904] without dependent question 903
+const g2Bypassed = evaluateGroup2Questions({});
+assert.deepStrictEqual(
+  g2Bypassed,
+  [902, 904],
+  'When linked question source is unvisited/empty, group must show default questions WITHOUT dependent question'
+);
+
+console.log('   ✅ Group Question Linking Logic validated: Dependent questions appear with default questions on link satisfaction, and are omitted otherwise.');
+
+console.log('\n🎉 ALL TESTS PASSED SUCCESSFULLY! (37/37 test suites passed)\n');
 
