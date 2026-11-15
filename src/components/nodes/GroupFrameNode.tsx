@@ -3,7 +3,7 @@ import { Handle, Position, NodeResizer, useReactFlow } from '@xyflow/react';
 import type { NodeProps } from '@xyflow/react';
 import { Layers, Sparkles, Trash } from 'lucide-react';
 import type { GroupCategory } from '../../types/group';
-import { isNodeInContainer } from '../../utils/flowValidator';
+import { isNodeInContainer, getNodeDimensions, getContainerBounds } from '../../utils/flowValidator';
 
 export interface GroupFrameNodeData {
   groupId: string;
@@ -48,18 +48,7 @@ export const GroupFrameNode = memo(({ id, data, selected, onDeleteFrame }: Group
       );
 
       for (const other of otherFrames) {
-        const oX = other.position.x;
-        const oY = other.position.y;
-        const oW =
-          (other.style?.width ? parseInt(String(other.style.width), 10) : 0) ||
-          (other.data as any)?.width ||
-          other.measured?.width ||
-          440;
-        const oH =
-          (other.style?.height ? parseInt(String(other.style.height), 10) : 0) ||
-          (other.data as any)?.height ||
-          other.measured?.height ||
-          480;
+        const { fX: oX, fY: oY, fW: oW, fH: oH } = getContainerBounds(other);
 
         const collides =
           params.x < oX + oW + GAP &&
@@ -71,6 +60,29 @@ export const GroupFrameNode = memo(({ id, data, selected, onDeleteFrame }: Group
           return false;
         }
       }
+
+      // Ensure resized boundary doesn't clip or sit on top of any child symbols
+      const currentFrame = allNodes.find((n) => n.id === id);
+      const childNodes = allNodes.filter((n) =>
+        isNodeInContainer(n, currentFrame || ({ id } as any), allNodes)
+      );
+      const currentBounds = currentFrame ? getContainerBounds(currentFrame) : { fW: 440, fH: 480 };
+      const isExpandingRight = params.width > currentBounds.fW;
+      const isExpandingBottom = params.height > currentBounds.fH;
+
+      for (const child of childNodes) {
+        const { width: cW, height: cH } = getNodeDimensions(child);
+        if (child.position.x < params.x + 12 || child.position.y < params.y + 44) {
+          return false;
+        }
+        if (child.position.x + cW > params.x + params.width - 12 && !isExpandingRight) {
+          return false;
+        }
+        if (child.position.y + cH > params.y + params.height - 12 && !isExpandingBottom) {
+          return false;
+        }
+      }
+
       return true;
     },
     [getNodes, id]

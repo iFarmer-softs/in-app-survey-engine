@@ -8,12 +8,14 @@ interface UseFlowCanvasConnectionsProps {
   nodes: Node[];
   edges: Edge[];
   setEdges: (edges: Edge[] | ((eds: Edge[]) => Edge[])) => void;
+  onContainmentWarning?: (msg: string) => void;
 }
 
 export function useFlowCanvasConnections({
   nodes,
   edges,
   setEdges,
+  onContainmentWarning,
 }: UseFlowCanvasConnectionsProps) {
   const [warningAlertData, setWarningAlertData] = useState<WarningAlertData | null>(null);
   const [edgeRouting, setEdgeRouting] = useState<'smoothstep' | 'bezier' | 'straight'>('smoothstep');
@@ -93,6 +95,32 @@ export function useFlowCanvasConnections({
         sourceNode?.type !== 'groupJump' &&
         targetNode?.type !== 'groupJump' &&
         sourceGroup !== targetGroup;
+
+      // Connectors should not go outside of the group border except the Group Connector
+      if (isCrossGroup) {
+        if (onContainmentWarning) {
+          onContainmentWarning('Connectors cannot go outside of the group border except via the Group Connector.');
+        }
+        const sourceLabel =
+          sourceNode?.type === 'question'
+            ? `Q#${(sourceNode.data as any)?.question_id || params.source}`
+            : (sourceNode?.data as any)?.label || sourceNode?.type || params.source;
+        const targetLabel =
+          targetNode?.type === 'question'
+            ? `Q#${(targetNode.data as any)?.question_id || params.target}`
+            : (targetNode?.data as any)?.label || targetNode?.type || params.target;
+
+        setWarningAlertData({
+          title: 'Connectors Cannot Cross Group Border',
+          sourceLabel,
+          targetLabel,
+          existingBranch: `Group #${sourceGroup}`,
+          newBranch: `Group #${targetGroup}`,
+          message:
+            'Connectors cannot go outside of the group border. To connect or route logic to another group, please use the Group Connector symbol.',
+        });
+        return;
+      }
 
       let edgeLabel: string | undefined = undefined;
       let strokeColor = isCrossGroup ? '#8b5cf6' : '#10b981';
@@ -178,6 +206,32 @@ export function useFlowCanvasConnections({
         sourceNode?.type !== 'groupJump' &&
         targetNode?.type !== 'groupJump' &&
         sourceGroup !== targetGroup;
+
+      // Connectors should not go outside of the group border except the Group Connector
+      if (isCrossGroup) {
+        if (onContainmentWarning) {
+          onContainmentWarning('Connectors cannot go outside of the group border except via the Group Connector.');
+        }
+        const sourceLabel =
+          sourceNode?.type === 'question'
+            ? `Q#${(sourceNode.data as any)?.question_id || newConnection.source}`
+            : (sourceNode?.data as any)?.label || sourceNode?.type || newConnection.source;
+        const targetLabel =
+          targetNode?.type === 'question'
+            ? `Q#${(targetNode.data as any)?.question_id || newConnection.target}`
+            : (targetNode?.data as any)?.label || targetNode?.type || newConnection.target;
+
+        setWarningAlertData({
+          title: 'Connectors Cannot Cross Group Border',
+          sourceLabel,
+          targetLabel,
+          existingBranch: `Group #${sourceGroup}`,
+          newBranch: `Group #${targetGroup}`,
+          message:
+            'Connectors cannot go outside of the group border. To connect or route logic to another group, please use the Group Connector symbol.',
+        });
+        return;
+      }
 
       let strokeColor = isCrossGroup ? '#8b5cf6' : '#10b981';
       let edgeLabel = oldEdge.label as string | undefined;

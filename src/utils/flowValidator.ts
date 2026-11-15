@@ -19,6 +19,108 @@ const OPTION_BASED_TYPES: AnswerType[] = [
   'single_radio',
 ];
 
+export const GROUP_BORDER_INSET = 12;
+export const GROUP_HEADER_INSET = 44;
+
+/**
+ * Returns the exact measured, styled, or fallback dimensions of any flow node or symbol.
+ */
+export function getNodeDimensions(node: Node): { width: number; height: number } {
+  const width =
+    (node.style?.width ? parseInt(String(node.style.width), 10) : 0) ||
+    (typeof node.width === 'number' && node.width > 0 ? node.width : 0) ||
+    node.measured?.width ||
+    (node.data as any)?.width ||
+    (node.type === 'question'
+      ? 270
+      : node.type === 'groupJump'
+      ? 210
+      : node.type === 'decision' || node.type === 'process' || node.type === 'document'
+      ? 220
+      : node.type === 'start' || node.type === 'end'
+      ? 150
+      : 200);
+
+  const height =
+    (node.style?.height ? parseInt(String(node.style.height), 10) : 0) ||
+    (typeof node.height === 'number' && node.height > 0 ? node.height : 0) ||
+    node.measured?.height ||
+    (node.data as any)?.height ||
+    (node.type === 'question'
+      ? 240
+      : node.type === 'groupJump'
+      ? 90
+      : node.type === 'decision' || node.type === 'process' || node.type === 'document'
+      ? 100
+      : node.type === 'start' || node.type === 'end'
+      ? 50
+      : 100);
+
+  return { width, height };
+}
+
+/**
+ * Returns the exact bounding box of a group container or frame.
+ */
+export function getContainerBounds(containerNode: Node): { fX: number; fY: number; fW: number; fH: number } {
+  const cData = containerNode.data as any;
+  const fX = containerNode.position.x;
+  const fY = containerNode.position.y;
+  const fW =
+    (typeof containerNode.width === 'number' && containerNode.width > 0 ? containerNode.width : 0) ||
+    containerNode.measured?.width ||
+    (containerNode.style?.width ? parseInt(String(containerNode.style.width), 10) : 0) ||
+    cData?.width ||
+    (containerNode.type === 'groupContainer' ? 350 : 440);
+  const fH =
+    (typeof containerNode.height === 'number' && containerNode.height > 0 ? containerNode.height : 0) ||
+    containerNode.measured?.height ||
+    (containerNode.style?.height ? parseInt(String(containerNode.style.height), 10) : 0) ||
+    cData?.expandedHeight ||
+    cData?.height ||
+    (containerNode.type === 'groupContainer' ? 400 : 480);
+  return { fX, fY, fW, fH };
+}
+
+/**
+ * Returns true if a node is cleanly inside the container boundary without touching or crossing
+ * the left/right/bottom borders (12px inset) or the top header bar (44px inset).
+ */
+export function isNodeCleanlyInsideContainer(node: Node, container: Node): boolean {
+  const { fX, fY, fW, fH } = getContainerBounds(container);
+  const { width, height } = getNodeDimensions(node);
+  const nodeLeft = node.position.x;
+  const nodeRight = nodeLeft + width;
+  const nodeTop = node.position.y;
+  const nodeBottom = nodeTop + height;
+
+  return (
+    nodeLeft >= fX + GROUP_BORDER_INSET &&
+    nodeRight <= fX + fW - GROUP_BORDER_INSET &&
+    nodeTop >= fY + GROUP_HEADER_INSET &&
+    nodeBottom <= fY + fH - GROUP_BORDER_INSET
+  );
+}
+
+/**
+ * Returns true if a node geometrically overlaps (intersects or touches) the container's outer bounds.
+ */
+export function isNodeOverlappingContainer(node: Node, container: Node): boolean {
+  const { fX, fY, fW, fH } = getContainerBounds(container);
+  const { width, height } = getNodeDimensions(node);
+  const nodeLeft = node.position.x;
+  const nodeRight = nodeLeft + width;
+  const nodeTop = node.position.y;
+  const nodeBottom = nodeTop + height;
+
+  return (
+    nodeRight > fX &&
+    nodeLeft < fX + fW &&
+    nodeBottom > fY &&
+    nodeTop < fY + fH
+  );
+}
+
 /**
  * Authoritatively determines if a child symbol belongs to a group container or frame.
  * Checks (in priority order):
@@ -66,33 +168,16 @@ export function isNodeInContainer(
 
   // 3. Spatial containment check: symbol is positioned inside container boundary
   if (childNode.position && containerNode.position) {
-    const fX = containerNode.position.x;
-    const fY = containerNode.position.y;
-    const fW =
-      (containerNode.style?.width ? parseInt(String(containerNode.style.width), 10) : 0) ||
-      (typeof containerNode.width === 'number' && containerNode.width > 0 ? containerNode.width : 0) ||
-      containerNode.measured?.width ||
-      cData?.width ||
-      (containerNode.type === 'groupContainer' ? 350 : 440);
-    const fH =
-      (containerNode.style?.height ? parseInt(String(containerNode.style.height), 10) : 0) ||
-      (typeof containerNode.height === 'number' && containerNode.height > 0 ? containerNode.height : 0) ||
-      containerNode.measured?.height ||
-      cData?.expandedHeight ||
-      cData?.height ||
-      (containerNode.type === 'groupContainer' ? 400 : 480);
-
-    const nW = childNode.measured?.width || (childNode.type === 'question' ? 270 : 180);
-    const nH = childNode.measured?.height || (childNode.type === 'question' ? 200 : 100);
+    const { fX, fY, fW, fH } = getContainerBounds(containerNode);
+    const { width: nW, height: nH } = getNodeDimensions(childNode);
     const nCenterX = childNode.position.x + nW / 2;
     const nCenterY = childNode.position.y + nH / 2;
 
     const isInside =
-      (childNode.position.x >= fX - 15 &&
-        childNode.position.x + Math.min(nW, 50) <= fX + fW + 15 &&
-        childNode.position.y >= fY - 15 &&
-        childNode.position.y + Math.min(nH, 50) <= fY + fH + 15) ||
-      (nCenterX >= fX && nCenterX <= fX + fW && nCenterY >= fY && nCenterY <= fH);
+      nCenterX >= fX &&
+      nCenterX <= fX + fW &&
+      nCenterY >= fY &&
+      nCenterY <= fY + fH;
 
     if (isInside) {
       return true;

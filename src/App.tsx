@@ -20,6 +20,7 @@ import {
   GitFork,
   X,
   Plus,
+  AlertTriangle,
 } from 'lucide-react';
 
 import { Header } from './components/layout/Header';
@@ -37,6 +38,10 @@ import { JsonExportModal } from './components/modals/JsonExportModal';
 import { MobilePreviewModal } from './components/modals/MobilePreviewModal';
 import { FlowDiagnosticsModal } from './components/modals/FlowDiagnosticsModal';
 import { WarningAlertModal } from './components/modals/WarningAlertModal';
+import {
+  GroupTransferWarningModal,
+  type PendingGroupTransfer,
+} from './components/modals/GroupTransferWarningModal';
 import { CreateVersionModal } from './components/modals/CreateVersionModal';
 import { VersionHistoryModal } from './components/modals/VersionHistoryModal';
 import { CustomFlowchartEdge } from './components/edges/CustomFlowchartEdge';
@@ -72,7 +77,16 @@ import {
   checkFramesOverlap,
   findNearestNonOverlappingPosition,
 } from './utils/flowLayout';
-import { validateSurveyFlow, isNodeInContainer } from './utils/flowValidator';
+import {
+  validateSurveyFlow,
+  isNodeInContainer,
+  getNodeDimensions,
+  getContainerBounds,
+  GROUP_BORDER_INSET,
+  GROUP_HEADER_INSET,
+  isNodeCleanlyInsideContainer,
+  isNodeOverlappingContainer,
+} from './utils/flowValidator';
 import {
   calculateDependencyTrace,
   getTraceNodeRole,
@@ -282,6 +296,46 @@ const FlowEditor: React.FC = () => {
   const triggerRedo = useCallback(() => {
     handleRedo(nodes, edges, groupMeta);
   }, [handleRedo, nodes, edges, groupMeta]);
+
+  // Group transfer & containment states
+  const [pendingGroupTransfer, setPendingGroupTransfer] = useState<PendingGroupTransfer | null>(null);
+  const [containmentToast, setContainmentToast] = useState<string | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showContainmentToast = useCallback((msg: string) => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    setContainmentToast(msg);
+    toastTimerRef.current = setTimeout(() => {
+      setContainmentToast(null);
+    }, 3500);
+  }, []);
+
+  const dragStartPositionsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
+  const dragStartContainersRef = useRef<Map<string, Node>>(new Map());
+
+  const handleNodeDragStart = useCallback(
+    (_event: any, _draggedNode?: Node, _draggedNodesList?: Node[]) => {
+      onNodeDragStart(nodes, edges, groupMeta);
+      const posMap = new Map<string, { x: number; y: number }>();
+      const containerMap = new Map<string, Node>();
+      const containers = nodes.filter(
+        (n) => n.type === 'groupFrame' || n.type === 'groupContainer'
+      );
+      nodes.forEach((n) => {
+        posMap.set(n.id, { x: n.position.x, y: n.position.y });
+        let parent = containers.find((c) => isNodeInContainer(n, c, nodes));
+        if (!parent && n.type !== 'groupFrame' && n.type !== 'groupContainer') {
+          parent = containers.find((c) => isNodeOverlappingContainer(n, c));
+        }
+        if (parent) {
+          containerMap.set(n.id, parent);
+        }
+      });
+      dragStartPositionsRef.current = posMap;
+      dragStartContainersRef.current = containerMap;
+    },
+    [nodes, edges, groupMeta, onNodeDragStart]
+  );
 
   // Auto-synchronize groupMeta.totalGroups with the actual count of groups on canvas (NOT group IDs)
   useEffect(() => {
@@ -521,6 +575,7 @@ const FlowEditor: React.FC = () => {
     nodes,
     edges,
     setEdges,
+    onContainmentWarning: showContainmentToast,
   });
 
   const onConnect = useCallback(
@@ -1296,212 +1351,23 @@ const FlowEditor: React.FC = () => {
     ]
   );
 
-  // Drag stop handler: handles Smart Non-Overlap Auto-Nudge for groups and Auto-Reparenting for symbols
-  const handleNodeDragStop = useCallback(
-    (_event: any, draggedNode: Node, draggedNodesList?: Node[]) => {
-      onNodeDragStop(nodes);
-
-      if (!draggedNode) return;
-
-      // Case A: Group Frame / Container was dragged
-      // Free transit was allowed during drag; on drop, if overlapping another frame, auto-nudge to nearest clear spot!
-      if (draggedNode.type === 'groupFrame' || draggedNode.type === 'groupContainer') {
-        const otherFrames = nodes
-          .filter(
-            (n) => (n.type === 'groupFrame' || n.type === 'groupContainer') && n.id !== draggedNode.id
-          )
-          .map((other) => ({
-            x: other.position.x,
-            y: other.position.y,
-            w:
-              (other.style?.width ? parseInt(String(other.style.width), 10) : 0) ||
-              (other.data as any)?.width ||
-              other.measured?.width ||
-              440,
-            h:
-              (other.style?.height ? parseInt(String(other.style.height), 10) : 0) ||
-              (other.data as any)?.height ||
-              other.measured?.height ||
-              480,
-          }));
-
-        // Resolve all child symbols inside this container authoritatively
-        const childIdSet = new Set<string>();
-        nodes.forEach((n) => {
-          if (isNodeInContainer(n, draggedNode, nodes)) {
-            childIdSet.add(n.id);
-          }
-        });
-
-        const frameW =
-          (draggedNode.style?.width ? parseInt(String(draggedNode.style.width), 10) : 0) ||
-          (draggedNode.data as any)?.width ||
-          draggedNode.measured?.width ||
-          440;
-        const frameH =
-          (draggedNode.style?.height ? parseInt(String(draggedNode.style.height), 10) : 0) ||
-          (draggedNode.data as any)?.height ||
-          draggedNode.measured?.height ||
-          480;
-
-        let finalPos = draggedNode.position;
-        let nudgeDx = 0;
-        let nudgeDy = 0;
-
-        if (otherFrames.length > 0) {
-          const nearestClearPos = findNearestNonOverlappingPosition(
-            draggedNode.position.x,
-            draggedNode.position.y,
-            frameW,
-            frameH,
-            otherFrames,
-            30
-          );
-
-          nudgeDx = nearestClearPos.x - draggedNode.position.x;
-          nudgeDy = nearestClearPos.y - draggedNode.position.y;
-          if (Math.abs(nudgeDx) > 1 || Math.abs(nudgeDy) > 1) {
-            finalPos = nearestClearPos;
-          }
-        }
-
-        const numericGroup =
-          (draggedNode.data as any)?.numericGroupId ||
-          parseInt(String((draggedNode.data as any)?.groupId || '').replace(/\D+/g, ''), 10) ||
-          1;
-
-        recordSnapshot(nodes, edges, groupMeta);
-
-        setNodes((currentNodes) =>
-          currentNodes.map((n) => {
-            if (n.id === draggedNode.id) {
-              return {
-                ...n,
-                position: finalPos,
-                data: {
-                  ...n.data,
-                  questionIds: Array.from(childIdSet),
-                  questionCount: childIdSet.size,
-                },
-              };
-            }
-            if (childIdSet.has(n.id)) {
-              return {
-                ...n,
-                position: {
-                  x: Math.round(n.position.x + nudgeDx),
-                  y: Math.round(n.position.y + nudgeDy),
-                },
-                data: {
-                  ...n.data,
-                  containerId: draggedNode.id,
-                  group: numericGroup,
-                },
-              };
-            }
-            return n;
-          })
-        );
-        return;
-      }
-
-      const activeList =
-        draggedNodesList && draggedNodesList.length > 0
-          ? draggedNodesList.filter((n) => n.type !== 'groupFrame' && n.type !== 'groupContainer')
-          : [draggedNode];
-
+  // Helper to commit reparenting when moving across groups
+  const executeInterGroupReparent = useCallback(
+    (_movedNodes: Node[], reparentMap: Map<string, Node>) => {
+      const reparentedNodeIds = new Set(reparentMap.keys());
       const existingContainers = nodes.filter(
         (n) => n.type === 'groupFrame' || n.type === 'groupContainer'
       );
 
-      if (existingContainers.length === 0) return;
-
-      let hasReparented = false;
-      const reparentMap = new Map<string, Node>();
-      const deparentedNodeIds = new Set<string>();
-      const deparentedFromMap = new Map<string, string>();
-
-      for (const node of activeList) {
-        const nodeInState = nodes.find((n) => n.id === node.id) || node;
-        const nodeW = node.measured?.width || (node.type === 'question' ? 270 : 180);
-        const nodeH = node.measured?.height || (node.type === 'question' ? 200 : 100);
-        const nodeCenterX = node.position.x + nodeW / 2;
-        const nodeCenterY = node.position.y + nodeH / 2;
-
-        const target = existingContainers.find((frame) => {
-          const fX = frame.position.x;
-          const fY = frame.position.y;
-          const fW =
-            (frame.style?.width ? parseInt(String(frame.style.width), 10) : 0) ||
-            (typeof frame.width === 'number' && frame.width > 0 ? frame.width : 0) ||
-            frame.measured?.width ||
-            (frame.data as any)?.width ||
-            (frame.type === 'groupContainer' ? 350 : 440);
-          const fH =
-            (frame.style?.height ? parseInt(String(frame.style.height), 10) : 0) ||
-            (typeof frame.height === 'number' && frame.height > 0 ? frame.height : 0) ||
-            frame.measured?.height ||
-            (frame.data as any)?.expandedHeight ||
-            (frame.data as any)?.height ||
-            (frame.type === 'groupContainer' ? 400 : 480);
-
-          return (
-            (nodeCenterX >= fX &&
-              nodeCenterX <= fX + fW &&
-              nodeCenterY >= fY &&
-              nodeCenterY <= fY + fH) ||
-            (node.position.x >= fX - 15 &&
-              node.position.x + Math.min(nodeW, 80) <= fX + fW &&
-              node.position.y >= fY - 15 &&
-              node.position.y + Math.min(nodeH, 60) <= fY + fH)
-          );
-        });
-
-        // Resolve previous container authoritatively from node's current containerId, questionIds, group, or containment
-        const prevContainer = existingContainers.find((c) =>
-          isNodeInContainer(nodeInState, c, existingContainers)
-        );
-
-        // Case 1: Dropped inside a DIFFERENT container → reparent to new group
-        if (target && (!prevContainer || target.id !== prevContainer.id)) {
-          reparentMap.set(node.id, target);
-          if (prevContainer) {
-            deparentedFromMap.set(node.id, prevContainer.id);
-          }
-          hasReparented = true;
-        }
-
-        // Case 2: Dragged OUT of a group container into the open canvas (no target frame)
-        // → deparent (remove from previous group) and sever all connections
-        if (!target && prevContainer) {
-          deparentedNodeIds.add(node.id);
-          deparentedFromMap.set(node.id, prevContainer.id);
-          hasReparented = true;
-        }
-      }
-
-      if (!hasReparented) return;
-
-      // Build unified set of all nodes that changed group membership (reparented OR deparented)
-      const reparentedNodeIds = new Set(reparentMap.keys());
-      const allMovedNodeIds = new Set([...reparentedNodeIds, ...deparentedNodeIds]);
-
       const getNodeContainerId = (nodeId: string): string | undefined => {
-        // If reparented into a new group, return that group's id
         if (reparentMap.has(nodeId)) {
           return reparentMap.get(nodeId)!.id;
         }
-        // If deparented (moved out to open canvas), return undefined (no group)
-        if (deparentedNodeIds.has(nodeId)) {
-          return undefined;
-        }
         const n = nodes.find((item) => item.id === nodeId);
         if (!n) return undefined;
-
         if ((n.data as any)?.containerId) {
           return (n.data as any).containerId;
         }
-
         const parentFrame = existingContainers.find((c) =>
           ((c.data as any)?.questionIds || []).includes(n.id)
         );
@@ -1512,26 +1378,17 @@ const FlowEditor: React.FC = () => {
         const cX = n.position.x + nW / 2;
         const cY = n.position.y + nH / 2;
         const spatialFrame = existingContainers.find((c) => {
-          const cX1 = c.position.x;
-          const cY1 = c.position.y;
-          const cW =
-            (c.style?.width ? parseInt(String(c.style.width), 10) : 0) ||
-            c.measured?.width ||
-            440;
-          const cH =
-            (c.style?.height ? parseInt(String(c.style.height), 10) : 0) ||
-            c.measured?.height ||
-            480;
-          return cX >= cX1 && cX <= cX1 + cW && cY >= cY1 && cY <= cY1 + cH;
+          const { fX, fY, fW, fH } = getContainerBounds(c);
+          return cX >= fX && cX <= fX + fW && cY >= fY && cY <= fY + fH;
         });
         return spatialFrame?.id;
       };
 
-      // Clean Auto-Disconnect on Inter-Group Drop or Deparent
+      // Clean Auto-Disconnect on Inter-Group Drop:
       // Auto-sever any connections that tied the moved symbol(s) to their previous group
       const edgesToKeep = edges.filter((e) => {
-        const isSourceMoved = allMovedNodeIds.has(e.source);
-        const isTargetMoved = allMovedNodeIds.has(e.target);
+        const isSourceMoved = reparentedNodeIds.has(e.source);
+        const isTargetMoved = reparentedNodeIds.has(e.target);
 
         // If neither node changed group, keep the edge as-is
         if (!isSourceMoved && !isTargetMoved) {
@@ -1553,15 +1410,10 @@ const FlowEditor: React.FC = () => {
         const sourceContainer = getNodeContainerId(e.source);
         const targetContainer = getNodeContainerId(e.target);
 
-        // If both deparented to open canvas (both undefined), keep the edge between them
-        if (!sourceContainer && !targetContainer) {
-          return true;
-        }
-
         return Boolean(
           sourceContainer &&
-          targetContainer &&
-          sourceContainer === targetContainer
+            targetContainer &&
+            sourceContainer === targetContainer
         );
       });
 
@@ -1574,33 +1426,6 @@ const FlowEditor: React.FC = () => {
 
       setNodes((currentNodes) => {
         const nextNodes = currentNodes.map((n) => {
-          // Handle deparented nodes: clear containerId and group data
-          if (deparentedNodeIds.has(n.id)) {
-            const updatedData = { ...n.data } as any;
-            delete updatedData.containerId;
-            delete updatedData.customColor;
-
-            if (n.type === 'question') {
-              if (Array.isArray(updatedData.depends_on)) {
-                updatedData.depends_on = undefined;
-              }
-              if (updatedData.validation) {
-                updatedData.validation = undefined;
-              }
-              if (Array.isArray(updatedData.cross_group_dependency)) {
-                updatedData.cross_group_dependency = undefined;
-              }
-            }
-
-            return {
-              ...n,
-              data: {
-                ...updatedData,
-                group: 1, // Reset to default group
-              },
-            };
-          }
-
           if (reparentMap.has(n.id)) {
             const targetContainer = reparentMap.get(n.id)!;
             const targetData = targetContainer.data as any;
@@ -1672,14 +1497,6 @@ const FlowEditor: React.FC = () => {
               }
             }
 
-            // Remove any nodes that were deparented (dragged out to open canvas)
-            for (const nodeId of deparentedNodeIds) {
-              if (updatedQIds.includes(nodeId)) {
-                updatedQIds = updatedQIds.filter((id) => id !== nodeId);
-                modified = true;
-              }
-            }
-
             // Add any nodes that joined this container
             for (const [nodeId, targetContainer] of reparentMap.entries()) {
               if (targetContainer.id === n.id && !updatedQIds.includes(nodeId)) {
@@ -1712,7 +1529,282 @@ const FlowEditor: React.FC = () => {
         return nextNodes;
       });
     },
-    [nodes, edges, groupMeta, onNodeDragStop, recordSnapshot, setNodes, setEdges]
+    [nodes, edges, groupMeta, recordSnapshot, setEdges, setNodes]
+  );
+
+  // Drag stop handler: handles Smart Non-Overlap Auto-Nudge for groups and Auto-Reparenting for symbols
+  const handleNodeDragStop = useCallback(
+    (_event: any, draggedNode: Node, draggedNodesList?: Node[]) => {
+      onNodeDragStop(nodes);
+
+      if (!draggedNode) return;
+
+      // Case A: Group Frame / Container was dragged
+      // Free transit was allowed during drag; on drop, if overlapping another frame, auto-nudge to nearest clear spot!
+      if (draggedNode.type === 'groupFrame' || draggedNode.type === 'groupContainer') {
+        const otherFrames = nodes
+          .filter(
+            (n) => (n.type === 'groupFrame' || n.type === 'groupContainer') && n.id !== draggedNode.id
+          )
+          .map((other) => {
+            const { fX, fY, fW, fH } = getContainerBounds(other);
+            return { x: fX, y: fY, w: fW, h: fH };
+          });
+
+        // Resolve all child symbols inside this container authoritatively
+        const childIdSet = new Set<string>();
+        nodes.forEach((n) => {
+          if (isNodeInContainer(n, draggedNode, nodes)) {
+            childIdSet.add(n.id);
+          }
+        });
+
+        const { fW: frameW, fH: frameH } = getContainerBounds(draggedNode);
+
+        let finalPos = draggedNode.position;
+        let nudgeDx = 0;
+        let nudgeDy = 0;
+
+        if (otherFrames.length > 0) {
+          const nearestClearPos = findNearestNonOverlappingPosition(
+            draggedNode.position.x,
+            draggedNode.position.y,
+            frameW,
+            frameH,
+            otherFrames,
+            30
+          );
+
+          nudgeDx = nearestClearPos.x - draggedNode.position.x;
+          nudgeDy = nearestClearPos.y - draggedNode.position.y;
+          if (Math.abs(nudgeDx) > 1 || Math.abs(nudgeDy) > 1) {
+            finalPos = nearestClearPos;
+          }
+        }
+
+        const numericGroup =
+          (draggedNode.data as any)?.numericGroupId ||
+          parseInt(String((draggedNode.data as any)?.groupId || '').replace(/\D+/g, ''), 10) ||
+          1;
+
+        recordSnapshot(nodes, edges, groupMeta);
+
+        setNodes((currentNodes) =>
+          currentNodes.map((n) => {
+            if (n.id === draggedNode.id) {
+              return {
+                ...n,
+                position: finalPos,
+                data: {
+                  ...n.data,
+                  questionIds: Array.from(childIdSet),
+                  questionCount: childIdSet.size,
+                },
+              };
+            }
+            if (childIdSet.has(n.id)) {
+              return {
+                ...n,
+                position: {
+                  x: Math.round(n.position.x + nudgeDx),
+                  y: Math.round(n.position.y + nudgeDy),
+                },
+                data: {
+                  ...n.data,
+                  containerId: draggedNode.id,
+                  group: numericGroup,
+                },
+              };
+            }
+            return n;
+          })
+        );
+        return;
+      }
+
+      // Case B: Symbol or Question was dragged
+      const activeList =
+        draggedNodesList && draggedNodesList.length > 0
+          ? draggedNodesList.filter((n) => n.type !== 'groupFrame' && n.type !== 'groupContainer')
+          : [draggedNode];
+
+      const existingContainers = nodes.filter(
+        (n) => n.type === 'groupFrame' || n.type === 'groupContainer'
+      );
+
+      if (existingContainers.length === 0) return;
+
+      const droppedOutsideNodes: Node[] = [];
+      const droppedOnBorderNodes: Node[] = [];
+      const movingAcrossNodes: Node[] = [];
+      const reparentMap = new Map<string, Node>();
+      let primarySourceContainer: Node | null = null;
+      let primaryTargetContainer: Node | null = null;
+
+      // Helper to compute safe snapback position inside parent container
+      const getSafeSnapbackPos = (node: Node, targetContainer?: Node): { x: number; y: number } => {
+        const startPos = dragStartPositionsRef.current.get(node.id);
+        const parent =
+          targetContainer ||
+          dragStartContainersRef.current.get(node.id) ||
+          existingContainers.find((c) => isNodeInContainer(node, c, existingContainers)) ||
+          existingContainers.find((c) => isNodeOverlappingContainer(node, c));
+
+        if (parent) {
+          if (startPos) {
+            const dummyAtStart = { ...node, position: startPos };
+            if (isNodeCleanlyInsideContainer(dummyAtStart, parent)) {
+              return startPos;
+            }
+          }
+          const { fX, fY, fW, fH } = getContainerBounds(parent);
+          const { width, height } = getNodeDimensions(node);
+          const safeX = Math.max(
+            fX + GROUP_BORDER_INSET + 16,
+            Math.min(node.position.x, fX + fW - GROUP_BORDER_INSET - 16 - width)
+          );
+          const safeY = Math.max(
+            fY + GROUP_HEADER_INSET + 16,
+            Math.min(node.position.y, fY + fH - GROUP_BORDER_INSET - 16 - height)
+          );
+          return { x: safeX, y: safeY };
+        }
+
+        return startPos || node.position;
+      };
+
+      for (const node of activeList) {
+        const nodeInState = nodes.find((n) => n.id === node.id) || node;
+        // Resolve original parent container before drag
+        const prevContainer =
+          dragStartContainersRef.current.get(node.id) ||
+          existingContainers.find((c) => isNodeInContainer(nodeInState, c, existingContainers));
+
+        // Check if node is cleanly inside any container
+        const cleanContainer = existingContainers.find((c) =>
+          isNodeCleanlyInsideContainer(node, c)
+        );
+
+        if (cleanContainer) {
+          // Node is cleanly inside a container (away from all borders and header)
+          if (prevContainer && cleanContainer.id !== prevContainer.id) {
+            // Cleanly moved to a DIFFERENT container -> prompt warning modal!
+            movingAcrossNodes.push(node);
+            reparentMap.set(node.id, cleanContainer);
+            if (!primarySourceContainer) primarySourceContainer = prevContainer;
+            if (!primaryTargetContainer) primaryTargetContainer = cleanContainer;
+          } else if (!prevContainer) {
+            // Unparented node cleanly dropped into a container
+            reparentMap.set(node.id, cleanContainer);
+          }
+          // If cleanly dropped inside its own parent container -> valid move!
+          continue;
+        }
+
+        // Node is NOT cleanly inside any container.
+        // Check if it overlaps (partially touches/intersects) ANY container
+        const overlappingContainer = existingContainers.find((c) =>
+          isNodeOverlappingContainer(node, c)
+        );
+
+        if (overlappingContainer) {
+          // Node is placed partially on the border of a container (its own or another group)!
+          droppedOnBorderNodes.push(node);
+        } else {
+          // Node is dropped completely outside all group containers on empty canvas
+          droppedOutsideNodes.push(node);
+        }
+      }
+
+      // 1. Enforce: Questions/symbols can't be taken outside of a group area
+      if (droppedOutsideNodes.length > 0) {
+        setNodes((currentNodes) =>
+          currentNodes.map((n) => {
+            if (activeList.some((d) => d.id === n.id)) {
+              const prevCont =
+                dragStartContainersRef.current.get(n.id) ||
+                existingContainers.find((c) => isNodeInContainer(n, c, existingContainers));
+              const safePos = getSafeSnapbackPos(n, prevCont);
+              return {
+                ...n,
+                position: { ...safePos },
+              };
+            }
+            return n;
+          })
+        );
+        showContainmentToast('Questions and symbols cannot be placed outside of a group area.');
+        return;
+      }
+
+      // 2. Enforce: Symbols shouldn't also be placed on the group border
+      // If ANY part of the symbol is on the group border, snap back to parent group!
+      if (droppedOnBorderNodes.length > 0) {
+        setNodes((currentNodes) =>
+          currentNodes.map((n) => {
+            if (activeList.some((d) => d.id === n.id)) {
+              const borderCont =
+                dragStartContainersRef.current.get(n.id) ||
+                existingContainers.find((c) => isNodeOverlappingContainer(n, c));
+              const safePos = getSafeSnapbackPos(n, borderCont);
+              return {
+                ...n,
+                position: { ...safePos },
+              };
+            }
+            return n;
+          })
+        );
+        showContainmentToast('Questions and symbols cannot be placed on the group border.');
+        return;
+      }
+
+      // 3. Enforce: Moving from one group to another shows a warning popup
+      if (movingAcrossNodes.length > 0 && primarySourceContainer && primaryTargetContainer) {
+        const sourceCont = primarySourceContainer;
+        const targetCont = primaryTargetContainer;
+        const currentReparentMap = new Map(reparentMap);
+
+        setPendingGroupTransfer({
+          nodes: movingAcrossNodes,
+          sourceContainer: sourceCont,
+          targetContainer: targetCont,
+          onConfirm: () => {
+            executeInterGroupReparent(movingAcrossNodes, currentReparentMap);
+          },
+          onCancel: () => {
+            setNodes((currentNodes) =>
+              currentNodes.map((n) => {
+                if (movingAcrossNodes.some((m) => m.id === n.id)) {
+                  const safePos = getSafeSnapbackPos(n, sourceCont);
+                  return {
+                    ...n,
+                    position: { ...safePos },
+                  };
+                }
+                return n;
+              })
+            );
+          },
+        });
+        return;
+      }
+
+      // 4. Directly reparent if node had no previous container
+      if (reparentMap.size > 0) {
+        executeInterGroupReparent(activeList, reparentMap);
+      }
+    },
+    [
+      nodes,
+      edges,
+      groupMeta,
+      onNodeDragStop,
+      recordSnapshot,
+      setNodes,
+      executeInterGroupReparent,
+      showContainmentToast,
+    ]
   );
 
   // Drag-and-drop drop handler
@@ -2001,16 +2093,17 @@ const FlowEditor: React.FC = () => {
             y: targetContainer.position.y + 60 + existingChildIds.length * 200,
           };
         } else {
-          // Clamp symbol position so it stays comfortably inside the target frame
-          const frameWidth = Number(targetContainer.style?.width) || 440;
-          const frameHeight = Number(targetContainer.style?.height) || 480;
+          // Clamp symbol position so it stays comfortably inside the target frame, away from all borders
+          const { fW: frameWidth, fH: frameHeight } = getContainerBounds(targetContainer);
+          const symbolW = 180;
+          const symbolH = 100;
           const clampedX = Math.max(
             targetContainer.position.x + 20,
-            Math.min(position.x, targetContainer.position.x + frameWidth - 180)
+            Math.min(position.x, targetContainer.position.x + frameWidth - symbolW - 20)
           );
           const clampedY = Math.max(
-            targetContainer.position.y + 50,
-            Math.min(position.y, targetContainer.position.y + frameHeight - 120)
+            targetContainer.position.y + 55,
+            Math.min(position.y, targetContainer.position.y + frameHeight - symbolH - 20)
           );
           nodePos = { x: clampedX, y: clampedY };
         }
@@ -3107,7 +3200,7 @@ const FlowEditor: React.FC = () => {
                     selectionOnDrag={!isHandMode && !isDrawAreaMode}
                     nodesDraggable={!isHandMode && !isDrawAreaMode}
                     elementsSelectable={!isHandMode && !isDrawAreaMode}
-                    onNodeDragStart={() => onNodeDragStart(nodes, edges, groupMeta)}
+                    onNodeDragStart={handleNodeDragStart}
                     onNodeDragStop={handleNodeDragStop}
                     onDrop={onDrop}
                     onDragOver={onDragOver}
@@ -3280,6 +3373,19 @@ const FlowEditor: React.FC = () => {
         onClose={() => setWarningAlertData(null)}
         data={warningAlertData}
       />
+
+      <GroupTransferWarningModal
+        isOpen={Boolean(pendingGroupTransfer)}
+        transfer={pendingGroupTransfer}
+        onClose={() => setPendingGroupTransfer(null)}
+      />
+
+      {containmentToast && (
+        <div className="canvas-containment-toast">
+          <AlertTriangle size={15} />
+          <span>{containmentToast}</span>
+        </div>
+      )}
     </div>
   );
 };

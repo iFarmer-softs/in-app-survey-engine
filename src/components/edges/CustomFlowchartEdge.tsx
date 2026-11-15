@@ -9,7 +9,7 @@ import {
 } from '@xyflow/react';
 import type { EdgeProps } from '@xyflow/react';
 import { X, GitBranch, Network, RotateCcw } from 'lucide-react';
-import { resolveNodeGroupId } from '../../utils/flowValidator';
+import { resolveNodeGroupId, isNodeInContainer, getContainerBounds } from '../../utils/flowValidator';
 
 function getBend(
   a: { x: number; y: number },
@@ -77,6 +77,7 @@ export function getOrthogonalPathWithDetour({
   centerX,
   centerY,
   offset = 20,
+  bounds,
 }: {
   sourceX: number;
   sourceY: number;
@@ -88,11 +89,17 @@ export function getOrthogonalPathWithDetour({
   centerX?: number;
   centerY?: number;
   offset?: number;
+  bounds?: { minX: number; maxX: number; minY: number; maxY: number };
 }): [string, number, number] {
   const defaultCenterX = (sourceX + targetX) / 2;
   const defaultCenterY = (sourceY + targetY) / 2;
-  const cx = centerX ?? defaultCenterX;
-  const cy = centerY ?? defaultCenterY;
+  let cx = centerX ?? defaultCenterX;
+  let cy = centerY ?? defaultCenterY;
+
+  if (bounds) {
+    cx = Math.max(bounds.minX, Math.min(cx, bounds.maxX));
+    cy = Math.max(bounds.minY, Math.min(cy, bounds.maxY));
+  }
 
   const effectiveSourcePos = sourcePosition || Position.Bottom;
   const effectiveTargetPos = targetPosition || Position.Top;
@@ -284,6 +291,15 @@ export function getOrthogonalPathWithDetour({
     ];
   }
 
+  if (bounds) {
+    pts = pts.map((pt) => ({
+      x: Math.max(bounds.minX, Math.min(pt.x, bounds.maxX)),
+      y: Math.max(bounds.minY, Math.min(pt.y, bounds.maxY)),
+    }));
+    labelX = Math.max(bounds.minX, Math.min(labelX, bounds.maxX));
+    labelY = Math.max(bounds.minY, Math.min(labelY, bounds.maxY));
+  }
+
   const edgePath = buildSvgPath(pts, borderRadius);
   return [edgePath, labelX, labelY];
 }
@@ -347,6 +363,40 @@ export const CustomFlowchartEdge: React.FC<EdgeProps> = ({
   const effectiveSourceGroup = dynamicSourceGroup ?? edgeData.sourceGroup;
   const effectiveTargetGroup = dynamicTargetGroup ?? edgeData.targetGroup;
 
+  // Intra-group boundary containment: intra-group connectors must stay strictly inside group border
+  const intraGroupBounds = React.useMemo(() => {
+    if (!sourceNode || !targetNode) return undefined;
+    if (sourceNode.type === 'groupJump' || targetNode.type === 'groupJump') return undefined;
+    if (dynamicSourceGroup !== dynamicTargetGroup) return undefined;
+
+    const containers = allNodes.filter(
+      (n) => n.type === 'groupFrame' || n.type === 'groupContainer'
+    );
+    const sCont = containers.find(
+      (c) =>
+        c.id === (sourceNode.data as any)?.containerId ||
+        (sourceNode.data as any)?.group === (c.data as any)?.numericGroupId ||
+        isNodeInContainer(sourceNode, c, allNodes)
+    );
+    const tCont = containers.find(
+      (c) =>
+        c.id === (targetNode.data as any)?.containerId ||
+        (targetNode.data as any)?.group === (c.data as any)?.numericGroupId ||
+        isNodeInContainer(targetNode, c, allNodes)
+    );
+    const container = sCont && tCont && sCont.id === tCont.id ? sCont : sCont || tCont;
+    if (!container) return undefined;
+
+    const { fX, fY, fW, fH } = getContainerBounds(container);
+
+    return {
+      minX: fX + 12,
+      maxX: fX + fW - 12,
+      minY: fY + 44,
+      maxY: fY + fH - 12,
+    };
+  }, [sourceNode, targetNode, dynamicSourceGroup, dynamicTargetGroup, allNodes]);
+
   // Determine routing geometry
   const routing = edgeData.routingType || 'smoothstep';
 
@@ -384,6 +434,7 @@ export const CustomFlowchartEdge: React.FC<EdgeProps> = ({
       centerX: edgeData.centerX,
       centerY: edgeData.centerY,
       offset: edgeData.offset,
+      bounds: intraGroupBounds,
     });
   }
 
@@ -516,6 +567,11 @@ export const CustomFlowchartEdge: React.FC<EdgeProps> = ({
 
       currentX = Math.round(initialCenterX + dx);
       currentY = Math.round(initialCenterY + dy);
+
+      if (intraGroupBounds) {
+        currentX = Math.max(intraGroupBounds.minX, Math.min(currentX, intraGroupBounds.maxX));
+        currentY = Math.max(intraGroupBounds.minY, Math.min(currentY, intraGroupBounds.maxY));
+      }
 
       if (routing === 'bezier') {
         const deltaCurv = (dx + dy) / 300;

@@ -8195,3 +8195,26 @@ body.is-resizing-sidebar * {
 .survey-flow-canvas.is-tool-draw .react-flow__pane {
   cursor: crosshair !important;
 }
+
+/* Floating Containment Toast Banner on Canvas */
+.canvas-containment-toast {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(15, 23, 42, 0.96);
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6), 0 0 15px rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
+  padding: 8px 18px;
+  border-radius: 9999px;
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 1000;
+  pointer-events: none;
+  backdrop-filter: blur(8px);
+  animation: modalSlideUp 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}

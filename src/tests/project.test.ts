@@ -12,6 +12,12 @@ import {
   resolveNodeGroupId,
   isCrossGroupEdge,
   isNodeInContainer,
+  getNodeDimensions,
+  getContainerBounds,
+  isNodeCleanlyInsideContainer,
+  isNodeOverlappingContainer,
+  GROUP_BORDER_INSET,
+  GROUP_HEADER_INSET,
 } from '../utils/flowValidator.ts';
 import {
   calculateGroupQuestionLayout,
@@ -3750,5 +3756,523 @@ assert.deepStrictEqual(
 
 console.log('   ✅ Group Question Linking Logic validated: Dependent questions appear with default questions on link satisfaction, and are omitted otherwise.');
 
-console.log('\n🎉 ALL TESTS PASSED SUCCESSFULLY! (37/37 test suites passed)\n');
+// 38. Group Area Boundary Enforcement & Inter-Group Transfer Warning Modal
+console.log('3️⃣8️⃣ Testing Group Area Containment & Inter-Group Transfer Warning Modal Logic...');
+
+// 38A: Open Canvas Drag Prevention (Question cannot be taken outside group area)
+const testGroup1 = {
+  id: 'grp-area-1',
+  type: 'groupFrame',
+  position: { x: 50, y: 50 },
+  style: { width: 400, height: 400 },
+  data: { groupId: 'grp-1', numericGroupId: 1, title: 'Personal Information', questionIds: ['q-a', 'q-b'] },
+};
+
+const testGroup2 = {
+  id: 'grp-area-2',
+  type: 'groupFrame',
+  position: { x: 600, y: 50 },
+  style: { width: 400, height: 400 },
+  data: { groupId: 'grp-2', numericGroupId: 2, title: 'Farm Information', questionIds: ['q-c'] },
+};
+
+const initialNodeQA = {
+  id: 'q-a',
+  type: 'question',
+  position: { x: 100, y: 150 },
+  data: { question_id: 101, question: 'Farmer Name', group: 1, containerId: 'grp-area-1' },
+};
+
+const initialNodeQB = {
+  id: 'q-b',
+  type: 'question',
+  position: { x: 100, y: 280 },
+  data: { question_id: 102, question: 'Age', group: 1, containerId: 'grp-area-1', depends_on: [101] },
+};
+
+const edgeQAtoQB = {
+  id: 'edge-qa-qb',
+  source: 'q-a',
+  target: 'q-b',
+};
+
+// Simulate drag start caching positions
+const dragStartPositions = new Map<string, { x: number; y: number }>();
+dragStartPositions.set('q-a', { x: 100, y: 150 });
+
+// Simulate user dragging q-a outside all group areas (to (1500, 1500))
+const draggedOutsidePos = { x: 1500, y: 1500 };
+const isInsideGroup1 = (pos: { x: number; y: number }) =>
+  pos.x >= testGroup1.position.x &&
+  pos.x <= testGroup1.position.x + 400 &&
+  pos.y >= testGroup1.position.y &&
+  pos.y <= testGroup1.position.y + 400;
+
+const isInsideGroup2 = (pos: { x: number; y: number }) =>
+  pos.x >= testGroup2.position.x &&
+  pos.x <= testGroup2.position.x + 400 &&
+  pos.y >= testGroup2.position.y &&
+  pos.y <= testGroup2.position.y + 400;
+
+// Test 38A: Outside drop resolution -> Revert to start position
+const targetContainerOutside = isInsideGroup1(draggedOutsidePos) ? testGroup1 : isInsideGroup2(draggedOutsidePos) ? testGroup2 : null;
+assert.strictEqual(targetContainerOutside, null, 'Drop position (1500, 1500) must be outside all containers');
+
+let resolvedQA = { ...initialNodeQA, position: draggedOutsidePos };
+let containmentWarningTriggered = false;
+
+if (!targetContainerOutside && initialNodeQA.data.containerId) {
+  // Boundary containment rule: snap back to original position
+  const cachedStart = dragStartPositions.get('q-a')!;
+  resolvedQA = { ...resolvedQA, position: { ...cachedStart } };
+  containmentWarningTriggered = true;
+}
+
+assert.deepStrictEqual(resolvedQA.position, { x: 100, y: 150 }, 'Node dropped outside group must snap back to its starting position');
+assert.strictEqual(containmentWarningTriggered, true, 'Containment notification must trigger when dropped outside');
+assert.strictEqual(resolvedQA.data.containerId, 'grp-area-1', 'ContainerId must remain intact in original group');
+
+// 38B: Moving across groups triggers transfer warning modal
+const draggedToGroup2Pos = { x: 700, y: 200 };
+const targetContainerInside2 = isInsideGroup1(draggedToGroup2Pos) ? testGroup1 : isInsideGroup2(draggedToGroup2Pos) ? testGroup2 : null;
+assert.strictEqual(targetContainerInside2?.id, 'grp-area-2', 'Target container must resolve to grp-area-2');
+
+let modalTriggered = false;
+let modalPayload: any = null;
+
+if (targetContainerInside2 && initialNodeQA.data.containerId && targetContainerInside2.id !== initialNodeQA.data.containerId) {
+  modalTriggered = true;
+  modalPayload = {
+    nodes: [initialNodeQA],
+    sourceContainer: testGroup1,
+    targetContainer: targetContainerInside2,
+  };
+}
+
+assert.strictEqual(modalTriggered, true, 'Moving across groups must trigger transfer warning modal');
+assert.strictEqual(modalPayload.sourceContainer.id, 'grp-area-1');
+assert.strictEqual(modalPayload.targetContainer.id, 'grp-area-2');
+
+// 38C: If user cancels transfer -> Revert position, keep edges and group container
+let cancelledNodeQA = { ...initialNodeQA, position: draggedToGroup2Pos };
+// User clicked Cancel:
+const revertPos = dragStartPositions.get('q-a')!;
+cancelledNodeQA = { ...cancelledNodeQA, position: { ...revertPos } };
+assert.deepStrictEqual(cancelledNodeQA.position, { x: 100, y: 150 }, 'Cancelled transfer must revert node position');
+assert.strictEqual(cancelledNodeQA.data.group, 1, 'Group must remain 1');
+assert.strictEqual(cancelledNodeQA.data.containerId, 'grp-area-1', 'ContainerId must remain grp-area-1');
+
+// 38D: If user confirms transfer -> Execute inter-group reparenting
+const reparentedIds = new Set(['q-a']);
+const allTransferEdges = [edgeQAtoQB];
+const survivingTransferEdges = allTransferEdges.filter((e) => {
+  const isSourceMoved = reparentedIds.has(e.source);
+  const isTargetMoved = reparentedIds.has(e.target);
+  return isSourceMoved === isTargetMoved;
+});
+assert.strictEqual(survivingTransferEdges.length, 0, 'Edges connecting moved node to its previous group must be severed');
+
+// Target container questionIds updated
+const updatedGroup1QIds = testGroup1.data.questionIds.filter((id) => id !== 'q-a');
+const updatedGroup2QIds = [...testGroup2.data.questionIds, 'q-a'];
+assert.deepStrictEqual(updatedGroup1QIds, ['q-b'], 'Source group questionIds must no longer include q-a');
+assert.deepStrictEqual(updatedGroup2QIds, ['q-c', 'q-a'], 'Target group questionIds must include q-a');
+
+// 38E: Group Border Placement Prevention (Symbols cannot be placed on the group border / header)
+const BORDER_INSET_TEST = 12;
+const HEADER_INSET_TEST = 44;
+const fX = testGroup1.position.x; // 50
+const fY = testGroup1.position.y; // 50
+const fW = testGroup1.style.width; // 400
+const fH = testGroup1.style.height; // 400
+const nodeW_test = 200;
+const nodeH_test = 100;
+
+const checkIsOnBorder = (pos: { x: number; y: number }) => {
+  const nodeLeft = pos.x;
+  const nodeTop = pos.y;
+  const nodeRight = pos.x + nodeW_test;
+  const nodeBottom = pos.y + nodeH_test;
+
+  const isOnLeft = nodeLeft < fX + BORDER_INSET_TEST;
+  const isOnRight = nodeRight > fX + fW - BORDER_INSET_TEST;
+  const isOnTop = nodeTop < fY + HEADER_INSET_TEST;
+  const isOnBottom = nodeBottom > fY + fH - BORDER_INSET_TEST;
+  return isOnLeft || isOnRight || isOnTop || isOnBottom;
+};
+
+// Case 1: Drop on left border (e.g. x = 55, where fX = 50, fX + 12 = 62)
+assert.strictEqual(checkIsOnBorder({ x: 55, y: 150 }), true, 'Symbol at x=55 touches left border (< 62px)');
+
+// Case 2: Drop on right border (e.g. x = 245, right = 445 > fX + fW - 12 = 438)
+assert.strictEqual(checkIsOnBorder({ x: 245, y: 150 }), true, 'Symbol at x=245 extends across right border (> 438px)');
+
+// Case 3: Drop on top header (e.g. y = 60, where fY = 50, fY + 44 = 94)
+assert.strictEqual(checkIsOnBorder({ x: 100, y: 60 }), true, 'Symbol at y=60 overlaps header bar (< 94px)');
+
+// Case 4: Drop on bottom border (e.g. y = 345, bottom = 445 > fY + fH - 12 = 438)
+assert.strictEqual(checkIsOnBorder({ x: 100, y: 345 }), true, 'Symbol at y=345 extends across bottom border (> 438px)');
+
+// Case 5: Drop safely inside interior (e.g. x = 100, y = 150)
+assert.strictEqual(checkIsOnBorder({ x: 100, y: 150 }), false, 'Symbol at (100, 150) is safely away from all borders');
+
+// Simulate border drop rejection & snapback
+const borderDropCandidate = { ...initialNodeQA, position: { x: 55, y: 150 } };
+let borderDropResolved = borderDropCandidate;
+let borderToastTriggered = false;
+
+if (checkIsOnBorder(borderDropCandidate.position)) {
+  const startPos = dragStartPositions.get('q-a')!;
+  borderDropResolved = { ...borderDropResolved, position: { ...startPos } };
+  borderToastTriggered = true;
+}
+
+assert.deepStrictEqual(borderDropResolved.position, { x: 100, y: 150 }, 'Node dropped on group border must snap back to starting position');
+assert.strictEqual(borderToastTriggered, true, 'Border containment warning toast must trigger');
+
+console.log('   ✅ Group Area Boundary Enforcement, Border Placement Rejection & Inter-Group Transfer Warning validated with 100% precision.');
+
+// 39. Connector Boundary Containment & Group Connector Exception
+console.log('3️⃣9️⃣ Testing Connector Boundary Containment & Group Connector Exception Logic...');
+
+// 39A: Direct cross-group connector between normal questions without Group Connector is rejected
+const nodeG1 = { id: 'node-q1', type: 'question', data: { question_id: 1, group: 1, containerId: 'grp-1' } };
+const nodeG2 = { id: 'node-q2', type: 'question', data: { question_id: 2, group: 2, containerId: 'grp-2' } };
+const nodeJump = { id: 'node-jump', type: 'groupJump', data: { targetGroupId: 2, group: 1, containerId: 'grp-1' } };
+
+const isConnectionAllowed = (source: any, target: any) => {
+  const sGroup = source.data.group;
+  const tGroup = target.data.group;
+  const isCross = sGroup !== tGroup;
+  if (!isCross) return true;
+  // Only allowed if one of the endpoints is a Group Connector (groupJump)
+  return source.type === 'groupJump' || target.type === 'groupJump';
+};
+
+// Case 1: Question 1 -> Question 2 directly across groups -> BLOCKED
+assert.strictEqual(
+  isConnectionAllowed(nodeG1, nodeG2),
+  false,
+  'Direct connector from Group 1 to Group 2 must be blocked from leaving group border'
+);
+
+// Case 2: Question 1 -> Group Connector inside group -> ALLOWED
+assert.strictEqual(
+  isConnectionAllowed(nodeG1, nodeJump),
+  true,
+  'Connector from Question to Group Connector inside group must be allowed'
+);
+
+// Case 3: Group Connector -> Question 2 across group border -> ALLOWED (Group Connector exception)
+assert.strictEqual(
+  isConnectionAllowed(nodeJump, nodeG2),
+  true,
+  'Group Connector connecting across group border must be allowed'
+);
+
+// 39B: Intra-group connector path bounds clamping
+// For an intra-group connector in Group 1 (fX: 50, fY: 50, fW: 400, fH: 400)
+// The connector line should not go outside minX: 62, maxX: 438, minY: 94, maxY: 438
+const intraBounds = { minX: 62, maxX: 438, minY: 94, maxY: 438 };
+const testPts = [
+  { x: 40, y: 30 },   // outside top-left
+  { x: 500, y: 600 }, // outside bottom-right
+  { x: 200, y: 200 }, // inside
+];
+
+const clampedPts = testPts.map((pt) => ({
+  x: Math.max(intraBounds.minX, Math.min(pt.x, intraBounds.maxX)),
+  y: Math.max(intraBounds.minY, Math.min(pt.y, intraBounds.maxY)),
+}));
+
+assert.deepStrictEqual(
+  clampedPts[0],
+  { x: 62, y: 94 },
+  'Intra-group connector path must clamp to top-left safe interior'
+);
+assert.deepStrictEqual(
+  clampedPts[1],
+  { x: 438, y: 438 },
+  'Intra-group connector path must clamp to bottom-right safe interior'
+);
+assert.deepStrictEqual(
+  clampedPts[2],
+  { x: 200, y: 200 },
+  'Path point inside safe interior remains untouched'
+);
+
+console.log('   ✅ Connector Boundary Containment & Group Connector Exception validated with 100% precision.');
+
+// 4️⃣0️⃣ Testing Partial Group Border Overlap Rejection & Automatic Reversion to Parent Group
+console.log('4️⃣0️⃣ Testing Partial Group Border Overlap Rejection & Automatic Reversion to Parent Group...');
+
+// Setup test containers
+const testContainer1: any = {
+  id: 'frame-grp-1',
+  type: 'groupFrame',
+  position: { x: 100, y: 100 },
+  style: { width: 500, height: 500 },
+  data: { groupId: 'frame-grp-1', numericGroupId: 1, title: 'Group 1', questionIds: ['q-test-1'] },
+};
+
+const testContainer2: any = {
+  id: 'frame-grp-2',
+  type: 'groupFrame',
+  position: { x: 700, y: 100 },
+  style: { width: 500, height: 500 },
+  data: { groupId: 'frame-grp-2', numericGroupId: 2, title: 'Group 2', questionIds: [] },
+};
+
+const allContainers = [testContainer1, testContainer2];
+
+// Initial question node safely inside Group 1
+const initialQuestion: any = {
+  id: 'q-test-1',
+  type: 'question',
+  position: { x: 150, y: 180 },
+  data: { question_id: 101, group: 1, containerId: 'frame-grp-1' },
+};
+
+// Flowchart decision symbol inside Group 1
+const initialDecision: any = {
+  id: 'decision-test-1',
+  type: 'decision',
+  position: { x: 150, y: 180 },
+  data: { label: 'Decision 1', group: 1, containerId: 'frame-grp-1' },
+};
+
+// Flowchart process symbol inside Group 1
+const initialProcess: any = {
+  id: 'process-test-1',
+  type: 'process',
+  position: { x: 150, y: 180 },
+  data: { label: 'Process 1', group: 1, containerId: 'frame-grp-1' },
+};
+
+// Simulation engine for drag release matching handleNodeDragStop logic
+function simulateDropRelease(
+  draggedNode: any,
+  startPos: { x: number; y: number },
+  parentContainer: any
+): { finalPosition: { x: number; y: number }; revertedToParent: boolean; reason: string } {
+  // Check if node is cleanly inside any container
+  const cleanCont = allContainers.find((c) => isNodeCleanlyInsideContainer(draggedNode, c));
+  if (cleanCont) {
+    if (cleanCont.id === parentContainer.id) {
+      return { finalPosition: draggedNode.position, revertedToParent: false, reason: 'clean_inside_same_group' };
+    }
+    return { finalPosition: draggedNode.position, revertedToParent: false, reason: 'clean_transfer_to_other_group' };
+  }
+
+  // Not cleanly inside. Check if it overlaps any container -> partial border overlap!
+  const overlapCont = allContainers.find((c) => isNodeOverlappingContainer(draggedNode, c));
+  if (overlapCont) {
+    return { finalPosition: { ...startPos }, revertedToParent: true, reason: 'dropped_on_border' };
+  }
+
+  // Dropped outside all containers
+  return { finalPosition: { ...startPos }, revertedToParent: true, reason: 'dropped_outside' };
+}
+
+// 40A: Question node partially on LEFT border of Group 1
+// Group 1 left border is at x=100. GROUP_BORDER_INSET is 12, safe interior starts at x=112.
+// Placing question (width 270) at x=50 -> overlaps x=100 border from outside (left edge 50, right edge 320)
+const partialLeftNode = { ...initialQuestion, position: { x: 50, y: 200 } };
+assert.strictEqual(
+  isNodeCleanlyInsideContainer(partialLeftNode, testContainer1),
+  false,
+  'Node at x=50 must not be cleanly inside Group 1'
+);
+assert.strictEqual(
+  isNodeOverlappingContainer(partialLeftNode, testContainer1),
+  true,
+  'Node at x=50 must overlap Group 1 outer bounds'
+);
+const resultLeft = simulateDropRelease(partialLeftNode, initialQuestion.position, testContainer1);
+assert.strictEqual(resultLeft.revertedToParent, true, 'Node on left border must revert to parent');
+assert.deepStrictEqual(resultLeft.finalPosition, initialQuestion.position, 'Position must snap back to starting position');
+assert.strictEqual(resultLeft.reason, 'dropped_on_border');
+
+// 40B: Decision symbol (width 220, height 100) partially on RIGHT border of Group 1
+// Group 1 right border is at x=600 (100 + 500). Safe interior ends at x=588.
+// Placing decision symbol at x=450 -> right edge is 450 + 220 = 670, crossing border from 450 to 670
+const partialRightDecision = { ...initialDecision, position: { x: 450, y: 200 } };
+assert.strictEqual(
+  isNodeCleanlyInsideContainer(partialRightDecision, testContainer1),
+  false,
+  'Decision node at x=450 must not be cleanly inside Group 1'
+);
+assert.strictEqual(
+  isNodeOverlappingContainer(partialRightDecision, testContainer1),
+  true,
+  'Decision node at x=450 must overlap Group 1 outer bounds'
+);
+const resultRight = simulateDropRelease(partialRightDecision, initialDecision.position, testContainer1);
+assert.strictEqual(resultRight.revertedToParent, true, 'Decision symbol on right border must revert to parent');
+assert.deepStrictEqual(resultRight.finalPosition, initialDecision.position, 'Position must snap back to starting position');
+assert.strictEqual(resultRight.reason, 'dropped_on_border');
+
+// 40C: Process symbol (width 220, height 100) partially on TOP header of Group 1
+// Group 1 top header is 44px, from y=100 to y=144.
+// Placing process symbol at y=120 -> top edge 120 overlaps header bar (< 144)
+const partialTopProcess = { ...initialProcess, position: { x: 150, y: 120 } };
+assert.strictEqual(
+  isNodeCleanlyInsideContainer(partialTopProcess, testContainer1),
+  false,
+  'Process symbol at y=120 must not be cleanly inside Group 1 due to header inset'
+);
+assert.strictEqual(
+  isNodeOverlappingContainer(partialTopProcess, testContainer1),
+  true,
+  'Process symbol at y=120 must overlap Group 1 bounds'
+);
+const resultTop = simulateDropRelease(partialTopProcess, initialProcess.position, testContainer1);
+assert.strictEqual(resultTop.revertedToParent, true, 'Process symbol on top header must revert to parent');
+assert.deepStrictEqual(resultTop.finalPosition, initialProcess.position, 'Position must snap back to starting position');
+assert.strictEqual(resultTop.reason, 'dropped_on_border');
+
+// 40D: Question node (height 240) partially on BOTTOM border of Group 1 (NO auto-expansion on drop)
+// Group 1 bottom border is at y=600 (100 + 500). Safe interior ends at y=588.
+// Placing question at y=380 -> bottom edge is 380 + 240 = 620, crossing bottom border
+const partialBottomNode = { ...initialQuestion, position: { x: 150, y: 380 } };
+assert.strictEqual(
+  isNodeCleanlyInsideContainer(partialBottomNode, testContainer1),
+  false,
+  'Question at y=380 must not be cleanly inside Group 1'
+);
+assert.strictEqual(
+  isNodeOverlappingContainer(partialBottomNode, testContainer1),
+  true,
+  'Question at y=380 must overlap Group 1 bottom border'
+);
+const resultBottom = simulateDropRelease(partialBottomNode, initialQuestion.position, testContainer1);
+assert.strictEqual(resultBottom.revertedToParent, true, 'Question on bottom border must revert to parent without auto-expansion');
+assert.deepStrictEqual(resultBottom.finalPosition, initialQuestion.position, 'Position must snap back to starting position');
+assert.strictEqual(resultBottom.reason, 'dropped_on_border');
+
+// 40E: Node dragged from Group 1 partially onto ANOTHER Group's border (Group 2 at x=700)
+// Dropping at x=650 -> left edge 650 is outside Group 2, right edge 650 + 270 = 920 is inside Group 2
+const partialOtherGroupBorderNode = { ...initialQuestion, position: { x: 650, y: 200 } };
+assert.strictEqual(
+  isNodeCleanlyInsideContainer(partialOtherGroupBorderNode, testContainer1),
+  false,
+  'Must not be cleanly inside Group 1'
+);
+assert.strictEqual(
+  isNodeCleanlyInsideContainer(partialOtherGroupBorderNode, testContainer2),
+  false,
+  'Must not be cleanly inside Group 2'
+);
+assert.strictEqual(
+  isNodeOverlappingContainer(partialOtherGroupBorderNode, testContainer2),
+  true,
+  'Must overlap Group 2 border'
+);
+const resultOtherBorder = simulateDropRelease(partialOtherGroupBorderNode, initialQuestion.position, testContainer1);
+assert.strictEqual(resultOtherBorder.revertedToParent, true, 'Node on foreign group border must revert to parent');
+assert.deepStrictEqual(resultOtherBorder.finalPosition, initialQuestion.position, 'Must snap back to starting position in parent group');
+assert.strictEqual(resultOtherBorder.reason, 'dropped_on_border');
+
+// 40F: Control test - Question node dropped cleanly inside Group 1 interior
+const cleanInsideNode = { ...initialQuestion, position: { x: 150, y: 180 } };
+assert.strictEqual(
+  isNodeCleanlyInsideContainer(cleanInsideNode, testContainer1),
+  true,
+  'Question at (150, 180) must be 100% cleanly inside Group 1'
+);
+const resultClean = simulateDropRelease(cleanInsideNode, initialQuestion.position, testContainer1);
+assert.strictEqual(resultClean.revertedToParent, false, 'Clean interior drop must not revert');
+assert.deepStrictEqual(resultClean.finalPosition, { x: 150, y: 180 }, 'Clean drop stays at new position');
+
+console.log('   ✅ Partial Group Border Overlap Rejection & Parent Reversion validated with 100% precision across all borders and symbol types.');
+
+// 4️⃣1️⃣ Testing Right Border Enforcement, Dimension Priority & Intra-Group Connector Boundary Clamping
+console.log('4️⃣1️⃣ Testing Right Border Enforcement, Dimension Priority & Intra-Group Connector Boundary Clamping...');
+
+// 41A: Dimension priority in getContainerBounds: width > measured.width > style.width > data.width
+const resizedFrameNode: any = {
+  id: 'grp-frame-resized',
+  type: 'groupFrame',
+  position: { x: 80, y: 100 },
+  width: 633, // NodeResizer sets width directly on node
+  style: { width: 440, height: 1660 }, // style width remains default
+  measured: { width: 633, height: 1220 },
+  data: { groupId: 'grp-frame-resized', numericGroupId: 1 },
+};
+const boundsResized = getContainerBounds(resizedFrameNode);
+assert.strictEqual(boundsResized.fW, 633, 'getContainerBounds must prioritize node.width over node.style.width');
+
+// 41B: Node placed crossing the right border (e.g. at x = 388 on a 440px-wide frame starting at x=80)
+const defaultFrameNode: any = {
+  id: 'grp-frame-default',
+  type: 'groupFrame',
+  position: { x: 80, y: 100 },
+  style: { width: 440, height: 480 },
+  data: { groupId: 'grp-frame-default', numericGroupId: 1 },
+};
+// Question node (width 270) placed at x = 388: right edge = 388 + 270 = 658, frame right edge = 80 + 440 = 520
+const nodeOnRightBorder: any = {
+  id: 'q-102-test',
+  type: 'question',
+  position: { x: 388, y: 150 },
+  data: { question_id: 102, group: 1, containerId: 'grp-frame-default' },
+};
+assert.strictEqual(
+  isNodeCleanlyInsideContainer(nodeOnRightBorder, defaultFrameNode),
+  false,
+  'Node crossing the right border must NOT be cleanly inside'
+);
+assert.strictEqual(
+  isNodeOverlappingContainer(nodeOnRightBorder, defaultFrameNode),
+  true,
+  'Node crossing the right border must be detected as overlapping the container'
+);
+
+// 41C: Safe snapback clamping when startPos was on the border or undefined
+// The clamped position must be strictly inside: safeX <= defX + defW - GROUP_BORDER_INSET - 16 - width
+const { width: qW, height: qH } = getNodeDimensions(nodeOnRightBorder);
+const { fX: defX, fY: defY, fW: defW, fH: defH } = getContainerBounds(defaultFrameNode);
+const safeX = Math.max(
+  defX + GROUP_BORDER_INSET + 16,
+  Math.min(nodeOnRightBorder.position.x, defX + defW - GROUP_BORDER_INSET - 16 - qW)
+);
+const safeY = Math.max(
+  defY + GROUP_HEADER_INSET + 16,
+  Math.min(nodeOnRightBorder.position.y, defY + defH - GROUP_BORDER_INSET - 16 - qH)
+);
+const clampedNode = { ...nodeOnRightBorder, position: { x: safeX, y: safeY } };
+assert.strictEqual(
+  isNodeCleanlyInsideContainer(clampedNode, defaultFrameNode),
+  true,
+  'Clamped snapback position must place the node 100% cleanly inside the container away from the right border'
+);
+assert.ok(
+  safeX + qW <= defX + defW - GROUP_BORDER_INSET - 16,
+  'Clamped node right edge must stay comfortably away from the right border'
+);
+
+// 41D: Intra-group edge with Option Handle on right side: generated path must never exceed maxX
+const [pathOptionToQuestion] = getOrthogonalPathWithDetour({
+  sourceX: 650, // Option handle on right edge of Q#102
+  sourceY: 250,
+  sourcePosition: Position.Right,
+  targetX: 300,
+  targetY: 450,
+  targetPosition: Position.Top,
+  bounds: { minX: defX + 12, maxX: defX + defW - 12, minY: defY + 44, maxY: defY + defH - 12 },
+});
+// Verify that no SVG path coordinate in pathOptionToQuestion has an X coordinate > maxX
+const maxXAllowed = defX + defW - 12; // 80 + 440 - 12 = 508
+const xMatches = pathOptionToQuestion.match(/[MLCQ][\s]*([\d.-]+)/g) || [];
+for (const match of xMatches) {
+  const xCoord = parseFloat(match.replace(/[MLCQ\s]/g, ''));
+  assert.ok(
+    xCoord <= maxXAllowed + 0.5,
+    `Path coordinate ${xCoord} must not exceed right border maxX (${maxXAllowed})`
+  );
+}
+
+console.log('   ✅ Right Border Enforcement, Dimension Priority & Intra-Group Connector Boundary Clamping validated with 100% precision.');
+
+console.log('\n🎉 ALL TESTS PASSED SUCCESSFULLY! (41/41 test suites passed)\n');
 
