@@ -96,10 +96,15 @@ export function useFlowCanvasConnections({
         targetNode?.type !== 'groupJump' &&
         sourceGroup !== targetGroup;
 
-      // Connectors should not go outside of the group border except the Group Connector
-      if (isCrossGroup) {
+      const isQuestionToQuestion =
+        sourceNode?.type === 'question' && targetNode?.type === 'question';
+      const isGroupJump =
+        sourceNode?.type === 'groupJump' || targetNode?.type === 'groupJump';
+
+      // Internal connectors cannot cross group border, but group-to-group question connectors and Group Connectors can cross border
+      if (isCrossGroup && !isQuestionToQuestion && !isGroupJump) {
         if (onContainmentWarning) {
-          onContainmentWarning('Connectors cannot go outside of the group border except via the Group Connector.');
+          onContainmentWarning('Only group-to-group question connectors and Group Connectors can cross group borders.');
         }
         const sourceLabel =
           sourceNode?.type === 'question'
@@ -117,7 +122,7 @@ export function useFlowCanvasConnections({
           existingBranch: `Group #${sourceGroup}`,
           newBranch: `Group #${targetGroup}`,
           message:
-            'Connectors cannot go outside of the group border. To connect or route logic to another group, please use the Group Connector symbol.',
+            'Internal connectors cannot cross the group border. Only group-to-group question connectors and Group Connectors are allowed to connect across group borders.',
         });
         return;
       }
@@ -207,10 +212,15 @@ export function useFlowCanvasConnections({
         targetNode?.type !== 'groupJump' &&
         sourceGroup !== targetGroup;
 
-      // Connectors should not go outside of the group border except the Group Connector
-      if (isCrossGroup) {
+      const isQuestionToQuestion =
+        sourceNode?.type === 'question' && targetNode?.type === 'question';
+      const isGroupJump =
+        sourceNode?.type === 'groupJump' || targetNode?.type === 'groupJump';
+
+      // Internal connectors cannot cross group border, but group-to-group question connectors and Group Connectors can cross border
+      if (isCrossGroup && !isQuestionToQuestion && !isGroupJump) {
         if (onContainmentWarning) {
-          onContainmentWarning('Connectors cannot go outside of the group border except via the Group Connector.');
+          onContainmentWarning('Only group-to-group question connectors and Group Connectors can cross group borders.');
         }
         const sourceLabel =
           sourceNode?.type === 'question'
@@ -228,7 +238,7 @@ export function useFlowCanvasConnections({
           existingBranch: `Group #${sourceGroup}`,
           newBranch: `Group #${targetGroup}`,
           message:
-            'Connectors cannot go outside of the group border. To connect or route logic to another group, please use the Group Connector symbol.',
+            'Internal connectors cannot cross the group border. Only group-to-group question connectors and Group Connectors are allowed to connect across group borders.',
         });
         return;
       }

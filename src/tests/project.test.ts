@@ -3935,9 +3935,11 @@ console.log('   ✅ Group Area Boundary Enforcement, Border Placement Rejection 
 // 39. Connector Boundary Containment & Group Connector Exception
 console.log('3️⃣9️⃣ Testing Connector Boundary Containment & Group Connector Exception Logic...');
 
-// 39A: Direct cross-group connector between normal questions without Group Connector is rejected
+// 39A: Internal connectors cannot cross group border, but group-to-group question connectors and Group Connectors can cross border
 const nodeG1 = { id: 'node-q1', type: 'question', data: { question_id: 1, group: 1, containerId: 'grp-1' } };
 const nodeG2 = { id: 'node-q2', type: 'question', data: { question_id: 2, group: 2, containerId: 'grp-2' } };
+const nodeProcG1 = { id: 'node-proc1', type: 'process', data: { label: 'Calc', group: 1, containerId: 'grp-1' } };
+const nodeProcG2 = { id: 'node-proc2', type: 'process', data: { label: 'Calc', group: 2, containerId: 'grp-2' } };
 const nodeJump = { id: 'node-jump', type: 'groupJump', data: { targetGroupId: 2, group: 1, containerId: 'grp-1' } };
 
 const isConnectionAllowed = (source: any, target: any) => {
@@ -3945,25 +3947,34 @@ const isConnectionAllowed = (source: any, target: any) => {
   const tGroup = target.data.group;
   const isCross = sGroup !== tGroup;
   if (!isCross) return true;
-  // Only allowed if one of the endpoints is a Group Connector (groupJump)
-  return source.type === 'groupJump' || target.type === 'groupJump';
+  // Group-to-group question connectors and Group Connectors can cross border!
+  const isQuestionToQuestion = source.type === 'question' && target.type === 'question';
+  const isGroupJump = source.type === 'groupJump' || target.type === 'groupJump';
+  return isQuestionToQuestion || isGroupJump;
 };
 
-// Case 1: Question 1 -> Question 2 directly across groups -> BLOCKED
+// Case 1: Question 1 -> Question 2 directly across groups -> ALLOWED (Group to group question connector)
 assert.strictEqual(
   isConnectionAllowed(nodeG1, nodeG2),
-  false,
-  'Direct connector from Group 1 to Group 2 must be blocked from leaving group border'
+  true,
+  'Group to group question connector must be allowed to cross group border'
 );
 
-// Case 2: Question 1 -> Group Connector inside group -> ALLOWED
+// Case 2: Process 1 -> Process 2 directly across groups -> BLOCKED (Internal non-question connector cannot cross group border)
+assert.strictEqual(
+  isConnectionAllowed(nodeProcG1, nodeProcG2),
+  false,
+  'Internal non-question symbols must not directly cross group border without Group Connector'
+);
+
+// Case 3: Question 1 -> Group Connector inside group -> ALLOWED
 assert.strictEqual(
   isConnectionAllowed(nodeG1, nodeJump),
   true,
   'Connector from Question to Group Connector inside group must be allowed'
 );
 
-// Case 3: Group Connector -> Question 2 across group border -> ALLOWED (Group Connector exception)
+// Case 4: Group Connector -> Question 2 across group border -> ALLOWED (Group Connector exception)
 assert.strictEqual(
   isConnectionAllowed(nodeJump, nodeG2),
   true,
