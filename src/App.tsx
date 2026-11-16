@@ -14,7 +14,6 @@ import {
 import type { Edge, Node, EdgeChange, NodeChange, Connection } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import {
-  PanelLeftOpen,
   PanelRightOpen,
   Crop,
   GitFork,
@@ -26,7 +25,6 @@ import {
 import { Header } from './components/layout/Header';
 import { GroupTemplateHeader } from './components/layout/GroupTemplateHeader';
 import { AdminLeftSidebar } from './components/layout/AdminLeftSidebar';
-import { FlowchartSymbolsPanel } from './components/layout/FlowchartSymbolsPanel';
 import { InputTypeViewsPanel } from './components/layout/InputTypeViewsPanel';
 import { FigmaToolbar, type CanvasToolMode } from './components/canvas/FigmaToolbar';
 import { FlowchartListView } from './components/dashboard/FlowchartListView';
@@ -167,15 +165,7 @@ const FlowEditor: React.FC = () => {
     relative: { x: number; y: number };
   } | null>(null);
 
-  // Sidebar expand / collapse states with persistent localStorage
-  const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem('survey_left_sidebar_open') !== 'false';
-    } catch {
-      return true;
-    }
-  });
-
+  // Right Inspector expand / collapse state with persistent localStorage
   const [isRightSidebarOpen, setIsRightSidebarOpen] = useState<boolean>(() => {
     try {
       return localStorage.getItem('survey_right_sidebar_open') !== 'false';
@@ -183,17 +173,6 @@ const FlowEditor: React.FC = () => {
       return true;
     }
   });
-
-  const toggleLeftSidebar = useCallback(() => {
-    setIsLeftSidebarOpen((prev) => {
-      const next = !prev;
-      try {
-        localStorage.setItem('survey_left_sidebar_open', String(next));
-      } catch { }
-      setTimeout(() => window.dispatchEvent(new Event('resize')), 250);
-      return next;
-    });
-  }, []);
 
   const toggleRightSidebar = useCallback(() => {
     setIsRightSidebarOpen((prev) => {
@@ -206,37 +185,31 @@ const FlowEditor: React.FC = () => {
     });
   }, []);
 
-  // Draggable sidebar resizer hook (Antigravity Style)
+  // Draggable inspector resizer hook (Antigravity Style)
   const {
-    leftWidth,
     rightWidth,
     resizingSide,
-    startResizingLeft,
     startResizingRight,
-    resetLeftWidth,
     resetRightWidth,
   } = useSidebarResizer();
 
   // Dark / Light / System Theme hook
   const { theme, resolvedTheme, setTheme, cycleTheme } = useTheme();
 
-  // Global keyboard shortcuts: Cmd+B (left sidebar), Cmd+J (right inspector)
+  // Global keyboard shortcuts: Cmd+J (right inspector)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement)?.tagName)) {
         return;
       }
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'b') {
-        e.preventDefault();
-        toggleLeftSidebar();
-      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'j') {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'j') {
         e.preventDefault();
         toggleRightSidebar();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [toggleLeftSidebar, toggleRightSidebar]);
+  }, [toggleRightSidebar]);
 
   // 1. Projects manager hook
   const {
@@ -2517,12 +2490,15 @@ const FlowEditor: React.FC = () => {
               label = `${newEdgeData.validationType.toUpperCase()} "${newEdgeData.triggerValue}"`;
             }
 
+            const { targetHandle, sourceHandle, ...restData } = newEdgeData;
             return {
               ...edge,
+              ...(targetHandle !== undefined ? { targetHandle } : {}),
+              ...(sourceHandle !== undefined ? { sourceHandle } : {}),
               label,
               data: {
                 ...edge.data,
-                ...newEdgeData,
+                ...restData,
               },
             };
           }
@@ -2848,36 +2824,38 @@ const FlowEditor: React.FC = () => {
 
   return (
     <div className="app-container">
-      {/* 1. ADMIN LEFT SIDEBAR */}
-      <AdminLeftSidebar
-        activeView={activeView}
-        onSelectView={(view) => {
-          if (view === 'list') {
-            refreshProjects();
-          } else if (view === 'groups') {
-            refreshGroups();
-          } else if (view === 'editor') {
-            if (projects.length === 0) {
-              handleCreateNewProject(
-                'My Survey Flowchart',
-                '',
-                'Dynamic KYC and field assessment survey flowchart',
-                1
-              );
-              return;
+      {/* 1. ADMIN LEFT SIDEBAR (Shown in List & Groups dashboard views; edge-to-edge full canvas in Studio) */}
+      {activeView !== 'editor' && (
+        <AdminLeftSidebar
+          activeView={activeView}
+          onSelectView={(view) => {
+            if (view === 'list') {
+              refreshProjects();
+            } else if (view === 'groups') {
+              refreshGroups();
+            } else if (view === 'editor') {
+              if (projects.length === 0) {
+                handleCreateNewProject(
+                  'My Survey Flowchart',
+                  '',
+                  'Dynamic KYC and field assessment survey flowchart',
+                  1
+                );
+                return;
+              }
             }
-          }
-          setActiveView(view);
-        }}
-        onOpenCreateModal={() => setIsCreateModalOpen(true)}
-        activeProjectTitle={activeProject?.title || 'Survey Flowchart'}
-        totalProjectsCount={projects.length}
-        totalGroupsCount={groups.length}
-        theme={theme}
-        resolvedTheme={resolvedTheme}
-        onSelectTheme={setTheme}
-        onCycleTheme={cycleTheme}
-      />
+            setActiveView(view);
+          }}
+          onOpenCreateModal={() => setIsCreateModalOpen(true)}
+          activeProjectTitle={activeProject?.title || 'Survey Flowchart'}
+          totalProjectsCount={projects.length}
+          totalGroupsCount={groups.length}
+          theme={theme}
+          resolvedTheme={resolvedTheme}
+          onSelectTheme={setTheme}
+          onCycleTheme={cycleTheme}
+        />
+      )}
 
       {/* 2. MAIN APPLICATION CONTENT AREA */}
       <div className="admin-main-viewport">
@@ -2919,91 +2897,8 @@ const FlowEditor: React.FC = () => {
           />
         ) : (
           <div className="studio-editor-wrapper">
-            {groupDesignSession ? (
-              <GroupTemplateHeader
-                name={groupDesignSession.name}
-                nameBn={groupDesignSession.nameBn}
-                category={groupDesignSession.category}
-                color={groupDesignSession.color}
-                description={groupDesignSession.description}
-                questionCount={nodes.filter((n) => n.type === 'question').length}
-                edgeCount={edges.length}
-                onUpdateMetadata={(meta) =>
-                  setGroupDesignSession((prev) => (prev ? { ...prev, ...meta } : prev))
-                }
-                onAutoLayout={handleAutoLayout}
-                onExit={handleExitGroupDesignSession}
-                onSave={handleSaveGroupDesignSession}
-                canUndo={canUndo}
-                canRedo={canRedo}
-                onUndo={triggerUndo}
-                onRedo={triggerRedo}
-              />
-            ) : (
-              <Header
-                projectTitle={activeProject?.title}
-                currentVersion={activeProject?.currentVersion || '1.0.0'}
-                versionStatus={activeProject?.status || 'draft'}
-                groupMeta={groupMeta}
-                onOpenJsonModal={() => setIsJsonModalOpen(true)}
-                onOpenMobileModal={() => {
-                  setVersionPreviewCustomSchema(null);
-                  setIsMobileModalOpen(true);
-                }}
-                onResetSample={handleResetSample}
-                onClearCanvas={handleClearCanvas}
-                onAutoLayout={handleAutoLayout}
-                onBackToList={() => {
-                  refreshProjects();
-                  setActiveView('list');
-                }}
-                nodeCount={nodes.length}
-                edgeCount={edges.length}
-                diagnosticsCount={diagnostics.length}
-                diagnosticsErrors={diagnosticsErrors}
-                onOpenDiagnostics={() => setIsDiagnosticsModalOpen(true)}
-                onAlignHorizontal={handleAlignHorizontal}
-                onAlignVertical={handleAlignVertical}
-                onOpenVersionHistory={() => {
-                  setVersionHistoryTargetProject(activeProject);
-                  setIsVersionHistoryModalOpen(true);
-                }}
-                onOpenCreateSnapshot={() => {
-                  setIsInitialPublishMode(false);
-                  setIsCreateVersionModalOpen(true);
-                }}
-                onPublishVersion={() => {
-                  setIsInitialPublishMode(true);
-                  setIsCreateVersionModalOpen(true);
-                }}
-                canUndo={canUndo}
-                canRedo={canRedo}
-                onUndo={triggerUndo}
-                onRedo={triggerRedo}
-                isPathTracingEnabled={isPathTracingEnabled}
-                onTogglePathTracing={togglePathTracing}
-                onAddGroupArea={handleCreateNewGroupArea}
-                isServerConnected={isServerConnected}
-                onSave={handleManualSave}
-                isSaving={isSyncing}
-                isSaved={justSaved}
-              />
-            )}
-
             <div className="studio-body app-body">
-              {/* Floating Dock Buttons when Sidebars are Collapsed */}
-              {!isLeftSidebarOpen && (
-                <button
-                  type="button"
-                  className="floating-sidebar-toggle left-dock"
-                  onClick={toggleLeftSidebar}
-                  title="Expand Survey Elements Toolbox (Ctrl+B)"
-                >
-                  <PanelLeftOpen size={14} />
-                  <span className="dock-label">Toolbox</span>
-                </button>
-              )}
-
+              {/* Floating Dock Toggle Button when Inspector is Collapsed */}
               {!isRightSidebarOpen && (
                 <button
                   type="button"
@@ -3016,39 +2911,7 @@ const FlowEditor: React.FC = () => {
                 </button>
               )}
 
-              {/* LEFT PANEL: Survey Elements Toolbox (Logic & Question Types) */}
-              <FlowchartSymbolsPanel
-                isOpen={isLeftSidebarOpen}
-                width={leftWidth}
-                isResizing={resizingSide === 'left'}
-                onToggleCollapse={toggleLeftSidebar}
-                onAddSymbol={handleAddSymbol}
-                onAddQuestion={handleAddQuestionFromWidget}
-                groups={groups}
-                onInsertGroup={(grp) => handleInsertGroupIntoCanvas(grp)}
-                onDeleteGroup={handleDeleteGroup}
-                onNavigateToGroups={() => {
-                  if (groupDesignSession) {
-                    if (window.confirm('Exit Group Designer without saving?')) {
-                      handleExitGroupDesignSession();
-                    }
-                  } else {
-                    setActiveView('groups');
-                  }
-                }}
-              />
-
-              {/* Left Resizer Splitter (Antigravity Style) */}
-              {isLeftSidebarOpen && (
-                <div
-                  className={`sidebar-resizer left-resizer ${resizingSide === 'left' ? 'is-active' : ''}`}
-                  onMouseDown={startResizingLeft}
-                  onDoubleClick={resetLeftWidth}
-                  title="Drag to resize sidebar, double-click to reset width"
-                />
-              )}
-
-              {/* CENTER: React Flow Canvas & Question Group Studio Dock */}
+              {/* CENTER: React Flow Canvas & Floating Top HUD Elements */}
               <div
                 className="canvas-and-dock-container"
                 style={{
@@ -3061,6 +2924,90 @@ const FlowEditor: React.FC = () => {
                   position: 'relative',
                 }}
               >
+                {/* 1. FLOATING TOP ACTION BAR / ISLANDS */}
+                {groupDesignSession ? (
+                  <GroupTemplateHeader
+                    name={groupDesignSession.name}
+                    nameBn={groupDesignSession.nameBn}
+                    category={groupDesignSession.category}
+                    color={groupDesignSession.color}
+                    description={groupDesignSession.description}
+                    questionCount={nodes.filter((n) => n.type === 'question').length}
+                    edgeCount={edges.length}
+                    onUpdateMetadata={(meta) =>
+                      setGroupDesignSession((prev) => (prev ? { ...prev, ...meta } : prev))
+                    }
+                    onAutoLayout={handleAutoLayout}
+                    onExit={handleExitGroupDesignSession}
+                    onSave={handleSaveGroupDesignSession}
+                    canUndo={canUndo}
+                    canRedo={canRedo}
+                    onUndo={triggerUndo}
+                    onRedo={triggerRedo}
+                  />
+                ) : (
+                  <Header
+                    projectTitle={activeProject?.title}
+                    currentVersion={activeProject?.currentVersion || '1.0.0'}
+                    versionStatus={activeProject?.status || 'draft'}
+                    groupMeta={groupMeta}
+                    onResetSample={handleResetSample}
+                    onClearCanvas={handleClearCanvas}
+                    onAutoLayout={handleAutoLayout}
+                    onBackToList={() => {
+                      refreshProjects();
+                      setActiveView('list');
+                    }}
+                    nodeCount={nodes.length}
+                    edgeCount={edges.length}
+                    diagnosticsCount={diagnostics.length}
+                    diagnosticsErrors={diagnosticsErrors}
+                    onOpenDiagnostics={() => setIsDiagnosticsModalOpen(true)}
+                    onAlignHorizontal={handleAlignHorizontal}
+                    onAlignVertical={handleAlignVertical}
+                    onOpenVersionHistory={() => {
+                      setVersionHistoryTargetProject(activeProject);
+                      setIsVersionHistoryModalOpen(true);
+                    }}
+                    onOpenCreateSnapshot={() => {
+                      setIsInitialPublishMode(false);
+                      setIsCreateVersionModalOpen(true);
+                    }}
+                    onPublishVersion={() => {
+                      setIsInitialPublishMode(true);
+                      setIsCreateVersionModalOpen(true);
+                    }}
+                    canUndo={canUndo}
+                    canRedo={canRedo}
+                    onUndo={triggerUndo}
+                    onRedo={triggerRedo}
+                    isPathTracingEnabled={isPathTracingEnabled}
+                    onTogglePathTracing={togglePathTracing}
+                    onAddGroupArea={handleCreateNewGroupArea}
+                    isServerConnected={isServerConnected}
+                    activeToolMode={activeToolMode}
+                    onSelectMode={(mode) => {
+                      setActiveToolMode(mode);
+                      if (mode !== 'drawArea') {
+                        setDrawStartPos(null);
+                        setDrawCurrentPos(null);
+                      }
+                    }}
+                    onAddSymbol={handleAddSymbol}
+                    onAddQuestion={handleAddQuestionFromWidget}
+                    groups={groups}
+                    onInsertGroup={(grp) => handleInsertGroupIntoCanvas(grp)}
+                    onNavigateToGroups={() => {
+                      if (groupDesignSession) {
+                        if (window.confirm('Exit Group Designer without saving?')) {
+                          handleExitGroupDesignSession();
+                        }
+                      } else {
+                        setActiveView('groups');
+                      }
+                    }}
+                  />
+                )}
                 <main
                   className="canvas-wrapper canvas-container"
                   ref={reactFlowWrapper}
@@ -3255,6 +3202,17 @@ const FlowEditor: React.FC = () => {
                         setDrawCurrentPos(null);
                       }
                     }}
+                    theme={theme}
+                    resolvedTheme={resolvedTheme}
+                    onCycleTheme={cycleTheme}
+                    onSave={handleManualSave}
+                    isSaving={isSyncing}
+                    isSaved={justSaved}
+                    onOpenMobileModal={() => {
+                      setVersionPreviewCustomSchema(null);
+                      setIsMobileModalOpen(true);
+                    }}
+                    onOpenJsonModal={() => setIsJsonModalOpen(true)}
                   />
                 </main>
               </div>

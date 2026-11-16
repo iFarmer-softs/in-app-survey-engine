@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   ArrowLeft,
-  Sparkles,
+  Check,
   Settings2,
   TreePine,
   CheckCircle2,
@@ -94,12 +94,13 @@ export const GroupTemplateHeader: React.FC<GroupTemplateHeaderProps> = ({
       <div className="header-brand">
         <button
           type="button"
-          className="header-back-list-btn"
+          className="header-icon-btn header-back-list-btn"
           onClick={onExit}
-          title="Exit Group Designer"
+          data-tooltip="Exit Group Designer"
+          data-tooltip-pos="bottom-right"
+          aria-label="Exit Group Designer"
         >
           <ArrowLeft size={16} />
-          <span>Exit</span>
         </button>
 
         <div className="brand-titles">
@@ -129,7 +130,7 @@ export const GroupTemplateHeader: React.FC<GroupTemplateHeaderProps> = ({
         </div>
       </div>
 
-      {/* 3. Right: Consolidated Action Buttons */}
+      {/* 3. Right: Icon-only Action Buttons */}
       <div className="header-actions">
         {/* Undo / Redo Segmented Buttons */}
         {(onUndo || onRedo) && (
@@ -139,7 +140,9 @@ export const GroupTemplateHeader: React.FC<GroupTemplateHeaderProps> = ({
               className="btn btn-icon btn-history-action"
               onClick={onUndo}
               disabled={!canUndo}
-              title="Undo (Ctrl+Z / Cmd+Z)"
+              data-tooltip="Undo (Ctrl+Z)"
+              data-tooltip-pos="bottom"
+              aria-label="Undo"
             >
               <Undo2 size={14} />
             </button>
@@ -148,7 +151,9 @@ export const GroupTemplateHeader: React.FC<GroupTemplateHeaderProps> = ({
               className="btn btn-icon btn-history-action"
               onClick={onRedo}
               disabled={!canRedo}
-              title="Redo (Ctrl+Y / Cmd+Shift+Z)"
+              data-tooltip="Redo (Ctrl+Y)"
+              data-tooltip-pos="bottom"
+              aria-label="Redo"
             >
               <Redo2 size={14} />
             </button>
@@ -157,33 +162,36 @@ export const GroupTemplateHeader: React.FC<GroupTemplateHeaderProps> = ({
 
         <button
           type="button"
-          className="btn btn-secondary"
+          className="header-icon-btn"
           onClick={onAutoLayout}
-          title="Auto-organize questions hierarchy vertically"
+          data-tooltip="Tree Auto-Layout"
+          data-tooltip-pos="bottom"
+          aria-label="Tree Auto-Layout"
         >
-          <TreePine size={14} />
-          <span>Auto-Layout</span>
+          <TreePine size={15} />
         </button>
 
         <button
           type="button"
-          className="btn btn-secondary"
+          className="header-icon-btn"
           onClick={handleOpenSettings}
-          title="Edit Group Name, Bengali Title & Category"
+          data-tooltip="Group Template Settings"
+          data-tooltip-pos="bottom-left"
+          aria-label="Group Template Settings"
         >
-          <Settings2 size={14} />
-          <span>Settings</span>
+          <Settings2 size={15} />
         </button>
 
         <button
           type="button"
-          className="btn btn-primary btn-save-template"
+          className="header-icon-btn btn-primary-icon"
           onClick={onSave}
           disabled={questionCount === 0 || !name.trim()}
-          title="Save this reusable question group template"
+          data-tooltip="Save Group Template"
+          data-tooltip-pos="bottom-left"
+          aria-label="Save Group Template"
         >
-          <Sparkles size={14} />
-          <span>Save Template</span>
+          <Check size={16} />
         </button>
       </div>
 

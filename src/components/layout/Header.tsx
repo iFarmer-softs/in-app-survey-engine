@@ -1,7 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
-  Code2,
-  Smartphone,
   RotateCcw,
   Sparkles,
   ArrowLeft,
@@ -20,19 +18,55 @@ import {
   GitFork,
   Crop,
   Trash2,
-  Save,
   Check,
-  Loader2,
+  Plus,
+  Layers,
+  Pin,
+  PinOff,
+  GripVertical,
+  Search,
+  X,
 } from 'lucide-react';
 import type { GroupMeta } from '../../utils/schemaCompiler';
+import type { FlowNodeType, AnswerType } from '../../types/survey';
+import type { ReusableQuestionGroup } from '../../types/group';
+import type { CanvasToolMode } from '../canvas/FigmaToolbar';
+import type { ThemeMode, ResolvedTheme } from '../../hooks/useTheme';
+import { INPUT_TYPE_VIEWS, type InputTypeItem } from './InputTypeViewsPanel';
+
+interface FlowLogicItem {
+  id: string;
+  nodeType: FlowNodeType;
+  title: string;
+  titleBn: string;
+  badge: string;
+  icon: React.ReactNode;
+  color: string;
+  description: string;
+}
+
+const FLOW_LOGIC_ITEMS: FlowLogicItem[] = [
+  {
+    id: 'decision-branch',
+    nodeType: 'decision',
+    title: 'Condition / Branch',
+    titleBn: 'শর্ত / লজিক্যাল শাখা',
+    badge: 'if / else',
+    icon: <GitBranch size={16} />,
+    color: '#f59e0b',
+    description: 'Evaluates conditional logic (Match, Greater, Less) based on answer',
+  },
+];
+
+export type FlyoutTab = 'all' | 'questions' | 'logic' | 'groups';
 
 interface HeaderProps {
   projectTitle?: string;
   currentVersion?: string;
   versionStatus?: 'published' | 'draft' | 'archived';
   groupMeta: GroupMeta;
-  onOpenJsonModal: () => void;
-  onOpenMobileModal: () => void;
+  onOpenJsonModal?: () => void;
+  onOpenMobileModal?: () => void;
   onResetSample: () => void;
   onClearCanvas?: () => void;
   onAutoLayout: () => void;
@@ -58,21 +92,37 @@ interface HeaderProps {
   onSave?: () => void;
   isSaving?: boolean;
   isSaved?: boolean;
+  // Creation tools integrated from left dock:
+  activeToolMode?: CanvasToolMode;
+  onSelectMode?: (mode: CanvasToolMode) => void;
+  onAddSymbol?: (nodeType: FlowNodeType, name: string, nameBn: string) => void;
+  onAddQuestion?: (
+    answerType: AnswerType,
+    name: string,
+    nameBn: string,
+    options?: string
+  ) => void;
+  groups?: ReusableQuestionGroup[];
+  onInsertGroup?: (group: ReusableQuestionGroup) => void;
+  onNavigateToGroups?: () => void;
+  theme?: ThemeMode;
+  resolvedTheme?: ResolvedTheme;
+  onCycleTheme?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   projectTitle,
   currentVersion = '1.0.0',
   versionStatus = 'draft',
-  groupMeta,
-  onOpenJsonModal,
-  onOpenMobileModal,
+  groupMeta: _groupMeta,
+  onOpenJsonModal: _onOpenJsonModal,
+  onOpenMobileModal: _onOpenMobileModal,
   onResetSample,
   onClearCanvas,
   onAutoLayout,
   onBackToList,
-  nodeCount,
-  edgeCount,
+  nodeCount: _nodeCount,
+  edgeCount: _edgeCount,
   diagnosticsCount,
   diagnosticsErrors,
   onOpenDiagnostics,
@@ -89,15 +139,34 @@ export const Header: React.FC<HeaderProps> = ({
   onTogglePathTracing,
   onAddGroupArea,
   isServerConnected = false,
-  onSave,
-  isSaving = false,
-  isSaved = false,
+  onSave: _onSave,
+  isSaving: _isSaving = false,
+  isSaved: _isSaved = false,
+  activeToolMode = 'select',
+  onSelectMode,
+  onAddSymbol,
+  onAddQuestion,
+  groups = [],
+  onInsertGroup,
+  onNavigateToGroups,
+  theme: _theme,
+  resolvedTheme: _resolvedTheme = 'dark',
+  onCycleTheme: _onCycleTheme,
 }) => {
   const [isVersionMenuOpen, setIsVersionMenuOpen] = useState(false);
   const [isToolsMenuOpen, setIsToolsMenuOpen] = useState(false);
 
+  // Floating Flyout Drawer state
+  const [isFlyoutOpen, setIsFlyoutOpen] = useState(false);
+  const [isPinned, setIsPinned] = useState(false);
+  const [activeTab, setActiveTab] = useState<FlyoutTab>('all');
+  const [search, setSearch] = useState('');
+  const [justAddedId, setJustAddedId] = useState<string | null>(null);
+
   const versionDropdownRef = useRef<HTMLDivElement>(null);
   const toolsDropdownRef = useRef<HTMLDivElement>(null);
+  const flyoutRef = useRef<HTMLDivElement>(null);
+  const flyoutToggleRef = useRef<HTMLButtonElement>(null);
 
   // Close menus on outside click
   useEffect(() => {
@@ -115,27 +184,198 @@ export const Header: React.FC<HeaderProps> = ({
       ) {
         setIsToolsMenuOpen(false);
       }
+      if (
+        !isPinned &&
+        flyoutRef.current &&
+        !flyoutRef.current.contains(target) &&
+        flyoutToggleRef.current &&
+        !flyoutToggleRef.current.contains(target)
+      ) {
+        setIsFlyoutOpen(false);
+      }
     };
-    if (isVersionMenuOpen || isToolsMenuOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
+    document.addEventListener('mousedown', handleClickOutside);
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [isVersionMenuOpen, isToolsMenuOpen]);
+  }, [isPinned]);
+
+  // Global shortcut: Q toggles Questions drawer, Esc closes unpinned
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.isContentEditable
+      ) {
+        return;
+      }
+
+      if (e.key === 'q' || e.key === 'Q') {
+        if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+          e.preventDefault();
+          setIsFlyoutOpen((prev) => !prev);
+          if (!isFlyoutOpen) {
+            setActiveTab('questions');
+          }
+        }
+      } else if (e.key === 'Escape') {
+        if (isFlyoutOpen && !isPinned) {
+          setIsFlyoutOpen(false);
+        }
+        setIsVersionMenuOpen(false);
+        setIsToolsMenuOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isFlyoutOpen, isPinned]);
+
+  const toggleFlyoutTab = (tab: FlyoutTab) => {
+    if (isFlyoutOpen && activeTab === tab) {
+      if (!isPinned) {
+        setIsFlyoutOpen(false);
+      }
+    } else {
+      setActiveTab(tab);
+      setIsFlyoutOpen(true);
+    }
+  };
+
+  // Drag and drop start handlers
+  const onDragStartLogic = (event: React.DragEvent, item: FlowLogicItem) => {
+    const payload = JSON.stringify({
+      nodeType: item.nodeType,
+      name: item.title,
+      nameBn: item.titleBn,
+    });
+    event.dataTransfer.setData('application/reactflow-node', payload);
+    event.dataTransfer.setData('text/plain', payload);
+    event.dataTransfer.effectAllowed = 'copyMove';
+  };
+
+  const onDragStartQuestion = (event: React.DragEvent, item: InputTypeItem) => {
+    const payload = JSON.stringify({
+      nodeType: 'question',
+      answerType: item.type,
+      name: item.title,
+      nameBn: item.titleBn,
+      options: item.defaultOptions || '',
+    });
+    event.dataTransfer.setData('application/reactflow-node', payload);
+    event.dataTransfer.setData('text/plain', payload);
+    event.dataTransfer.effectAllowed = 'copyMove';
+  };
+
+  const onDragStartGroup = (
+    event: React.DragEvent,
+    grp: ReusableQuestionGroup
+  ) => {
+    const payload = JSON.stringify(grp);
+    event.dataTransfer.setData('application/reactflow-question-group', payload);
+    event.dataTransfer.setData('text/plain', payload);
+    event.dataTransfer.effectAllowed = 'copyMove';
+  };
+
+  const handleQuickAddQuestion = (item: InputTypeItem) => {
+    if (onAddQuestion) {
+      onAddQuestion(
+        item.type,
+        item.title,
+        item.titleBn,
+        item.defaultOptions
+      );
+    } else if (onAddSymbol) {
+      onAddSymbol('question', item.title, item.titleBn);
+    }
+    setJustAddedId(item.type);
+    setTimeout(() => setJustAddedId(null), 800);
+  };
+
+  const handleQuickAddLogic = (item: FlowLogicItem) => {
+    onAddSymbol?.(item.nodeType, item.title, item.titleBn);
+    setJustAddedId(item.id);
+    setTimeout(() => setJustAddedId(null), 800);
+  };
+
+  const handleQuickInsertGroup = (grp: ReusableQuestionGroup) => {
+    onInsertGroup?.(grp);
+    setJustAddedId(grp.id);
+    setTimeout(() => setJustAddedId(null), 800);
+  };
+
+  const handleToggleDrawArea = () => {
+    if (onSelectMode) {
+      if (activeToolMode === 'drawArea') {
+        onSelectMode('select');
+      } else {
+        onSelectMode('drawArea');
+      }
+    }
+  };
+
+  // Filtered lists for the flyout drawer
+  const filteredLogicItems = useMemo(() => {
+    if (activeTab === 'questions' || activeTab === 'groups') return [];
+    if (!search.trim()) return FLOW_LOGIC_ITEMS;
+    const q = search.toLowerCase().trim();
+    return FLOW_LOGIC_ITEMS.filter(
+      (item) =>
+        item.title.toLowerCase().includes(q) ||
+        (item.titleBn && item.titleBn.toLowerCase().includes(q)) ||
+        item.badge.toLowerCase().includes(q) ||
+        item.description.toLowerCase().includes(q)
+    );
+  }, [search, activeTab]);
+
+  const filteredQuestionTypes = useMemo(() => {
+    if (activeTab === 'logic' || activeTab === 'groups') return [];
+    if (!search.trim()) return INPUT_TYPE_VIEWS;
+    const q = search.toLowerCase().trim();
+    return INPUT_TYPE_VIEWS.filter(
+      (item) =>
+        item.title.toLowerCase().includes(q) ||
+        (item.titleBn && item.titleBn.toLowerCase().includes(q)) ||
+        item.badge.toLowerCase().includes(q) ||
+        item.type.toLowerCase().includes(q) ||
+        item.description.toLowerCase().includes(q)
+    );
+  }, [search, activeTab]);
+
+  const filteredGroups = useMemo(() => {
+    if (activeTab === 'questions' || activeTab === 'logic') return [];
+    if (!search.trim()) return groups;
+    const q = search.toLowerCase().trim();
+    return groups.filter(
+      (grp) =>
+        grp.name.toLowerCase().includes(q) ||
+        (grp.nameBn && grp.nameBn.toLowerCase().includes(q)) ||
+        grp.category.toLowerCase().includes(q) ||
+        grp.description.toLowerCase().includes(q)
+    );
+  }, [search, groups, activeTab]);
+
+  const totalResults =
+    filteredLogicItems.length +
+    filteredQuestionTypes.length +
+    filteredGroups.length;
 
   return (
     <header className="app-header">
-      {/* 1. Left: Brand & Title with Version Dropdown */}
+      {/* 1. Left Island: Identity & Release */}
       <div className="header-brand">
         {onBackToList && (
           <button
-            className="header-back-list-btn"
+            type="button"
+            className="header-icon-btn header-back-list-btn"
             onClick={onBackToList}
-            title="Back to All Flowcharts"
+            data-tooltip="Back to All Flowcharts"
+            data-tooltip-pos="bottom-right"
+            aria-label="Back to All Flowcharts"
           >
             <ArrowLeft size={16} />
-            <span>Flowcharts</span>
           </button>
         )}
 
@@ -154,9 +394,11 @@ export const Header: React.FC<HeaderProps> = ({
                 type="button"
                 className="header-version-pill"
                 onClick={() => setIsVersionMenuOpen((prev) => !prev)}
-                title="Flowchart Version & Release Management"
+                data-tooltip="Flowchart Releases & History"
+                data-tooltip-pos="bottom-right"
+                aria-label="Flowchart Releases & History"
               >
-                <GitBranch size={13} className="version-pill-icon" />
+                <GitBranch size={12} className="version-pill-icon" />
                 <span className="version-pill-text">v{currentVersion}</span>
                 <span className={`version-pill-tag tag-${versionStatus}`}>
                   {versionStatus === 'published' ? 'Live' : 'Draft'}
@@ -255,182 +497,153 @@ export const Header: React.FC<HeaderProps> = ({
               )}
             </div>
 
-            {/* Backend Server Connectivity Status Pill */}
-            {isServerConnected ? (
-              <div
-                className="header-server-status-pill connected"
-                title="Connected to Spring Boot Backend Server (http://localhost:8080/api)"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '5px',
-                  fontSize: '11px',
-                  padding: '3px 8px',
-                  borderRadius: '9999px',
-                  backgroundColor: '#ecfdf5',
-                  color: '#059669',
-                  border: '1px solid #a7f3d0',
-                  fontWeight: 600,
-                  marginLeft: '4px',
-                }}
-              >
-                <span
-                  style={{
-                    width: '6px',
-                    height: '6px',
-                    borderRadius: '50%',
-                    backgroundColor: '#10b981',
-                    boxShadow: '0 0 6px rgba(16, 185, 129, 0.6)',
-                  }}
-                />
-                <span>Spring Boot API</span>
-              </div>
-            ) : (
-              <div
-                className="header-server-status-pill offline"
-                title="Backend Server Offline (Using Local Storage Cache)"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '5px',
-                  fontSize: '11px',
-                  padding: '3px 8px',
-                  borderRadius: '9999px',
-                  backgroundColor: '#fef3c7',
-                  color: '#b45309',
-                  border: '1px solid #fde68a',
-                  fontWeight: 600,
-                  marginLeft: '4px',
-                }}
-              >
-                <span
-                  style={{
-                    width: '6px',
-                    height: '6px',
-                    borderRadius: '50%',
-                    backgroundColor: '#f59e0b',
-                  }}
-                />
-                <span>Local Mode</span>
-              </div>
-            )}
+            {/* Backend Server Connectivity Status Dot */}
+            <div
+              className={`header-server-status-dot ${isServerConnected ? 'connected' : 'offline'}`}
+              data-tooltip={
+                isServerConnected
+                  ? 'Connected to Spring Boot API (:8080)'
+                  : 'Backend Offline (Using Local Storage Cache)'
+              }
+              data-tooltip-pos="bottom-right"
+            />
           </div>
         </div>
       </div>
 
-      {/* 2. Middle: Compact Status & Diagnostics */}
-      <div className="header-meta">
-        <div className="meta-pill stats-pill">
-          <span>
-            Group {groupMeta.groupNumber}/{groupMeta.totalGroups}
-          </span>
-          <span className="pill-divider">•</span>
-          <span>
-            {nodeCount} Nodes ({edgeCount} Links)
-          </span>
-        </div>
-
-        {/* Real-time Flow Diagnostics Pill */}
+      {/* 2. Top-Center Island: Creation & Canvas Tools Dock (Reorganized from Left Dock) */}
+      <div className="header-meta header-center-dock">
+        {/* Creation Tool 1: Add Questions & Elements (Plus) */}
         <button
-          className={`meta-pill diagnostics-pill ${
-            diagnosticsErrors > 0
-              ? 'has-error'
-              : diagnosticsCount > 0
-              ? 'has-warning'
-              : 'is-healthy'
+          type="button"
+          ref={flyoutToggleRef}
+          className={`header-icon-btn ${
+            isFlyoutOpen && (activeTab === 'questions' || activeTab === 'all')
+              ? 'is-active'
+              : ''
           }`}
-          onClick={onOpenDiagnostics}
-          title="Click to view flowchart diagnostics"
+          onClick={() => toggleFlyoutTab('questions')}
+          data-tooltip="Add Questions & Elements (Q)"
+          data-tooltip-pos="bottom"
+          aria-label="Add Questions & Elements"
         >
-          {diagnosticsErrors > 0 ? (
-            <>
-              <AlertTriangle size={13} className="text-red-400" />
-              <span>{diagnosticsErrors} Errors</span>
-            </>
-          ) : diagnosticsCount > 0 ? (
-            <>
-              <AlertTriangle size={13} className="text-amber-400" />
-              <span>{diagnosticsCount} Warnings</span>
-            </>
-          ) : (
-            <>
-              <CheckCircle2 size={13} className="text-emerald-400" />
-              <span>Flow Valid</span>
-            </>
-          )}
+          <Plus size={16} />
         </button>
-      </div>
 
-      {/* 3. Right: Clean Consolidated Action Group */}
-      <div className="header-actions">
-        {/* Undo / Redo Segmented Buttons */}
-        {(onUndo || onRedo) && (
-          <div className="header-history-btn-group">
-            <button
-              type="button"
-              className="btn btn-icon btn-history-action"
-              onClick={onUndo}
-              disabled={!canUndo}
-              title="Undo (Ctrl+Z / Cmd+Z)"
-            >
-              <Undo2 size={14} />
-            </button>
-            <button
-              type="button"
-              className="btn btn-icon btn-history-action"
-              onClick={onRedo}
-              disabled={!canRedo}
-              title="Redo (Ctrl+Y / Cmd+Shift+Z)"
-            >
-              <Redo2 size={14} />
-            </button>
-          </div>
-        )}
+        {/* Creation Tool 2: Condition / Branch (Draggable onto canvas or click to add) */}
+        <div
+          className="header-icon-btn figma-draggable-item"
+          draggable
+          onDragStart={(e) => onDragStartLogic(e, FLOW_LOGIC_ITEMS[0])}
+          onClick={() => handleQuickAddLogic(FLOW_LOGIC_ITEMS[0])}
+          data-tooltip="Condition / Branch (Drag to canvas)"
+          data-tooltip-pos="bottom"
+          aria-label="Condition / Branch"
+        >
+          <GitBranch size={15} className="text-amber-400" />
+        </div>
 
-        {/* Dependency Path Tracing Quick Toggle */}
+        {/* Creation Tool 3: Group Area Mode Toggle (Crop) */}
+        <button
+          type="button"
+          className={`header-icon-btn ${activeToolMode === 'drawArea' ? 'is-active' : ''}`}
+          onClick={(e) => {
+            if (e.altKey && onAddGroupArea) {
+              onAddGroupArea();
+              return;
+            }
+            handleToggleDrawArea();
+          }}
+          data-tooltip={
+            activeToolMode === 'drawArea'
+              ? 'Draw Area Mode Active (F)'
+              : 'Draw Group Area (F)'
+          }
+          data-tooltip-pos="bottom"
+          aria-label="Draw Group Area"
+        >
+          <Crop
+            size={15}
+            className={activeToolMode === 'drawArea' ? 'text-cyan-400' : ''}
+          />
+        </button>
+
+        {/* Creation Tool 4: Reusable Question Groups Library */}
+        <button
+          type="button"
+          className={`header-icon-btn ${
+            isFlyoutOpen && activeTab === 'groups' ? 'is-active' : ''
+          }`}
+          onClick={() => toggleFlyoutTab('groups')}
+          data-tooltip="Question Groups Library"
+          data-tooltip-pos="bottom"
+          aria-label="Question Groups Library"
+        >
+          <Layers size={15} />
+          {groups.length > 0 && <span className="header-dot-indicator" />}
+        </button>
+
+        <div className="header-dock-divider" />
+
+        {/* History: Undo */}
+        <button
+          type="button"
+          className="header-icon-btn"
+          onClick={onUndo}
+          disabled={!canUndo}
+          data-tooltip="Undo (Ctrl+Z)"
+          data-tooltip-pos="bottom"
+          aria-label="Undo"
+        >
+          <Undo2 size={15} />
+        </button>
+
+        {/* History: Redo */}
+        <button
+          type="button"
+          className="header-icon-btn"
+          onClick={onRedo}
+          disabled={!canRedo}
+          data-tooltip="Redo (Ctrl+Y)"
+          data-tooltip-pos="bottom"
+          aria-label="Redo"
+        >
+          <Redo2 size={15} />
+        </button>
+
+        {/* Dependency Path Tracing */}
         {onTogglePathTracing && (
           <button
             type="button"
-            className={`btn btn-icon ${isPathTracingEnabled ? 'btn-active-cyan' : 'btn-secondary'}`}
+            className={`header-icon-btn ${isPathTracingEnabled ? 'is-active-cyan' : ''}`}
             onClick={onTogglePathTracing}
-            title={
+            data-tooltip={
               isPathTracingEnabled
-                ? 'Dependency Path Tracing (ON): Highlight upstream & downstream flows. Click to turn OFF'
-                : 'Dependency Path Tracing (OFF): Click to turn ON'
+                ? 'Dependency Path Tracing (ON)'
+                : 'Dependency Path Tracing (OFF)'
             }
-            style={
-              isPathTracingEnabled
-                ? {
-                    borderColor: 'rgba(6, 182, 212, 0.5)',
-                    color: '#22d3ee',
-                    background: 'rgba(6, 182, 212, 0.12)',
-                  }
-                : undefined
-            }
+            data-tooltip-pos="bottom"
+            aria-label="Dependency Path Tracing"
           >
-            <GitFork size={14} />
+            <GitFork size={15} />
           </button>
         )}
 
-        {/* Consolidated Canvas Tools & Layout Dropdown */}
+        {/* Canvas Tools & Alignment Dropdown */}
         <div className="header-tools-dropdown-container" ref={toolsDropdownRef}>
           <button
             type="button"
-            className="btn btn-secondary btn-tools-toggle"
+            className={`header-icon-btn ${isToolsMenuOpen ? 'is-active' : ''}`}
             onClick={() => setIsToolsMenuOpen((prev) => !prev)}
-            title="Canvas layout, alignment & line style options"
+            data-tooltip="Canvas Layout & Alignment"
+            data-tooltip-pos="bottom"
+            aria-label="Canvas Layout & Alignment"
           >
-            <SlidersHorizontal size={14} />
-            <span>Tools</span>
-            <ChevronDown
-              size={11}
-              className={`tools-chevron ${isToolsMenuOpen ? 'is-rotated' : ''}`}
-            />
+            <SlidersHorizontal size={15} />
           </button>
 
           {isToolsMenuOpen && (
             <div className="header-tools-menu animate-in">
-              {/* Section 1: Auto Layout & Align */}
               <div className="tools-section-title">Layout & Alignment</div>
               <button
                 type="button"
@@ -491,53 +704,7 @@ export const Header: React.FC<HeaderProps> = ({
 
               <div className="menu-divider" />
 
-              {/* Section 2: Visual Inspection */}
-              <div className="tools-section-title">Visual Inspection</div>
-              <button
-                type="button"
-                className={`tools-menu-item ${isPathTracingEnabled ? 'is-active' : ''}`}
-                onClick={() => {
-                  onTogglePathTracing?.();
-                }}
-              >
-                <GitFork
-                  size={14}
-                  className={isPathTracingEnabled ? 'text-cyan-400' : ''}
-                />
-                <div className="tools-item-text">
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      width: '100%',
-                    }}
-                  >
-                    <span className="tools-title">Dependency Tracing</span>
-                    <span
-                      style={{
-                        fontSize: '9px',
-                        fontWeight: 700,
-                        padding: '1px 5px',
-                        borderRadius: '4px',
-                        background: isPathTracingEnabled
-                          ? 'rgba(6, 182, 212, 0.2)'
-                          : 'rgba(100, 116, 139, 0.2)',
-                        color: isPathTracingEnabled ? '#22d3ee' : '#94a3b8',
-                      }}
-                    >
-                      {isPathTracingEnabled ? 'ON' : 'OFF'}
-                    </span>
-                  </div>
-                  <span className="tools-sub">
-                    Highlight ancestors & dependents
-                  </span>
-                </div>
-              </button>
-
-              <div className="menu-divider" />
-
-              {/* Section 4: Clear Canvas / Blank Canvas */}
+              <div className="tools-section-title">Canvas Reset</div>
               <button
                 type="button"
                 className="tools-menu-item item-danger"
@@ -571,53 +738,382 @@ export const Header: React.FC<HeaderProps> = ({
           )}
         </div>
 
-        {/* Primary Action 0: Save Flowchart */}
-        {onSave && (
-          <button
-            type="button"
-            className={`btn btn-save ${isSaved ? 'is-saved' : ''} ${isSaving ? 'is-saving' : ''}`}
-            onClick={onSave}
-            disabled={isSaving}
-            title="Save flowchart to local storage & cloud database (Ctrl+S / Cmd+S)"
-          >
-            {isSaving ? (
-              <>
-                <Loader2 size={15} className="animate-spin" />
-                <span>Saving...</span>
-              </>
-            ) : isSaved ? (
-              <>
-                <Check size={15} />
-                <span>Saved!</span>
-              </>
-            ) : (
-              <>
-                <Save size={15} />
-                <span>Save</span>
-              </>
-            )}
-          </button>
+        <div className="header-dock-divider" />
+
+        {/* Real-time Flow Diagnostics Icon Button */}
+        <button
+          type="button"
+          className={`header-icon-btn diagnostics-btn ${
+            diagnosticsErrors > 0
+              ? 'has-error'
+              : diagnosticsCount > 0
+              ? 'has-warning'
+              : 'is-healthy'
+          }`}
+          onClick={onOpenDiagnostics}
+          data-tooltip={
+            diagnosticsErrors > 0
+              ? `${diagnosticsErrors} Errors Detected`
+              : diagnosticsCount > 0
+              ? `${diagnosticsCount} Warnings`
+              : 'Flow Valid — No Errors'
+          }
+          data-tooltip-pos="bottom"
+          aria-label="Flow Diagnostics"
+        >
+          {diagnosticsErrors > 0 ? (
+            <>
+              <AlertTriangle size={15} className="text-red-400" />
+              <span className="diagnostics-badge-number">{diagnosticsErrors}</span>
+            </>
+          ) : diagnosticsCount > 0 ? (
+            <>
+              <AlertTriangle size={15} className="text-amber-400" />
+              <span className="diagnostics-badge-number">{diagnosticsCount}</span>
+            </>
+          ) : (
+            <CheckCircle2 size={15} className="text-emerald-400" />
+          )}
+        </button>
+
+        {/* Floating Flyout Drawer (Centered directly below the dock) */}
+        {isFlyoutOpen && (
+          <div className="top-flyout-drawer animate-in" ref={flyoutRef}>
+            {/* Flyout Header */}
+            <div className="flyout-header">
+              <div className="flyout-title-row">
+                <div className="flyout-title-badge">
+                  <Sparkles size={14} className="text-emerald-400" />
+                  <span className="flyout-title-text">Survey Elements</span>
+                </div>
+                <div className="flyout-header-actions">
+                  <button
+                    type="button"
+                    className={`flyout-icon-btn ${isPinned ? 'is-pinned' : ''}`}
+                    onClick={() => setIsPinned(!isPinned)}
+                    data-tooltip={
+                      isPinned
+                        ? 'Unpin Drawer'
+                        : 'Pin Drawer'
+                    }
+                    data-tooltip-pos="bottom-left"
+                    aria-label="Pin or Unpin Drawer"
+                  >
+                    {isPinned ? <PinOff size={13} /> : <Pin size={13} />}
+                  </button>
+                  <button
+                    type="button"
+                    className="flyout-icon-btn"
+                    onClick={() => setIsFlyoutOpen(false)}
+                    data-tooltip="Close Drawer (Esc)"
+                    data-tooltip-pos="bottom-left"
+                    aria-label="Close Drawer"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Flyout Search Bar */}
+              <div className="flyout-search-wrap">
+                <Search size={13} className="flyout-search-icon" />
+                <input
+                  type="text"
+                  placeholder="Search question types & logic..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="flyout-search-input"
+                  autoFocus
+                />
+                {search && (
+                  <button
+                    type="button"
+                    className="flyout-search-clear"
+                    onClick={() => setSearch('')}
+                  >
+                    <X size={12} />
+                  </button>
+                )}
+              </div>
+
+              {/* Filter Tabs */}
+              <div className="flyout-tabs-row">
+                <button
+                  type="button"
+                  className={`flyout-tab-pill ${activeTab === 'all' ? 'is-active' : ''}`}
+                  onClick={() => setActiveTab('all')}
+                >
+                  All
+                </button>
+                <button
+                  type="button"
+                  className={`flyout-tab-pill ${
+                    activeTab === 'questions' ? 'is-active' : ''
+                  }`}
+                  onClick={() => setActiveTab('questions')}
+                >
+                  Questions
+                </button>
+                <button
+                  type="button"
+                  className={`flyout-tab-pill ${
+                    activeTab === 'logic' ? 'is-active' : ''
+                  }`}
+                  onClick={() => setActiveTab('logic')}
+                >
+                  Logic
+                </button>
+                <button
+                  type="button"
+                  className={`flyout-tab-pill ${
+                    activeTab === 'groups' ? 'is-active' : ''
+                  }`}
+                  onClick={() => setActiveTab('groups')}
+                >
+                  Groups ({groups.length})
+                </button>
+              </div>
+            </div>
+
+            {/* Flyout Body */}
+            <div className="flyout-body">
+              {totalResults === 0 ? (
+                <div className="flyout-empty-state">
+                  <Layers size={24} className="text-slate-500" />
+                  <span className="empty-title">No matching elements</span>
+                  <span className="empty-sub">Try searching with other keywords</span>
+                  <button
+                    type="button"
+                    className="flyout-clear-btn"
+                    onClick={() => setSearch('')}
+                  >
+                    Reset Search
+                  </button>
+                </div>
+              ) : (
+                <>
+                  {/* Logic Items */}
+                  {filteredLogicItems.length > 0 && (
+                    <div className="flyout-section">
+                      <div className="flyout-section-heading">LOGIC & BRANCHES</div>
+                      <div className="flyout-cards-list">
+                        {filteredLogicItems.map((item) => (
+                          <div
+                            key={item.id}
+                            className={`flyout-card ${
+                              justAddedId === item.id ? 'just-added' : ''
+                            }`}
+                            draggable
+                            onDragStart={(e) => onDragStartLogic(e, item)}
+                            onClick={() => handleQuickAddLogic(item)}
+                            title={`${item.title} — Drag onto canvas or click to add`}
+                          >
+                            <div className="flyout-card-drag">
+                              <GripVertical size={13} />
+                            </div>
+                            <div
+                              className="flyout-card-icon"
+                              style={{
+                                color: item.color,
+                                backgroundColor: `${item.color}18`,
+                              }}
+                            >
+                              {item.icon}
+                            </div>
+                            <div className="flyout-card-content">
+                              <div className="flyout-card-title-row">
+                                <span className="flyout-card-title">
+                                  {item.title}
+                                </span>
+                                <span
+                                  className="flyout-card-badge"
+                                  style={{
+                                    color: item.color,
+                                    backgroundColor: `${item.color}15`,
+                                  }}
+                                >
+                                  {item.badge}
+                                </span>
+                              </div>
+                              <span className="flyout-card-bn">{item.titleBn}</span>
+                              <span className="flyout-card-desc">
+                                {item.description}
+                              </span>
+                            </div>
+                            {justAddedId === item.id && (
+                              <div className="flyout-card-added-pill">
+                                <Check size={11} />
+                                <span>Added</span>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Question Types */}
+                  {filteredQuestionTypes.length > 0 && (
+                    <div className="flyout-section">
+                      <div className="flyout-section-heading">
+                        QUESTION TYPES ({filteredQuestionTypes.length})
+                      </div>
+                      <div className="flyout-cards-list">
+                        {filteredQuestionTypes.map((item) => (
+                          <div
+                            key={item.type}
+                            className={`flyout-card ${
+                              justAddedId === item.type ? 'just-added' : ''
+                            }`}
+                            draggable
+                            onDragStart={(e) => onDragStartQuestion(e, item)}
+                            onClick={() => handleQuickAddQuestion(item)}
+                            title={`${item.title} — Drag onto canvas or click to add`}
+                          >
+                            <div className="flyout-card-drag">
+                              <GripVertical size={13} />
+                            </div>
+                            <div
+                              className="flyout-card-icon"
+                              style={{
+                                color: item.color,
+                                backgroundColor: `${item.color}15`,
+                              }}
+                            >
+                              {item.icon}
+                            </div>
+                            <div className="flyout-card-content">
+                              <div className="flyout-card-title-row">
+                                <span className="flyout-card-title">
+                                  {item.title}
+                                </span>
+                                <span
+                                  className="flyout-card-badge"
+                                  style={{
+                                    color: item.color,
+                                    backgroundColor: `${item.color}15`,
+                                  }}
+                                >
+                                  {item.badge}
+                                </span>
+                              </div>
+                              <span className="flyout-card-bn">{item.titleBn}</span>
+                              <span className="flyout-card-desc">
+                                {item.description}
+                              </span>
+                            </div>
+                            {justAddedId === item.type && (
+                              <div className="flyout-card-added-pill">
+                                <Check size={11} />
+                                <span>Added</span>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Question Groups */}
+                  {filteredGroups.length > 0 && (
+                    <div className="flyout-section">
+                      <div
+                        className="flyout-section-heading"
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                        }}
+                      >
+                        <span>
+                          QUESTION GROUP TEMPLATES ({filteredGroups.length})
+                        </span>
+                        {onNavigateToGroups && (
+                          <button
+                            type="button"
+                            className="flyout-tab-pill"
+                            onClick={onNavigateToGroups}
+                            style={{
+                              fontSize: 10,
+                              padding: '1px 6px',
+                              color: '#10b981',
+                            }}
+                            title="Open Question Group Designer Studio"
+                          >
+                            Studio →
+                          </button>
+                        )}
+                      </div>
+                      <div className="flyout-cards-list">
+                        {filteredGroups.map((grp) => (
+                          <div
+                            key={grp.id}
+                            className={`flyout-card flyout-group-card ${
+                              justAddedId === grp.id ? 'just-added' : ''
+                            }`}
+                            draggable
+                            onDragStart={(e) => onDragStartGroup(e, grp)}
+                            onClick={() => handleQuickInsertGroup(grp)}
+                            title={`Insert ${grp.name} into canvas (${grp.questions.length} questions)`}
+                          >
+                            <div className="flyout-card-drag">
+                              <GripVertical size={13} />
+                            </div>
+                            <div
+                              className="flyout-card-icon"
+                              style={{
+                                color: grp.color,
+                                backgroundColor: `${grp.color}20`,
+                              }}
+                            >
+                              <Layers size={16} />
+                            </div>
+                            <div className="flyout-card-content">
+                              <div className="flyout-card-title-row">
+                                <span className="flyout-card-title">
+                                  {grp.name}
+                                </span>
+                                <span
+                                  className="flyout-card-badge"
+                                  style={{
+                                    color: grp.color,
+                                    backgroundColor: `${grp.color}18`,
+                                  }}
+                                >
+                                  {grp.category.toUpperCase()}
+                                </span>
+                              </div>
+                              {grp.nameBn && (
+                                <span className="flyout-card-bn">{grp.nameBn}</span>
+                              )}
+                              <span className="flyout-card-desc">
+                                {grp.questions.length} Questions • {grp.description}
+                              </span>
+                            </div>
+                            {justAddedId === grp.id && (
+                              <div className="flyout-card-added-pill">
+                                <Check size={11} />
+                                <span>Added</span>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* Flyout Footer */}
+            <div className="flyout-footer">
+              <Sparkles size={12} className="text-emerald-400 shrink-0" />
+              <span className="flyout-footer-tip">
+                Drag elements directly to the canvas, or click once to insert.
+              </span>
+            </div>
+          </div>
         )}
-
-        {/* Primary Action 1: Mobile Preview */}
-        <button
-          className="btn btn-secondary btn-mobile-preview"
-          onClick={onOpenMobileModal}
-          title="Interactive Mobile App Emulator"
-        >
-          <Smartphone size={15} />
-          <span>Mobile Preview</span>
-        </button>
-
-        {/* Primary Action 2: Generate JSON */}
-        <button
-          className="btn btn-primary"
-          onClick={onOpenJsonModal}
-          title="Generate & export compiled JSON survey schema"
-        >
-          <Code2 size={15} />
-          <span>Generate JSON</span>
-        </button>
       </div>
     </header>
   );

@@ -1,5 +1,5 @@
 import { memo, useCallback } from 'react';
-import { Handle, Position, NodeResizer, useReactFlow } from '@xyflow/react';
+import { NodeResizer, useReactFlow } from '@xyflow/react';
 import type { NodeProps } from '@xyflow/react';
 import { Layers, Sparkles, Trash } from 'lucide-react';
 import type { GroupCategory } from '../../types/group';
@@ -110,7 +110,7 @@ export const GroupFrameNode = memo(({ id, data, selected, onDeleteFrame }: Group
       <NodeResizer
         minWidth={320}
         minHeight={200}
-        isVisible={selected}
+        isVisible={true}
         color={selected ? '#10b981' : color}
         lineClassName="group-frame-resize-line"
         handleClassName="group-frame-resize-handle"
@@ -191,22 +191,6 @@ export const GroupFrameNode = memo(({ id, data, selected, onDeleteFrame }: Group
           </div>
         ) : null}
       </div>
-
-      {/* Optional Top / Bottom Handles for Flow Routing */}
-      <Handle
-        type="target"
-        position={Position.Top}
-        id="frame-in"
-        className="flowchart-handle group-handle"
-        style={{ background: activeColor, pointerEvents: 'auto' }}
-      />
-      <Handle
-        type="source"
-        position={Position.Bottom}
-        id="frame-out"
-        className="flowchart-handle group-handle"
-        style={{ background: activeColor, pointerEvents: 'auto' }}
-      />
     </div>
   );
 });

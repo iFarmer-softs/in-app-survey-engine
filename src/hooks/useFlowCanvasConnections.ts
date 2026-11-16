@@ -149,10 +149,27 @@ export function useFlowCanvasConnections({
           : `Cross-Group: G${sourceGroup} ➔ G${targetGroup}`;
       }
 
+      // Flexible target handle resolution for cross-group connections
+      let resolvedTargetHandle = params.targetHandle;
+      if (isCrossGroup && (!resolvedTargetHandle || resolvedTargetHandle === 'in') && sourceNode && targetNode) {
+        const sX = sourceNode.position.x;
+        const sY = sourceNode.position.y;
+        const tX = targetNode.position.x;
+        const tY = targetNode.position.y;
+        const dx = tX - sX;
+        const dy = tY - sY;
+        if (Math.abs(dx) >= Math.abs(dy)) {
+          resolvedTargetHandle = dx > 0 ? 'in-left' : 'in-right';
+        } else {
+          resolvedTargetHandle = dy > 0 ? 'in' : 'in-bottom';
+        }
+      }
+
       setEdges((eds) =>
         addEdge(
           {
             ...params,
+            targetHandle: resolvedTargetHandle,
             type: 'surveyEdge',
             animated: true,
             label: edgeLabel,

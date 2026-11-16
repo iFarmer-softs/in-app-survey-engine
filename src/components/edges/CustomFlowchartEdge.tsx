@@ -78,6 +78,8 @@ export function getOrthogonalPathWithDetour({
   centerY,
   offset = 20,
   bounds,
+  sourceContainer,
+  targetContainer,
 }: {
   sourceX: number;
   sourceY: number;
@@ -90,9 +92,26 @@ export function getOrthogonalPathWithDetour({
   centerY?: number;
   offset?: number;
   bounds?: { minX: number; maxX: number; minY: number; maxY: number };
+  sourceContainer?: ContainerRect;
+  targetContainer?: ContainerRect;
 }): [string, number, number] {
-  const defaultCenterX = (sourceX + targetX) / 2;
-  const defaultCenterY = (sourceY + targetY) / 2;
+  let defaultCenterX = (sourceX + targetX) / 2;
+  let defaultCenterY = (sourceY + targetY) / 2;
+
+  // If source and target are in different group frames, default the corridor to the open space between them
+  if (sourceContainer && targetContainer && sourceContainer !== targetContainer) {
+    if (sourceContainer.maxX < targetContainer.minX) {
+      defaultCenterX = (sourceContainer.maxX + targetContainer.minX) / 2;
+    } else if (targetContainer.maxX < sourceContainer.minX) {
+      defaultCenterX = (targetContainer.maxX + sourceContainer.minX) / 2;
+    }
+    if (sourceContainer.maxY < targetContainer.minY) {
+      defaultCenterY = (sourceContainer.maxY + targetContainer.minY) / 2;
+    } else if (targetContainer.maxY < sourceContainer.minY) {
+      defaultCenterY = (targetContainer.maxY + sourceContainer.minY) / 2;
+    }
+  }
+
   let cx = centerX ?? defaultCenterX;
   let cy = centerY ?? defaultCenterY;
 
@@ -205,9 +224,11 @@ export function getOrthogonalPathWithDetour({
         : targetY <= sourceY - 2 * offset;
 
     if (isForward) {
-      if (Math.abs(cx - defaultCenterX) > 5) {
-        const y1 = effectiveSourcePos === Position.Bottom ? sourceY + offset : sourceY - offset;
+      if (Math.abs(cx - defaultCenterX) > 0.5) {
         const y2 = effectiveTargetPos === Position.Top ? targetY - offset : targetY + offset;
+        const y1 = Math.abs(cy - defaultCenterY) > 0.5
+          ? cy
+          : (effectiveSourcePos === Position.Bottom ? sourceY + offset : sourceY - offset);
         pts = [
           { x: sourceX, y: sourceY },
           { x: sourceX, y: y1 },
@@ -249,13 +270,12 @@ export function getOrthogonalPathWithDetour({
         : targetX <= sourceX - 2 * offset;
 
     if (isForward) {
-      if (Math.abs(cy - defaultCenterY) > 5) {
-        const x1 = effectiveSourcePos === Position.Right ? sourceX + offset : sourceX - offset;
+      if (Math.abs(cy - defaultCenterY) > 0.5) {
         const x2 = effectiveTargetPos === Position.Left ? targetX - offset : targetX + offset;
         pts = [
           { x: sourceX, y: sourceY },
-          { x: x1, y: sourceY },
-          { x: x1, y: cy },
+          { x: cx, y: sourceY },
+          { x: cx, y: cy },
           { x: x2, y: cy },
           { x: x2, y: targetY },
           { x: targetX, y: targetY },
@@ -304,6 +324,327 @@ export function getOrthogonalPathWithDetour({
   return [edgePath, labelX, labelY];
 }
 
+export interface ContainerRect {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+}
+
+export function segmentIntersectsRect(
+  p1: { x: number; y: number },
+  p2: { x: number; y: number },
+  r?: ContainerRect,
+  inset: number = 4
+): boolean {
+  if (!r) return false;
+  const minX = r.minX + inset;
+  const maxX = r.maxX - inset;
+  const minY = r.minY + inset;
+  const maxY = r.maxY - inset;
+  if (Math.abs(p1.y - p2.y) < 0.001) {
+    const y = p1.y;
+    if (y <= minY || y >= maxY) return false;
+    const sMinX = Math.min(p1.x, p2.x);
+    const sMaxX = Math.max(p1.x, p2.x);
+    return Math.max(sMinX, minX) < Math.min(sMaxX, maxX);
+  } else if (Math.abs(p1.x - p2.x) < 0.001) {
+    const x = p1.x;
+    if (x <= minX || x >= maxX) return false;
+    const sMinY = Math.min(p1.y, p2.y);
+    const sMaxY = Math.max(p1.y, p2.y);
+    return Math.max(sMinY, minY) < Math.min(sMaxY, maxY);
+  }
+  return true;
+}
+
+export function findClearOrthogonalRoute(
+  exitPoint: { x: number; y: number },
+  entryPoint: { x: number; y: number },
+  obstacles: ContainerRect[],
+  prefX?: number,
+  prefY?: number,
+  userShiftedX?: boolean,
+  userShiftedY?: boolean
+): Array<{ x: number; y: number }> {
+  function pathValid(pts: Array<{ x: number; y: number }>) {
+    for (let i = 0; i < pts.length - 1; i++) {
+      for (const obs of obstacles) {
+        if (segmentIntersectsRect(pts[i], pts[i + 1], obs)) return false;
+      }
+    }
+    return true;
+  }
+
+  const validObstacles = obstacles.filter(Boolean);
+  if (validObstacles.length === 0) {
+    return [exitPoint, { x: entryPoint.x, y: exitPoint.y }, entryPoint];
+  }
+
+  const allMinX = Math.min(...validObstacles.map((o) => o.minX));
+  const allMaxX = Math.max(...validObstacles.map((o) => o.maxX));
+  const allMinY = Math.min(...validObstacles.map((o) => o.minY));
+  const allMaxY = Math.max(...validObstacles.map((o) => o.maxY));
+
+  const xCandidates = [
+    prefX,
+    (exitPoint.x + entryPoint.x) / 2,
+    exitPoint.x,
+    entryPoint.x,
+    allMinX - 35,
+    allMaxX + 35,
+  ].filter((x): x is number => x !== undefined && !isNaN(x));
+
+  const yCandidates = [
+    prefY,
+    (exitPoint.y + entryPoint.y) / 2,
+    exitPoint.y,
+    entryPoint.y,
+    allMinY - 35,
+    allMaxY + 35,
+  ].filter((y): y is number => y !== undefined && !isNaN(y));
+
+  const isHorizFlow = Math.abs(entryPoint.x - exitPoint.x) >= Math.abs(entryPoint.y - exitPoint.y);
+  const hasVertDiff = Math.abs(entryPoint.y - exitPoint.y) > 1;
+  const hasHorizDiff = Math.abs(entryPoint.x - exitPoint.x) > 1;
+
+  // Prioritize user-preferred coordinates (prefX / prefY) when provided by interactive line dragging
+  if (prefX !== undefined && prefY !== undefined) {
+    if (isHorizFlow && hasVertDiff && !userShiftedY) {
+      // 2-bend step whose vertical spine moves side-by-side with prefX
+      let p = [exitPoint, { x: prefX, y: exitPoint.y }, { x: prefX, y: entryPoint.y }, entryPoint];
+      if (pathValid(p)) return p;
+    } else if (!isHorizFlow && hasHorizDiff && !userShiftedX) {
+      // 2-bend step whose horizontal spine moves up-and-down with prefY
+      let p = [exitPoint, { x: exitPoint.x, y: prefY }, { x: entryPoint.x, y: prefY }, entryPoint];
+      if (pathValid(p)) return p;
+    }
+
+    let p = [exitPoint, { x: prefX, y: exitPoint.y }, { x: prefX, y: prefY }, { x: entryPoint.x, y: prefY }, entryPoint];
+    if (pathValid(p)) return p;
+    p = [exitPoint, { x: exitPoint.x, y: prefY }, { x: prefX, y: prefY }, { x: prefX, y: entryPoint.y }, entryPoint];
+    if (pathValid(p)) return p;
+    p = [exitPoint, { x: prefX, y: exitPoint.y }, { x: prefX, y: entryPoint.y }, entryPoint];
+    if (pathValid(p)) return p;
+    p = [exitPoint, { x: exitPoint.x, y: prefY }, { x: entryPoint.x, y: prefY }, entryPoint];
+    if (pathValid(p)) return p;
+  } else if (prefX !== undefined) {
+    let p = [exitPoint, { x: prefX, y: exitPoint.y }, { x: prefX, y: entryPoint.y }, entryPoint];
+    if (pathValid(p)) return p;
+    for (const y of yCandidates) {
+      p = [exitPoint, { x: prefX, y: exitPoint.y }, { x: prefX, y }, { x: entryPoint.x, y }, entryPoint];
+      if (pathValid(p)) return p;
+      p = [exitPoint, { x: exitPoint.x, y }, { x: prefX, y }, { x: prefX, y: entryPoint.y }, entryPoint];
+      if (pathValid(p)) return p;
+    }
+  } else if (prefY !== undefined) {
+    let p = [exitPoint, { x: exitPoint.x, y: prefY }, { x: entryPoint.x, y: prefY }, entryPoint];
+    if (pathValid(p)) return p;
+    for (const x of xCandidates) {
+      p = [exitPoint, { x, y: exitPoint.y }, { x, y: prefY }, { x: entryPoint.x, y: prefY }, entryPoint];
+      if (pathValid(p)) return p;
+      p = [exitPoint, { x: exitPoint.x, y: prefY }, { x, y: prefY }, { x, y: entryPoint.y }, entryPoint];
+      if (pathValid(p)) return p;
+    }
+  }
+
+  // 1. Try 1-bend (2-segment)
+  let p = [exitPoint, { x: entryPoint.x, y: exitPoint.y }, entryPoint];
+  if (pathValid(p)) return p;
+  p = [exitPoint, { x: exitPoint.x, y: entryPoint.y }, entryPoint];
+  if (pathValid(p)) return p;
+
+  // 2. Try 2-bend (3-segment) via xCandidate
+  for (const x of xCandidates) {
+    p = [exitPoint, { x, y: exitPoint.y }, { x, y: entryPoint.y }, entryPoint];
+    if (pathValid(p)) return p;
+  }
+
+  // 3. Try 2-bend (3-segment) via yCandidate
+  for (const y of yCandidates) {
+    p = [exitPoint, { x: exitPoint.x, y }, { x: entryPoint.x, y }, entryPoint];
+    if (pathValid(p)) return p;
+  }
+
+  // 4. Try 3-bend (4-segment) via (x, y)
+  for (const x of xCandidates) {
+    for (const y of yCandidates) {
+      p = [exitPoint, { x, y: exitPoint.y }, { x, y }, { x: entryPoint.x, y }, entryPoint];
+      if (pathValid(p)) return p;
+      p = [exitPoint, { x: exitPoint.x, y }, { x, y }, { x, y: entryPoint.y }, entryPoint];
+      if (pathValid(p)) return p;
+    }
+  }
+
+  // Fallback: mid-corridor orthogonal path
+  return [
+    exitPoint,
+    { x: (exitPoint.x + entryPoint.x) / 2, y: exitPoint.y },
+    { x: (exitPoint.x + entryPoint.x) / 2, y: entryPoint.y },
+    entryPoint,
+  ];
+}
+
+export function getCrossGroupOrthogonalPath({
+  sourceX,
+  sourceY,
+  sourcePosition = Position.Bottom,
+  targetX,
+  targetY,
+  targetPosition = Position.Top,
+  borderRadius = 12,
+  centerX,
+  centerY,
+  offset = 24,
+  sourceContainer,
+  targetContainer,
+  otherContainers = [],
+}: {
+  sourceX: number;
+  sourceY: number;
+  sourcePosition?: Position;
+  targetX: number;
+  targetY: number;
+  targetPosition?: Position;
+  borderRadius?: number;
+  centerX?: number;
+  centerY?: number;
+  offset?: number;
+  sourceContainer?: ContainerRect;
+  targetContainer?: ContainerRect;
+  otherContainers?: ContainerRect[];
+}): [string, number, number] {
+  const sc = sourceContainer;
+  const tc = targetContainer;
+
+  // Calculate available gap between containers to safely size exit/entry clearance
+  // Safe clearance takes border corner rounding radius (12px) into account so curves never overlap frames
+  let gapX = 60;
+  let gapY = 60;
+  if (sc && tc) {
+    if (sc.maxX < tc.minX) gapX = tc.minX - sc.maxX;
+    else if (tc.maxX < sc.minX) gapX = sc.minX - tc.maxX;
+    if (sc.maxY < tc.minY) gapY = tc.minY - sc.maxY;
+    else if (tc.maxY < sc.minY) gapY = sc.minY - tc.maxY;
+  }
+  const safeMargin = Math.min(offset, Math.max(6, Math.min(borderRadius + 2, Math.floor(Math.min(gapX, gapY) / 3))));
+
+  // 1. Calculate clear exit point outside source container
+  let exitX = sourceX;
+  let exitY = sourceY;
+  if (sc) {
+    if (sourcePosition === Position.Right) {
+      exitX = Math.max(sourceX + safeMargin, sc.maxX + safeMargin);
+    } else if (sourcePosition === Position.Left) {
+      exitX = Math.min(sourceX - safeMargin, sc.minX - safeMargin);
+    } else if (sourcePosition === Position.Bottom) {
+      exitY = Math.max(sourceY + safeMargin, sc.maxY + safeMargin);
+    } else if (sourcePosition === Position.Top) {
+      exitY = Math.min(sourceY - safeMargin, sc.minY - safeMargin);
+    }
+  }
+
+  // 2. Calculate clear entry point outside target container
+  let entryX = targetX;
+  let entryY = targetY;
+  if (tc) {
+    if (targetPosition === Position.Top) {
+      entryY = Math.min(targetY - safeMargin, tc.minY - safeMargin);
+    } else if (targetPosition === Position.Bottom) {
+      entryY = Math.max(targetY + safeMargin, tc.maxY + safeMargin);
+    } else if (targetPosition === Position.Left) {
+      entryX = Math.min(targetX - safeMargin, tc.minX - safeMargin);
+    } else if (targetPosition === Position.Right) {
+      entryX = Math.max(targetX + safeMargin, tc.maxX + safeMargin);
+    }
+  }
+
+  const exitPoint = { x: exitX, y: exitY };
+  const entryPoint = { x: entryX, y: entryY };
+
+  // Determine preferred corridor coordinates between containers
+  let defaultPrefX = (exitPoint.x + entryPoint.x) / 2;
+  let defaultPrefY = (exitPoint.y + entryPoint.y) / 2;
+
+  let corridorMinX = -Infinity;
+  let corridorMaxX = Infinity;
+  let corridorMinY = -Infinity;
+  let corridorMaxY = Infinity;
+
+  if (sc && tc) {
+    if (sc.maxX < tc.minX) {
+      corridorMinX = sc.maxX + safeMargin;
+      corridorMaxX = tc.minX - safeMargin;
+      defaultPrefX = (sc.maxX + tc.minX) / 2;
+    } else if (tc.maxX < sc.minX) {
+      corridorMinX = tc.maxX + safeMargin;
+      corridorMaxX = sc.minX - safeMargin;
+      defaultPrefX = (tc.maxX + sc.minX) / 2;
+    }
+    if (sc.maxY < tc.minY) {
+      corridorMinY = sc.maxY + safeMargin;
+      corridorMaxY = tc.minY - safeMargin;
+      defaultPrefY = (sc.maxY + tc.minY) / 2;
+    } else if (tc.maxY < sc.minY) {
+      corridorMinY = tc.maxY + safeMargin;
+      corridorMaxY = sc.minY - safeMargin;
+      defaultPrefY = (tc.maxY + sc.minY) / 2;
+    }
+  }
+
+  let prefX = centerX ?? defaultPrefX;
+  let prefY = centerY ?? defaultPrefY;
+
+  // Clamping within corridor bounds when inside vertical/horizontal spans to avoid group border overlap
+  if (sc && tc && (sc.maxX < tc.minX || tc.maxX < sc.minX)) {
+    const isOutsideY =
+      prefY < Math.min(sc.minY, tc.minY) - 10 ||
+      prefY > Math.max(sc.maxY, tc.maxY) + 10;
+    if (!isOutsideY && corridorMinX <= corridorMaxX) {
+      prefX = Math.max(corridorMinX, Math.min(prefX, corridorMaxX));
+    }
+  }
+
+  if (sc && tc && (sc.maxY < tc.minY || tc.maxY < sc.minY)) {
+    const isOutsideX =
+      prefX < Math.min(sc.minX, tc.minX) - 10 ||
+      prefX > Math.max(sc.maxX, tc.maxX) + 10;
+    if (!isOutsideX && corridorMinY <= corridorMaxY) {
+      prefY = Math.max(corridorMinY, Math.min(prefY, corridorMaxY));
+    }
+  }
+
+  const userShiftedX = centerX !== undefined && Math.abs(centerX - defaultPrefX) > 0.5;
+  const userShiftedY = centerY !== undefined && Math.abs(centerY - defaultPrefY) > 0.5;
+
+  const obstacles = [sc, tc, ...otherContainers].filter(Boolean) as ContainerRect[];
+  const middlePts = findClearOrthogonalRoute(
+    exitPoint,
+    entryPoint,
+    obstacles,
+    prefX,
+    prefY,
+    userShiftedX,
+    userShiftedY
+  );
+
+  const rawPts: Array<{ x: number; y: number }> = [
+    { x: sourceX, y: sourceY },
+    ...middlePts,
+    { x: targetX, y: targetY },
+  ];
+
+  const simplified = simplifyPoints(rawPts);
+
+  // Label position directly follows user-dragged corridor coordinates (centerX, centerY)
+  // or defaults to the center of the inter-group corridor, NEVER inside the source/target container!
+  const labelX = prefX;
+  const labelY = prefY;
+
+  const edgePath = buildSvgPath(simplified, borderRadius);
+  return [edgePath, labelX, labelY];
+}
+
 export interface CustomEdgeData {
   validationType?: 'match' | 'greater' | 'less';
   triggerValue?: string | number;
@@ -318,6 +659,7 @@ export interface CustomEdgeData {
   centerY?: number;
   offset?: number;
   curvature?: number;
+  targetEntrySide?: 'auto' | 'left' | 'top' | 'right' | 'bottom';
 }
 
 export const CustomFlowchartEdge: React.FC<EdgeProps> = ({
@@ -363,28 +705,47 @@ export const CustomFlowchartEdge: React.FC<EdgeProps> = ({
   const effectiveSourceGroup = dynamicSourceGroup ?? edgeData.sourceGroup;
   const effectiveTargetGroup = dynamicTargetGroup ?? edgeData.targetGroup;
 
-  // Intra-group boundary containment: intra-group connectors must stay strictly inside group border
-  const intraGroupBounds = React.useMemo(() => {
-    if (!sourceNode || !targetNode) return undefined;
-    if (sourceNode.type === 'groupJump' || targetNode.type === 'groupJump') return undefined;
-    if (dynamicSourceGroup !== dynamicTargetGroup) return undefined;
-
-    const containers = allNodes.filter(
+  // Group container resolution for intra-group containment and cross-group non-overlapping routing
+  const containers = React.useMemo(() => {
+    return allNodes.filter(
       (n) => n.type === 'groupFrame' || n.type === 'groupContainer'
     );
-    const sCont = containers.find(
+  }, [allNodes]);
+
+  const sourceContainerNode = React.useMemo(() => {
+    if (!sourceNode) return undefined;
+    if (sourceNode.type === 'groupFrame' || sourceNode.type === 'groupContainer') return sourceNode;
+    return containers.find(
       (c) =>
         c.id === (sourceNode.data as any)?.containerId ||
         (sourceNode.data as any)?.group === (c.data as any)?.numericGroupId ||
         isNodeInContainer(sourceNode, c, allNodes)
     );
-    const tCont = containers.find(
+  }, [sourceNode, containers, allNodes]);
+
+  const targetContainerNode = React.useMemo(() => {
+    if (!targetNode) return undefined;
+    if (targetNode.type === 'groupFrame' || targetNode.type === 'groupContainer') return targetNode;
+    return containers.find(
       (c) =>
         c.id === (targetNode.data as any)?.containerId ||
         (targetNode.data as any)?.group === (c.data as any)?.numericGroupId ||
         isNodeInContainer(targetNode, c, allNodes)
     );
-    const container = sCont && tCont && sCont.id === tCont.id ? sCont : sCont || tCont;
+  }, [targetNode, containers, allNodes]);
+
+  const isCrossGroupConnection = Boolean(
+    isCrossGroup ||
+    (sourceContainerNode && targetContainerNode && sourceContainerNode.id !== targetContainerNode.id) ||
+    (sourceContainerNode && !targetContainerNode && targetNode && targetNode.type !== 'groupFrame') ||
+    (!sourceContainerNode && targetContainerNode && sourceNode && sourceNode.type !== 'groupFrame')
+  );
+
+  // Intra-group boundary containment: intra-group connectors must stay strictly inside group border
+  const intraGroupBounds = React.useMemo(() => {
+    if (!sourceNode || !targetNode) return undefined;
+    if (isCrossGroupConnection) return undefined;
+    const container = sourceContainerNode || targetContainerNode;
     if (!container) return undefined;
 
     const { fX, fY, fW, fH } = getContainerBounds(container);
@@ -395,7 +756,118 @@ export const CustomFlowchartEdge: React.FC<EdgeProps> = ({
       minY: fY + 44,
       maxY: fY + fH - 12,
     };
-  }, [sourceNode, targetNode, dynamicSourceGroup, dynamicTargetGroup, allNodes]);
+  }, [sourceNode, targetNode, isCrossGroupConnection, sourceContainerNode, targetContainerNode]);
+
+  // Cross-group container boundaries: ensures cross-group connectors NEVER overlap group frames
+  const crossGroupContainers = React.useMemo(() => {
+    if (!isCrossGroupConnection) return undefined;
+
+    const sBounds = sourceContainerNode ? getContainerBounds(sourceContainerNode) : undefined;
+    const tBounds = targetContainerNode ? getContainerBounds(targetContainerNode) : undefined;
+
+    return {
+      sourceContainer: sBounds
+        ? {
+            minX: sBounds.fX,
+            maxX: sBounds.fX + sBounds.fW,
+            minY: sBounds.fY,
+            maxY: sBounds.fY + sBounds.fH,
+          }
+        : undefined,
+      targetContainer: tBounds
+        ? {
+            minX: tBounds.fX,
+            maxX: tBounds.fX + tBounds.fW,
+            minY: tBounds.fY,
+            maxY: tBounds.fY + tBounds.fH,
+          }
+        : undefined,
+      otherContainers: containers
+        .filter((c) => c.id !== sourceContainerNode?.id && c.id !== targetContainerNode?.id)
+        .map((c) => {
+          const b = getContainerBounds(c);
+          return {
+            minX: b.fX,
+            maxX: b.fX + b.fW,
+            minY: b.fY,
+            maxY: b.fY + b.fH,
+          };
+        }),
+    };
+  }, [isCrossGroupConnection, sourceContainerNode, targetContainerNode, containers]);
+
+  // Flexible target port resolution for cross-group question connectors
+  const edgeTargetHandle = (edgeData as any).targetHandle;
+  let effectiveTargetPos = targetPosition;
+  let effectiveTargetX = targetX;
+  let effectiveTargetY = targetY;
+
+  if (isCrossGroupConnection && targetNode) {
+    const explicitEntry = edgeData.targetEntrySide;
+    const isAutoOrDef = !explicitEntry || explicitEntry === 'auto';
+    const isDefaultHandle = !edgeTargetHandle || edgeTargetHandle === 'in';
+
+    let resolvedSide: 'left' | 'right' | 'top' | 'bottom' | null = null;
+    if (explicitEntry && explicitEntry !== 'auto') {
+      resolvedSide = explicitEntry;
+    } else if (edgeTargetHandle === 'in-left') {
+      resolvedSide = 'left';
+    } else if (edgeTargetHandle === 'in-right') {
+      resolvedSide = 'right';
+    } else if (edgeTargetHandle === 'in-bottom' || edgeTargetHandle === 'in-bl' || edgeTargetHandle === 'in-br') {
+      resolvedSide = 'bottom';
+    } else if (edgeTargetHandle === 'in' && !isCrossGroup) {
+      resolvedSide = 'top';
+    } else if (isAutoOrDef && isDefaultHandle) {
+      // Natural flexible alignment based on source and target container positions
+      if (sourceContainerNode && targetContainerNode && sourceContainerNode.id !== targetContainerNode.id) {
+        const sB = getContainerBounds(sourceContainerNode);
+        const tB = getContainerBounds(targetContainerNode);
+        if (sB.fX + sB.fW <= tB.fX + 80) {
+          resolvedSide = 'left';
+        } else if (sB.fX >= tB.fX + tB.fW - 80) {
+          resolvedSide = 'right';
+        } else if (sB.fY + sB.fH <= tB.fY + 80) {
+          resolvedSide = 'top';
+        } else if (sB.fY >= tB.fY + tB.fH - 80) {
+          resolvedSide = 'bottom';
+        }
+      } else if (sourceNode) {
+        const dx = targetNode.position.x - sourceNode.position.x;
+        const dy = targetNode.position.y - sourceNode.position.y;
+        if (Math.abs(dx) >= Math.abs(dy)) {
+          resolvedSide = dx > 0 ? 'left' : 'right';
+        } else {
+          resolvedSide = dy > 0 ? 'top' : 'bottom';
+        }
+      }
+    }
+
+    if (resolvedSide) {
+      const nodeWidth = (targetNode.measured?.width as number) || (targetNode.width as number) || 260;
+      const nodeHeight = (targetNode.measured?.height as number) || (targetNode.height as number) || 120;
+      const topCenterX = targetPosition === Position.Top ? targetX : targetNode.position.x + nodeWidth / 2;
+      const topCenterY = targetPosition === Position.Top ? targetY : targetNode.position.y;
+
+      if (resolvedSide === 'left') {
+        effectiveTargetPos = Position.Left;
+        effectiveTargetX = topCenterX - nodeWidth / 2;
+        effectiveTargetY = topCenterY + nodeHeight / 2;
+      } else if (resolvedSide === 'right') {
+        effectiveTargetPos = Position.Right;
+        effectiveTargetX = topCenterX + nodeWidth / 2;
+        effectiveTargetY = topCenterY + nodeHeight / 2;
+      } else if (resolvedSide === 'bottom') {
+        effectiveTargetPos = Position.Bottom;
+        effectiveTargetX = topCenterX;
+        effectiveTargetY = topCenterY + nodeHeight;
+      } else if (resolvedSide === 'top') {
+        effectiveTargetPos = Position.Top;
+        effectiveTargetX = topCenterX;
+        effectiveTargetY = topCenterY;
+      }
+    }
+  }
 
   // Determine routing geometry
   const routing = edgeData.routingType || 'smoothstep';
@@ -409,32 +881,55 @@ export const CustomFlowchartEdge: React.FC<EdgeProps> = ({
       sourceX,
       sourceY,
       sourcePosition,
-      targetX,
-      targetY,
-      targetPosition,
+      targetX: effectiveTargetX,
+      targetY: effectiveTargetY,
+      targetPosition: effectiveTargetPos,
       curvature: edgeData.curvature ?? 0.25,
     });
   } else if (routing === 'straight') {
     [edgePath, labelX, labelY] = getStraightPath({
       sourceX,
       sourceY,
-      targetX,
-      targetY,
+      targetX: effectiveTargetX,
+      targetY: effectiveTargetY,
+    });
+  } else if (
+    isCrossGroupConnection &&
+    (crossGroupContainers?.sourceContainer || crossGroupContainers?.targetContainer)
+  ) {
+    // Cross-group question connector: stays strictly outside group bodies without overlapping,
+    // AND fully respects user drag coordinates (centerX, centerY) for free 2D line movement!
+    [edgePath, labelX, labelY] = getCrossGroupOrthogonalPath({
+      sourceX,
+      sourceY,
+      sourcePosition,
+      targetX: effectiveTargetX,
+      targetY: effectiveTargetY,
+      targetPosition: effectiveTargetPos,
+      borderRadius: 12,
+      centerX: edgeData.centerX,
+      centerY: edgeData.centerY,
+      offset: edgeData.offset ?? 24,
+      sourceContainer: crossGroupContainers.sourceContainer,
+      targetContainer: crossGroupContainers.targetContainer,
+      otherContainers: crossGroupContainers.otherContainers,
     });
   } else {
-    // Default: smoothstep with 2D detour support (both side-to-side and up/down movement)
+    // Default or user-dragged corridor: smoothstep with full 2D bidirectional movement (centerX, centerY) as before!
     [edgePath, labelX, labelY] = getOrthogonalPathWithDetour({
       sourceX,
       sourceY,
       sourcePosition,
-      targetX,
-      targetY,
-      targetPosition,
+      targetX: effectiveTargetX,
+      targetY: effectiveTargetY,
+      targetPosition: effectiveTargetPos,
       borderRadius: 12,
       centerX: edgeData.centerX,
       centerY: edgeData.centerY,
       offset: edgeData.offset,
       bounds: intraGroupBounds,
+      sourceContainer: crossGroupContainers?.sourceContainer,
+      targetContainer: crossGroupContainers?.targetContainer,
     });
   }
 

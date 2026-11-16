@@ -155,27 +155,42 @@ body,
   overflow: hidden;
 }
 
-/* Top Navigation Header */
+/* Top Navigation Header: Modern Floating Top Islands */
 .app-header {
-  height: 64px;
-  background-color: var(--bg-surface);
-  border-bottom: 1px solid var(--border-subtle);
+  position: absolute;
+  top: 16px;
+  left: 20px;
+  right: 20px;
+  height: auto;
+  background: transparent;
+  border-bottom: none;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 20px;
-  z-index: 20;
-}
-
-.header-brand {
-  display: flex;
-  align-items: center;
+  padding: 0;
+  z-index: 50;
+  pointer-events: none;
   gap: 12px;
 }
 
+.header-brand {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 12px;
+  border-radius: 9999px;
+  background: var(--bg-surface-elevated, #0f172a);
+  border: 1px solid var(--border-default, rgba(255, 255, 255, 0.12));
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  height: 42px;
+}
+
 .brand-logo-glow {
-  width: 36px;
-  height: 36px;
+  width: 30px;
+  height: 30px;
   border-radius: var(--radius-md);
   background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(99, 102, 241, 0.2));
   border: 1px solid rgba(16, 185, 129, 0.4);
@@ -187,7 +202,7 @@ body,
 
 .brand-titles {
   display: flex;
-  flex-direction: column;
+  align-items: center;
 }
 
 .brand-name-row {
@@ -198,16 +213,20 @@ body,
 
 .brand-company {
   font-weight: 700;
-  font-size: 16px;
+  font-size: 14px;
   color: var(--text-primary);
   letter-spacing: -0.3px;
 }
 
 .brand-product {
-  font-weight: 500;
-  font-size: 16px;
-  color: var(--emerald);
-  letter-spacing: -0.3px;
+  font-weight: 600;
+  font-size: 13.5px;
+  color: var(--text-primary);
+  letter-spacing: -0.2px;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .badge-beta {
@@ -227,22 +246,201 @@ body,
 }
 
 .header-meta {
+  pointer-events: auto;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 9999px;
+  background: var(--bg-surface-elevated, #0f172a);
+  border: 1px solid var(--border-default, rgba(255, 255, 255, 0.12));
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  height: 42px;
+  position: relative;
+}
+
+.header-center-dock {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Modern Minimalist Icon Buttons for Floating Top Bar */
+.header-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-secondary, #94a3b8);
+  cursor: pointer;
+  transition: all var(--transition-fast, 0.15s ease);
+  user-select: none;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.header-icon-btn:hover:not(:disabled) {
+  background: var(--bg-surface-hover, rgba(255, 255, 255, 0.08));
+  color: var(--text-primary, #f8fafc);
+  transform: scale(1.06);
+}
+
+.header-icon-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.header-icon-btn.is-active {
+  background: rgba(16, 185, 129, 0.18);
+  border-color: rgba(16, 185, 129, 0.45);
+  color: #10b981;
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.25);
+}
+
+.header-icon-btn.is-active-cyan {
+  background: rgba(6, 182, 212, 0.18);
+  border-color: rgba(6, 182, 212, 0.5);
+  color: #22d3ee;
+  box-shadow: 0 0 10px rgba(6, 182, 212, 0.25);
+}
+
+.header-icon-btn.btn-save.is-saved {
+  color: #10b981;
+  border-color: rgba(16, 185, 129, 0.4);
+  background: rgba(16, 185, 129, 0.12);
+}
+
+.header-icon-btn.btn-primary-icon {
+  background: var(--color-primary, #10b981);
+  color: white;
+  border-color: var(--color-primary, #10b981);
+}
+
+.header-icon-btn.btn-primary-icon:hover {
+  background: #059669;
+  border-color: #059669;
+}
+
+.header-icon-btn.diagnostics-btn.has-error {
+  color: #ef4444;
+}
+
+.header-icon-btn.diagnostics-btn.has-warning {
+  color: #f59e0b;
+}
+
+.header-icon-btn.diagnostics-btn.is-healthy {
+  color: #10b981;
+}
+
+.diagnostics-badge-number {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  font-size: 8.5px;
+  font-weight: 700;
+  padding: 0 3px;
+  border-radius: 9999px;
+  background: #ef4444;
+  color: white;
+  line-height: 1.2;
+}
+
+.header-dock-divider {
+  width: 1px;
+  height: 18px;
+  background: var(--border-subtle, rgba(255, 255, 255, 0.1));
+  margin: 0 3px;
+  flex-shrink: 0;
+}
+
+.header-dot-indicator {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 6px #10b981;
+}
+
+.header-server-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-left: 4px;
+}
+
+.header-server-status-dot.connected {
+  background: #10b981;
+  box-shadow: 0 0 8px #10b981;
+}
+
+.header-server-status-dot.offline {
+  background: #f59e0b;
+  box-shadow: 0 0 8px #f59e0b;
+}
+
+/* Floating Flyout Drawer Dropping from Top Center Dock */
+.top-flyout-drawer {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 340px;
+  max-height: calc(100vh - 80px);
+  background: var(--bg-surface-elevated, #0f172a);
+  border: 1px solid var(--border-default, rgba(255, 255, 255, 0.12));
+  border-radius: 16px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), 0 4px 16px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 1000;
+  pointer-events: auto;
+  animation: flyoutDropdownIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes flyoutDropdownIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -8px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
 }
 
 .meta-pill {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 12px;
+  padding: 4px 10px;
   border-radius: var(--radius-full);
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 500;
-  background-color: var(--bg-surface-elevated);
-  border: 1px solid var(--border-subtle);
+  background-color: transparent;
+  border: 1px solid transparent;
   color: var(--text-secondary);
+}
+
+.meta-pill.stats-pill {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
 }
 
 .group-pill {
@@ -262,9 +460,154 @@ body,
 }
 
 .header-actions {
+  pointer-events: auto;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 9999px;
+  background: var(--bg-surface-elevated, #0f172a);
+  border: 1px solid var(--border-default, rgba(255, 255, 255, 0.12));
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  height: 42px;
+}
+
+/* ==========================================================================
+   Figma/Linear-Style High Performance Instant Tooltip Engine
+   ========================================================================== */
+
+[data-tooltip] {
+  position: relative;
+}
+
+/* Tooltip Bubble */
+[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  top: calc(100% + 9px);
+  left: 50%;
+  transform: translateX(-50%) translateY(-3px);
+  padding: 5px 10px;
+  border-radius: 7px;
+  background: var(--bg-surface-elevated, #0f172a);
+  border: 1px solid var(--border-default, rgba(255, 255, 255, 0.16));
+  color: var(--text-primary, #f8fafc);
+  font-size: 11px;
+  font-weight: 500;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.14s ease, transform 0.14s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.14s;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.6), 0 2px 8px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  z-index: 100000;
+  letter-spacing: 0.15px;
+  line-height: 1.2;
+}
+
+/* Tooltip Arrow */
+[data-tooltip]::before {
+  content: '';
+  position: absolute;
+  top: calc(100% + 3px);
+  left: 50%;
+  transform: translateX(-50%) translateY(-3px);
+  border-width: 0 5px 6px 5px;
+  border-style: solid;
+  border-color: transparent transparent var(--border-default, rgba(255, 255, 255, 0.16)) transparent;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.14s ease, transform 0.14s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.14s;
+  z-index: 100001;
+}
+
+/* Hover Trigger with snappy 70ms response */
+[data-tooltip]:hover::after,
+[data-tooltip]:hover::before {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+  transition-delay: 0.07s;
+}
+
+/* Direction: Top (for bottom floating dock) */
+[data-tooltip-pos="top"]::after {
+  top: auto;
+  bottom: calc(100% + 9px);
+  left: 50%;
+  transform: translateX(-50%) translateY(3px);
+}
+
+[data-tooltip-pos="top"]::before {
+  top: auto;
+  bottom: calc(100% + 3px);
+  left: 50%;
+  border-width: 6px 5px 0 5px;
+  border-color: var(--border-default, rgba(255, 255, 255, 0.16)) transparent transparent transparent;
+  transform: translateX(-50%) translateY(3px);
+}
+
+[data-tooltip-pos="top"]:hover::after,
+[data-tooltip-pos="top"]:hover::before {
+  transform: translateX(-50%) translateY(0);
+}
+
+/* Direction: Bottom-Left (Aligned to right edge of button) */
+[data-tooltip-pos="bottom-left"]::after {
+  left: auto;
+  right: 0;
+  transform: translateY(-3px);
+}
+
+[data-tooltip-pos="bottom-left"]::before {
+  left: auto;
+  right: 11px;
+  transform: translateY(-3px);
+}
+
+[data-tooltip-pos="bottom-left"]:hover::after,
+[data-tooltip-pos="bottom-left"]:hover::before {
+  transform: translateY(0);
+}
+
+/* Direction: Bottom-Right (Aligned to left edge of button) */
+[data-tooltip-pos="bottom-right"]::after {
+  left: 0;
+  right: auto;
+  transform: translateY(-3px);
+}
+
+[data-tooltip-pos="bottom-right"]::before {
+  left: 11px;
+  right: auto;
+  transform: translateY(-3px);
+}
+
+[data-tooltip-pos="bottom-right"]:hover::after,
+[data-tooltip-pos="bottom-right"]:hover::before {
+  transform: translateY(0);
+}
+
+/* Daylight / Light Theme High Contrast Tooltip */
+[data-theme="light"] [data-tooltip]::after {
+  background: rgba(15, 23, 42, 0.95);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25), 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+[data-theme="light"] [data-tooltip]::before {
+  border-bottom-color: rgba(15, 23, 42, 0.95);
+}
+
+[data-theme="light"] [data-tooltip-pos="top"]::before {
+  border-top-color: rgba(15, 23, 42, 0.95);
 }
 
 /* History (Undo / Redo) Segmented Control */
@@ -382,7 +725,7 @@ body,
 .app-body {
   display: flex;
   flex: 1;
-  height: calc(100vh - 64px);
+  height: 100%;
   position: relative;
   overflow: hidden;
   width: 100%;
@@ -517,13 +860,21 @@ body.is-resizing-sidebar * {
 }
 
 .floating-sidebar-toggle.left-dock {
-  left: 12px;
-  border-radius: var(--radius-md);
+  left: 20px;
+  top: 76px;
+  border-radius: 9999px;
 }
 
 .floating-sidebar-toggle.right-dock {
-  right: 12px;
-  border-radius: var(--radius-md);
+  right: 20px;
+  top: 76px;
+  border-radius: 9999px;
+  padding: 6px 12px;
+  background: var(--bg-surface-elevated, #0f172a);
+  border: 1px solid var(--border-default, rgba(255, 255, 255, 0.12));
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
 }
 
 .floating-sidebar-toggle .dock-label {
@@ -3591,21 +3942,21 @@ body.is-resizing-sidebar * {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: var(--bg-surface-elevated);
-  border: 1px solid var(--border-default);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.1));
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 600;
-  padding: 6px 12px;
-  border-radius: var(--radius-md);
+  padding: 4px 10px;
+  border-radius: 9999px;
   cursor: pointer;
   transition: all var(--transition-fast);
 }
 
 .header-back-list-btn:hover {
-  background: var(--bg-surface-hover);
-  color: var(--emerald);
-  border-color: var(--emerald);
+  background: var(--bg-surface-hover, rgba(255, 255, 255, 0.12));
+  color: var(--emerald, #10b981);
+  border-color: rgba(16, 185, 129, 0.4);
 }
 
 /* ==========================================================================
@@ -6608,19 +6959,62 @@ body.is-resizing-sidebar * {
   text-align: center;
 }
 
+/* Resizing group frame on border hover (No visible nodes/handles, interactive border hit-corridors) */
 .group-frame-resize-line {
-  border-color: rgba(16, 185, 129, 0.5) !important;
+  border: none !important;
+  background: transparent !important;
+  pointer-events: auto !important;
+  z-index: 14 !important;
+  transition: background-color 0.15s ease;
+}
+
+.group-frame-resize-line.left,
+.group-frame-resize-line.right {
+  width: 14px !important;
+  transform: translate(-50%, 0) !important;
+  cursor: ew-resize !important;
+}
+
+.group-frame-resize-line.top,
+.group-frame-resize-line.bottom {
+  height: 14px !important;
+  transform: translate(0, -50%) !important;
+  cursor: ns-resize !important;
+}
+
+.group-frame-resize-line:hover {
+  background-color: rgba(16, 185, 129, 0.12) !important;
 }
 
 .group-frame-resize-handle {
-  width: 8px !important;
-  height: 8px !important;
-  border-radius: 2px !important;
-  background-color: var(--emerald) !important;
-  border: 1px solid #fff !important;
+  width: 20px !important;
+  height: 20px !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  pointer-events: auto !important;
+  z-index: 15 !important;
 }
 
-.react-flow__node-groupFrame {
+.group-frame-resize-handle.top.left,
+.group-frame-resize-handle.bottom.right {
+  cursor: nwse-resize !important;
+}
+
+.group-frame-resize-handle.bottom.left,
+.group-frame-resize-handle.top.right {
+  cursor: nesw-resize !important;
+}
+
+.react-flow__node-groupFrame,
+.react-flow__node-groupFrame.is-selected,
+.react-flow__node-groupFrame.selected,
+.react-flow__node-groupFrame.dragging,
+.react-flow__node-groupContainer,
+.react-flow__node-groupContainer.is-selected,
+.react-flow__node-groupContainer.selected,
+.react-flow__node-groupContainer.dragging {
   z-index: 0 !important;
   pointer-events: none !important;
 }
@@ -6635,13 +7029,8 @@ body.is-resizing-sidebar * {
 }
 
 .group-frame-resize-handle,
-.group-frame-resize-line,
-.group-frame-boundary .group-handle {
+.group-frame-resize-line {
   pointer-events: auto !important;
-}
-
-.react-flow__node-groupContainer {
-  z-index: 1 !important;
 }
 
 .react-flow__node-question,
@@ -6654,8 +7043,12 @@ body.is-resizing-sidebar * {
   z-index: 10 !important;
 }
 
-/* React Flow Edges and Labels Layering (Ensures edges inside groups are clickable & deletable) */
+/* React Flow Edges and Labels Layering: Edges stay above group frames at all times */
 .react-flow__edges {
+  z-index: 5 !important;
+}
+
+.react-flow__edge {
   z-index: 5 !important;
 }
 
@@ -8073,57 +8466,37 @@ body.is-resizing-sidebar * {
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.3);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
+  transition: width 0.28s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease;
 }
 
 .figma-tool-btn {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  border-radius: 9999px;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
   background: transparent;
   border: 1px solid transparent;
   color: var(--text-secondary, #94a3b8);
-  font-size: 12px;
-  font-weight: 500;
   cursor: pointer;
   transition: all var(--transition-fast, 0.15s ease);
   user-select: none;
+  flex-shrink: 0;
+  position: relative;
 }
 
 .figma-tool-btn:hover {
   color: var(--text-primary, #f8fafc);
-  background: var(--bg-surface-hover, rgba(255, 255, 255, 0.06));
+  background: var(--bg-surface-hover, rgba(255, 255, 255, 0.08));
+  transform: scale(1.08);
 }
 
 .figma-tool-btn.is-active {
   color: #22d3ee;
-  background: rgba(6, 182, 212, 0.16);
+  background: rgba(6, 182, 212, 0.18);
   border-color: rgba(6, 182, 212, 0.5);
-  box-shadow: 0 0 12px rgba(6, 182, 212, 0.25);
-  font-weight: 600;
-}
-
-.figma-tool-label {
-  font-size: 12px;
-  line-height: 1;
-}
-
-.figma-tool-key {
-  font-size: 10px;
-  font-weight: 700;
-  font-family: var(--font-mono, monospace);
-  padding: 1px 4px;
-  border-radius: 3px;
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--text-muted, #64748b);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.figma-tool-btn.is-active .figma-tool-key {
-  background: rgba(6, 182, 212, 0.25);
-  color: #38bdf8;
-  border-color: rgba(6, 182, 212, 0.4);
+  box-shadow: 0 0 10px rgba(6, 182, 212, 0.25);
 }
 
 .figma-dock-divider {
@@ -8180,6 +8553,115 @@ body.is-resizing-sidebar * {
   margin-left: 2px;
 }
 
+/* Primary Actions Group in Bottom Floating Dock */
+.figma-actions-group {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.figma-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-secondary, #94a3b8);
+  cursor: pointer;
+  transition: all var(--transition-fast, 0.15s ease);
+  user-select: none;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.figma-action-btn:hover:not(:disabled) {
+  background: var(--bg-surface-hover, rgba(255, 255, 255, 0.08));
+  color: var(--text-primary, #f8fafc);
+  transform: scale(1.08);
+}
+
+.figma-action-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.figma-action-btn.btn-save.is-saved {
+  color: #10b981;
+  border-color: rgba(16, 185, 129, 0.4);
+  background: rgba(16, 185, 129, 0.12);
+}
+
+.figma-action-btn.btn-primary-icon {
+  background: var(--color-primary, #10b981);
+  color: white;
+  border-color: var(--color-primary, #10b981);
+}
+
+.figma-action-btn.btn-primary-icon:hover {
+  background: #059669;
+  border-color: #059669;
+}
+
+/* ==========================================================================
+   Figma Floating Bottom Bar: Inline Expandable Actions on Hover
+   ========================================================================== */
+
+.figma-expandable-dock-section {
+  display: flex;
+  align-items: center;
+  position: relative;
+}
+
+.figma-hamburger-btn {
+  color: var(--text-secondary, #94a3b8);
+}
+
+.figma-hamburger-btn:hover,
+.figma-hamburger-btn.is-active,
+.figma-expandable-dock-section:hover .figma-hamburger-btn {
+  background: var(--bg-surface-hover, rgba(255, 255, 255, 0.08));
+  color: var(--text-primary, #f8fafc);
+  transform: scale(1.08);
+}
+
+.figma-hamburger-btn.is-active {
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.14);
+  border-color: rgba(16, 185, 129, 0.35);
+}
+
+/* The 4 action icons inside the bottom dock: collapsed by default, expands on hover */
+.figma-inline-actions-tray {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  max-width: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+  transform: scale(0.9) translateX(-4px);
+  transform-origin: left center;
+  transition: max-width 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+              opacity 0.22s ease,
+              transform 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+              margin 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+  margin-left: 0;
+  white-space: nowrap;
+}
+
+/* Hovering or active state expands the bottom bar inline to reveal all 4 icons */
+.figma-expandable-dock-section.is-expanded .figma-inline-actions-tray,
+.figma-expandable-dock-section:hover .figma-inline-actions-tray {
+  max-width: 180px;
+  opacity: 1;
+  pointer-events: auto;
+  transform: scale(1) translateX(0);
+  margin-left: 3px;
+}
+
 /* Canvas Mode Cursor Classes */
 .survey-flow-canvas.is-tool-hand,
 .survey-flow-canvas.is-tool-hand .react-flow__pane {
@@ -8217,4 +8699,486 @@ body.is-resizing-sidebar * {
   pointer-events: none;
   backdrop-filter: blur(8px);
   animation: modalSlideUp 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ==========================================================================
+   Figma/Miro-Style Floating Left Dock & Flyout Drawer
+   ========================================================================== */
+
+.figma-left-dock {
+  position: absolute;
+  left: 20px;
+  top: 76px;
+  z-index: 55;
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.figma-left-pill {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 6px;
+  border-radius: 9999px;
+  background: var(--bg-surface-elevated, #0f172a);
+  border: 1px solid var(--border-default, rgba(255, 255, 255, 0.12));
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.figma-left-btn {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-secondary, #94a3b8);
+  cursor: pointer;
+  transition: all var(--transition-fast, 0.15s ease);
+  user-select: none;
+}
+
+.figma-left-btn:hover {
+  background: var(--bg-surface-hover, rgba(255, 255, 255, 0.08));
+  color: var(--text-primary, #f8fafc);
+  transform: scale(1.05);
+}
+
+.figma-left-btn.is-active {
+  background: rgba(16, 185, 129, 0.18);
+  border-color: rgba(16, 185, 129, 0.5);
+  color: #10b981;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.25);
+}
+
+.figma-left-badge {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  font-size: 8px;
+  font-weight: 700;
+  font-family: var(--font-mono, monospace);
+  padding: 0 3px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-muted, #94a3b8);
+  line-height: 1.1;
+}
+
+.figma-left-btn.is-active .figma-left-badge {
+  background: rgba(16, 185, 129, 0.3);
+  color: #34d399;
+}
+
+.figma-draggable-item {
+  cursor: grab !important;
+}
+
+.figma-draggable-item:active {
+  cursor: grabbing !important;
+}
+
+.figma-left-dot-indicator {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 6px #10b981;
+}
+
+.figma-left-divider {
+  width: 20px;
+  height: 1px;
+  background: var(--border-subtle, rgba(255, 255, 255, 0.1));
+  margin: 2px 0;
+}
+
+/* Floating Flyout Drawer Popover */
+.figma-left-flyout {
+  width: 320px;
+  max-height: calc(100vh - 110px);
+  background: var(--bg-surface-elevated, #0f172a);
+  border: 1px solid var(--border-default, rgba(255, 255, 255, 0.12));
+  border-radius: 16px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55), 0 4px 16px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: flyoutSlideIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes flyoutSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-10px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+.flyout-header {
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.flyout-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.flyout-title-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.flyout-title-text {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.2px;
+}
+
+.flyout-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.flyout-icon-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.flyout-icon-btn:hover {
+  background: var(--bg-surface-hover, rgba(255, 255, 255, 0.08));
+  color: var(--text-primary);
+}
+
+.flyout-icon-btn.is-pinned {
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.15);
+}
+
+.flyout-search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.flyout-search-icon {
+  position: absolute;
+  left: 10px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.flyout-search-input {
+  width: 100%;
+  height: 32px;
+  padding: 0 28px 0 30px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.1));
+  color: var(--text-primary);
+  font-size: 12px;
+  outline: none;
+  transition: all var(--transition-fast);
+}
+
+.flyout-search-input:focus {
+  border-color: var(--emerald, #10b981);
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.15);
+}
+
+.flyout-search-clear {
+  position: absolute;
+  right: 8px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  border-radius: 4px;
+}
+
+.flyout-tabs-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+}
+
+.flyout-tab-pill {
+  padding: 3px 8px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 500;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.flyout-tab-pill:hover {
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.flyout-tab-pill.is-active {
+  background: rgba(16, 185, 129, 0.18);
+  border-color: rgba(16, 185, 129, 0.4);
+  color: #10b981;
+  font-weight: 600;
+}
+
+.flyout-body {
+  padding: 10px;
+  overflow-y: auto;
+  max-height: calc(100vh - 250px);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.flyout-section-heading {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+  padding-left: 2px;
+}
+
+.flyout-cards-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.flyout-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.07));
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  user-select: none;
+}
+
+.flyout-card:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.16);
+  transform: translateX(2px);
+}
+
+.flyout-card:active {
+  cursor: grabbing;
+}
+
+.flyout-card.just-added {
+  border-color: #10b981 !important;
+  background: rgba(16, 185, 129, 0.12) !important;
+}
+
+.flyout-card-drag {
+  color: var(--text-muted);
+  cursor: grab;
+  opacity: 0.6;
+}
+
+.flyout-card:hover .flyout-card-drag {
+  opacity: 1;
+  color: var(--text-secondary);
+}
+
+.flyout-card-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.flyout-card-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.flyout-card-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.flyout-card-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.flyout-card-badge {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.flyout-card-bn {
+  font-size: 10px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.flyout-card-desc {
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.flyout-card-added-pill {
+  position: absolute;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  background: #10b981;
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 9999px;
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.4);
+}
+
+.flyout-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 12px;
+  text-align: center;
+  gap: 6px;
+}
+
+.flyout-empty-state .empty-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.flyout-empty-state .empty-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.flyout-clear-btn {
+  margin-top: 6px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.flyout-footer {
+  padding: 8px 12px;
+  border-top: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.flyout-footer-tip {
+  font-size: 10px;
+  color: var(--text-muted);
+  line-height: 1.3;
+}
+
+/* Light Mode Overrides for Floating Islands & Dock */
+[data-theme="light"] .header-brand,
+[data-theme="light"] .header-meta,
+[data-theme="light"] .header-actions,
+[data-theme="light"] .figma-dock-pill,
+[data-theme="light"] .figma-left-pill,
+[data-theme="light"] .figma-left-flyout {
+  background: rgba(255, 255, 255, 0.94);
+  border-color: #e2e8f0;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(0, 0, 0, 0.04);
+}
+
+[data-theme="light"] .flyout-header,
+[data-theme="light"] .flyout-footer {
+  background: rgba(241, 245, 249, 0.6);
+}
+
+[data-theme="light"] .flyout-search-input {
+  background: #ffffff;
+  border-color: #cbd5e1;
+}
+
+[data-theme="light"] .flyout-card {
+  background: rgba(241, 245, 249, 0.5);
+  border-color: #e2e8f0;
+}
+
+[data-theme="light"] .flyout-card:hover {
+  background: #f1f5f9;
 }

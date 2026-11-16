@@ -225,6 +225,7 @@ export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
   const [crossSourceQuestionId, setCrossSourceQuestionId] = useState<string>('');
   const [crossValType, setCrossValType] = useState<ValidationType>('match');
   const [crossTriggerValue, setCrossTriggerValue] = useState<string>('');
+  const [crossTargetEntrySide, setCrossTargetEntrySide] = useState<'auto' | 'left' | 'top' | 'right' | 'bottom'>('auto');
 
   return (
     <aside
@@ -307,6 +308,53 @@ export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
                       </span>
                     </div>
                   </div>
+
+                  {/* Flexible Entry Side for Cross-Group Connectors */}
+                  {Boolean(edgeData.isCrossGroup) && (
+                    <div className="form-group" style={{ marginTop: 8 }}>
+                      <div className="flex-between" style={{ marginBottom: 4 }}>
+                        <label className="form-label" style={{ fontSize: 10, margin: 0 }}>
+                          Target Entry Port (Flexible Side)
+                        </label>
+                        <span style={{ fontSize: 9, color: 'var(--text-muted)' }}>
+                          Port: {selectedEdge.targetHandle || 'Auto'}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        {(['auto', 'left', 'top', 'right', 'bottom'] as const).map((side) => {
+                          const isCur =
+                            edgeData.targetEntrySide === side ||
+                            (!edgeData.targetEntrySide && side === 'auto');
+                          return (
+                            <button
+                              key={side}
+                              type="button"
+                              className={`cross-group-pill-opt ${isCur ? 'is-selected' : ''}`}
+                              style={{ flex: 1, textAlign: 'center', padding: '3px 0', textTransform: 'capitalize' }}
+                              onClick={() => {
+                                let nextHandle = 'in';
+                                if (side === 'left') nextHandle = 'in-left';
+                                else if (side === 'right') nextHandle = 'in-right';
+                                else if (side === 'bottom') nextHandle = 'in-bottom';
+                                else if (side === 'top') nextHandle = 'in';
+                                else nextHandle = 'in-left';
+
+                                onUpdateEdgeData(selectedEdge.id, {
+                                  ...edgeData,
+                                  targetHandle: nextHandle,
+                                  targetEntrySide: side,
+                                  centerX: undefined,
+                                  centerY: undefined,
+                                });
+                              }}
+                            >
+                              {side}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
 
                   <div className="edge-reconnect-hint">
                     💡 <strong>Tip:</strong> Drag line endpoints on canvas to re-anchor to any of the 8 ports.
@@ -835,12 +883,34 @@ export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
                     const edgeLabel = `[G${srcGroup}➔G${tgtGroup}] ${ruleDesc}`;
                     const newEdgeId = `e-cross-${selectedSourceQNode.id}-${selectedNode.id}-${Date.now()}`;
 
+                    let targetHandle = 'in';
+                    let targetEntrySide: 'auto' | 'left' | 'top' | 'right' | 'bottom' = crossTargetEntrySide;
+
+                    if (crossTargetEntrySide === 'left') targetHandle = 'in-left';
+                    else if (crossTargetEntrySide === 'right') targetHandle = 'in-right';
+                    else if (crossTargetEntrySide === 'bottom') targetHandle = 'in-bottom';
+                    else if (crossTargetEntrySide === 'top') targetHandle = 'in';
+                    else {
+                      // 'auto': flexibly pick the facing port based on spatial position
+                      const sPos = selectedSourceQNode.position;
+                      const tPos = selectedNode.position;
+                      const dx = tPos.x - sPos.x;
+                      const dy = tPos.y - sPos.y;
+                      if (Math.abs(dx) >= Math.abs(dy)) {
+                        targetHandle = dx > 0 ? 'in-left' : 'in-right';
+                        targetEntrySide = dx > 0 ? 'left' : 'right';
+                      } else {
+                        targetHandle = dy > 0 ? 'in' : 'in-bottom';
+                        targetEntrySide = dy > 0 ? 'top' : 'bottom';
+                      }
+                    }
+
                     const newEdge: Edge = {
                       id: newEdgeId,
                       source: selectedSourceQNode.id,
                       sourceHandle,
                       target: selectedNode.id,
-                      targetHandle: 'in',
+                      targetHandle,
                       type: 'surveyEdge',
                       animated: true,
                       label: edgeLabel,
@@ -861,6 +931,7 @@ export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
                         isCrossGroup: true,
                         sourceGroup: srcGroup,
                         targetGroup: tgtGroup,
+                        targetEntrySide,
                       },
                     };
 
@@ -1120,6 +1191,31 @@ export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
                                   ))}
                                 </div>
                               )}
+
+                              {/* Flexible Target Entry Port */}
+                              <div className="form-group" style={{ marginTop: 8 }}>
+                                <div className="flex-between" style={{ marginBottom: 4 }}>
+                                  <label className="form-label" style={{ fontSize: 10, margin: 0 }}>
+                                    Target Entry Port (Flexible Side)
+                                  </label>
+                                  <span style={{ fontSize: 9, color: 'var(--text-muted)' }}>
+                                    {crossTargetEntrySide === 'auto' ? 'Auto-facing' : crossTargetEntrySide}
+                                  </span>
+                                </div>
+                                <div style={{ display: 'flex', gap: 4 }}>
+                                  {(['auto', 'left', 'top', 'right', 'bottom'] as const).map((side) => (
+                                    <button
+                                      key={side}
+                                      type="button"
+                                      className={`cross-group-pill-opt ${crossTargetEntrySide === side ? 'is-selected' : ''}`}
+                                      style={{ flex: 1, textAlign: 'center', padding: '3px 0', textTransform: 'capitalize' }}
+                                      onClick={() => setCrossTargetEntrySide(side)}
+                                    >
+                                      {side}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
 
                               <button
                                 type="button"
