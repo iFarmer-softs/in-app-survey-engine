@@ -15,9 +15,12 @@ import {
   ArrowRight,
   HelpCircle,
   History,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import type { FlowchartProject } from '../../types/project';
 import { compileFlowToSchema } from '../../utils/schemaCompiler';
+import type { ThemeMode, ResolvedTheme } from '../../hooks/useTheme';
 
 interface FlowchartListViewProps {
   projects: FlowchartProject[];
@@ -28,6 +31,12 @@ interface FlowchartListViewProps {
   onDeleteProject: (id: string) => void;
   onOpenVersionHistory?: (project: FlowchartProject) => void;
   isServerConnected?: boolean;
+  onNavigateToStudio?: () => void;
+  onNavigateToGroups?: () => void;
+  activeProjectTitle?: string;
+  theme?: ThemeMode;
+  resolvedTheme?: ResolvedTheme;
+  onCycleTheme?: () => void;
 }
 
 export const FlowchartListView: React.FC<FlowchartListViewProps> = ({
@@ -39,6 +48,12 @@ export const FlowchartListView: React.FC<FlowchartListViewProps> = ({
   onDeleteProject,
   onOpenVersionHistory,
   isServerConnected = false,
+  onNavigateToStudio,
+  onNavigateToGroups,
+  activeProjectTitle,
+  theme,
+  resolvedTheme,
+  onCycleTheme,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'published' | 'draft'>('all');
@@ -160,13 +175,99 @@ export const FlowchartListView: React.FC<FlowchartListViewProps> = ({
           </p>
         </div>
 
-        <button
-          className="btn btn-primary create-hero-btn"
-          onClick={onCreateNew}
-        >
-          <PlusCircle size={18} />
-          <span>Create New Flowchart</span>
-        </button>
+        <div className="dashboard-header-actions" style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          {/* Top Navigation Tabs */}
+          <div className="dashboard-nav-tabs" style={{ display: 'inline-flex', alignItems: 'center', background: 'var(--bg-surface-elevated, #1e293b)', padding: '3px', borderRadius: '8px', border: '1px solid var(--border-default, #334155)' }}>
+            <button
+              type="button"
+              className="dashboard-nav-tab is-active"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 12px',
+                borderRadius: '6px',
+                border: 'none',
+                background: 'var(--bg-surface, #0f172a)',
+                color: 'var(--text-primary, #f8fafc)',
+                fontSize: '12px',
+                fontWeight: 600,
+                cursor: 'default',
+              }}
+            >
+              <FolderKanban size={14} className="text-emerald" />
+              <span>Flowcharts</span>
+            </button>
+            {onNavigateToGroups && (
+              <button
+                type="button"
+                className="dashboard-nav-tab"
+                onClick={onNavigateToGroups}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '6px 12px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  background: 'transparent',
+                  color: 'var(--text-secondary, #94a3b8)',
+                  fontSize: '12px',
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <Layers size={14} />
+                <span>Question Groups</span>
+              </button>
+            )}
+          </div>
+
+          {onNavigateToStudio && (
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={onNavigateToStudio}
+              title={`Open Flowchart Studio (${activeProjectTitle || 'Current Project'})`}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            >
+              <Workflow size={15} />
+              <span>Flowchart Studio →</span>
+            </button>
+          )}
+
+          {onCycleTheme && (
+            <button
+              type="button"
+              className="header-icon-btn"
+              onClick={onCycleTheme}
+              title={`Theme: ${(theme || 'system').toUpperCase()} (${resolvedTheme === 'light' ? 'Light' : 'Dark'})`}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '36px',
+                height: '36px',
+                borderRadius: '8px',
+                border: '1px solid var(--border-default, #334155)',
+                background: 'var(--bg-surface-elevated, #1e293b)',
+                color: 'var(--text-primary, #f8fafc)',
+                cursor: 'pointer',
+              }}
+            >
+              {resolvedTheme === 'light' ? <Sun size={16} /> : <Moon size={16} />}
+            </button>
+          )}
+
+          <button
+            className="btn btn-primary create-hero-btn"
+            onClick={onCreateNew}
+          >
+            <PlusCircle size={18} />
+            <span>Create New Flowchart</span>
+          </button>
+        </div>
       </div>
 
       {/* KPI Stats Bar */}

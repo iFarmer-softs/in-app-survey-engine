@@ -20,6 +20,7 @@ interface UseGroupContainersProps {
   setActiveView: (view: 'editor' | 'list' | 'groups') => void;
   setCenter: (x: number, y: number, options?: { zoom?: number; duration?: number }) => void;
   setGroupMeta?: (meta: GroupMeta | ((m: GroupMeta) => GroupMeta)) => void;
+  updateNodeInternals?: (nodeId: string | string[]) => void;
 }
 
 export function useGroupContainers({
@@ -32,6 +33,7 @@ export function useGroupContainers({
   setActiveView,
   setCenter,
   setGroupMeta,
+  updateNodeInternals,
 }: UseGroupContainersProps) {
   // Synchronized node dragging & cascading deletion: moving/deleting a group container cascades to all child questions
   const handleNodesChange = useCallback(
@@ -89,6 +91,62 @@ export function useGroupContainers({
                     });
                   }
                 });
+
+                // Recompute edge paths & fire updates on group transform changes
+                setEdges((currentEdges) =>
+                  currentEdges.map((edge) => {
+                    const srcIn = childIdSet.has(edge.source);
+                    const tgtIn = childIdSet.has(edge.target);
+                    const isGroupEdge = edge.source === node.id || edge.target === node.id;
+                    if (srcIn && tgtIn && edge.data) {
+                      const eData = edge.data as any;
+                      if (eData.centerX !== undefined || eData.centerY !== undefined) {
+                        return {
+                          ...edge,
+                          data: {
+                            ...eData,
+                            centerX: eData.centerX !== undefined ? eData.centerX + dx : undefined,
+                            centerY: eData.centerY !== undefined ? eData.centerY + dy : undefined,
+                            _groupTransformTick: Date.now(),
+                          },
+                        };
+                      }
+                    }
+                    if (srcIn || tgtIn || isGroupEdge) {
+                      return {
+                        ...edge,
+                        data: {
+                          ...(edge.data || {}),
+                          _groupTransformTick: Date.now(),
+                        },
+                      };
+                    }
+                    return edge;
+                  })
+                );
+
+                // Fire "update edges" call for all ports of its children & group container
+                if (updateNodeInternals) {
+                  try {
+                    updateNodeInternals(node.id);
+                    childIdSet.forEach((childId) => updateNodeInternals(childId));
+                  } catch {
+                    // ignore if not mounted
+                  }
+                }
+
+                if (typeof window !== 'undefined') {
+                  window.dispatchEvent(
+                    new CustomEvent('canvas-update-edges', {
+                      detail: {
+                        groupId: node.id,
+                        childIds: Array.from(childIdSet),
+                        dx,
+                        dy,
+                      },
+                    })
+                  );
+                }
               }
             }
           }
@@ -110,7 +168,7 @@ export function useGroupContainers({
 
       onNodesChange(extraChanges.length > 0 ? [...changes, ...extraChanges] : changes);
     },
-    [nodes, onNodesChange, setEdges]
+    [nodes, onNodesChange, setEdges, updateNodeInternals]
   );
 
   // Group Container Handlers: Collapse / Expand, Ungroup, Delete

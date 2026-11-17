@@ -66,19 +66,21 @@ export function getContainerBounds(containerNode: Node): { fX: number; fY: numbe
   const cData = containerNode.data as any;
   const fX = containerNode.position.x;
   const fY = containerNode.position.y;
-  const fW =
-    (typeof containerNode.width === 'number' && containerNode.width > 0 ? containerNode.width : 0) ||
-    containerNode.measured?.width ||
-    (containerNode.style?.width ? parseInt(String(containerNode.style.width), 10) : 0) ||
-    cData?.width ||
-    (containerNode.type === 'groupContainer' ? 350 : 440);
-  const fH =
-    (typeof containerNode.height === 'number' && containerNode.height > 0 ? containerNode.height : 0) ||
-    containerNode.measured?.height ||
-    (containerNode.style?.height ? parseInt(String(containerNode.style.height), 10) : 0) ||
-    cData?.expandedHeight ||
-    cData?.height ||
-    (containerNode.type === 'groupContainer' ? 400 : 480);
+  const fW = Math.max(
+    typeof containerNode.width === 'number' && containerNode.width > 0 ? containerNode.width : 0,
+    containerNode.measured?.width && containerNode.measured.width > 0 ? containerNode.measured.width : 0,
+    containerNode.style?.width ? parseInt(String(containerNode.style.width), 10) || 0 : 0,
+    typeof cData?.width === 'number' ? cData.width : 0,
+    containerNode.type === 'groupContainer' ? 350 : 440
+  );
+  const fH = Math.max(
+    typeof containerNode.height === 'number' && containerNode.height > 0 ? containerNode.height : 0,
+    containerNode.measured?.height && containerNode.measured.height > 0 ? containerNode.measured.height : 0,
+    containerNode.style?.height ? parseInt(String(containerNode.style.height), 10) || 0 : 0,
+    typeof cData?.expandedHeight === 'number' ? cData.expandedHeight : 0,
+    typeof cData?.height === 'number' ? cData.height : 0,
+    containerNode.type === 'groupContainer' ? 400 : 480
+  );
   return { fX, fY, fW, fH };
 }
 

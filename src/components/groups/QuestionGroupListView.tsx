@@ -11,8 +11,12 @@ import {
   X,
   RotateCcw,
   ArrowDownUp,
+  FolderKanban,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import type { ReusableQuestionGroup, GroupCategory } from '../../types/group';
+import type { ThemeMode, ResolvedTheme } from '../../hooks/useTheme';
 
 type SortOption =
   | 'id_asc'
@@ -29,6 +33,12 @@ interface QuestionGroupListViewProps {
   onDeleteGroup: (groupId: string) => void;
   onInsertGroupIntoCanvas: (group: ReusableQuestionGroup) => void;
   onResetDefaults?: () => void;
+  onNavigateToStudio?: () => void;
+  onNavigateToList?: () => void;
+  activeProjectTitle?: string;
+  theme?: ThemeMode;
+  resolvedTheme?: ResolvedTheme;
+  onCycleTheme?: () => void;
 }
 
 const CATEGORIES: { id: 'all' | GroupCategory; label: string }[] = [
@@ -48,6 +58,12 @@ export const QuestionGroupListView: React.FC<QuestionGroupListViewProps> = ({
   onDeleteGroup,
   onInsertGroupIntoCanvas,
   onResetDefaults,
+  onNavigateToStudio,
+  onNavigateToList,
+  activeProjectTitle,
+  theme,
+  resolvedTheme,
+  onCycleTheme,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<'all' | GroupCategory>('all');
@@ -117,6 +133,90 @@ export const QuestionGroupListView: React.FC<QuestionGroupListViewProps> = ({
         </div>
 
         <div className="dashboard-header-actions" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          {/* Top Navigation Tabs */}
+          <div className="dashboard-nav-tabs" style={{ display: 'inline-flex', alignItems: 'center', background: 'var(--bg-surface-elevated, #1e293b)', padding: '3px', borderRadius: '8px', border: '1px solid var(--border-default, #334155)' }}>
+            {onNavigateToList && (
+              <button
+                type="button"
+                className="dashboard-nav-tab"
+                onClick={onNavigateToList}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '6px 12px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  background: 'transparent',
+                  color: 'var(--text-secondary, #94a3b8)',
+                  fontSize: '12px',
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <FolderKanban size={14} />
+                <span>Flowcharts</span>
+              </button>
+            )}
+            <button
+              type="button"
+              className="dashboard-nav-tab is-active"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 12px',
+                borderRadius: '6px',
+                border: 'none',
+                background: 'var(--bg-surface, #0f172a)',
+                color: 'var(--text-primary, #f8fafc)',
+                fontSize: '12px',
+                fontWeight: 600,
+                cursor: 'default',
+              }}
+            >
+              <Layers size={14} className="text-emerald" />
+              <span>Question Groups</span>
+            </button>
+          </div>
+
+          {onNavigateToStudio && (
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={onNavigateToStudio}
+              title={`Open Flowchart Studio (${activeProjectTitle || 'Current Project'})`}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            >
+              <Workflow size={15} />
+              <span>Flowchart Studio →</span>
+            </button>
+          )}
+
+          {onCycleTheme && (
+            <button
+              type="button"
+              className="header-icon-btn"
+              onClick={onCycleTheme}
+              title={`Theme: ${(theme || 'system').toUpperCase()} (${resolvedTheme === 'light' ? 'Light' : 'Dark'})`}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '36px',
+                height: '36px',
+                borderRadius: '8px',
+                border: '1px solid var(--border-default, #334155)',
+                background: 'var(--bg-surface-elevated, #1e293b)',
+                color: 'var(--text-primary, #f8fafc)',
+                cursor: 'pointer',
+              }}
+            >
+              {resolvedTheme === 'light' ? <Sun size={16} /> : <Moon size={16} />}
+            </button>
+          )}
+
           {onResetDefaults && (
             <button
               className="btn btn-secondary"

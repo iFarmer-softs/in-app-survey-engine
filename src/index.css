@@ -268,6 +268,49 @@ body,
   display: flex;
   align-items: center;
   gap: 4px;
+  padding: 4px 10px 4px 14px;
+  border-radius: 9999px;
+  background: var(--bg-surface-elevated, #0f172a);
+  border: 1px solid var(--border-default, rgba(255, 255, 255, 0.12));
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  height: 42px;
+  pointer-events: auto;
+  user-select: none;
+}
+
+.header-center-dock .brand-titles {
+  display: flex;
+  align-items: center;
+  margin-right: 4px;
+}
+
+/* Standalone Separate Floating Back Button on Top Left */
+.header-floating-back {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--bg-surface-elevated, #0f172a);
+  border: 1px solid var(--border-default, rgba(255, 255, 255, 0.12));
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  color: var(--text-secondary, #94a3b8);
+  cursor: pointer;
+  transition: all var(--transition-fast, 0.15s ease);
+  flex-shrink: 0;
+}
+
+.header-floating-back:hover {
+  background: var(--bg-surface-hover, rgba(255, 255, 255, 0.12));
+  color: var(--text-primary, #f8fafc);
+  transform: scale(1.08);
+  border-color: rgba(16, 185, 129, 0.4);
 }
 
 /* Modern Minimalist Icon Buttons for Floating Top Bar */
@@ -392,38 +435,6 @@ body,
   box-shadow: 0 0 8px #f59e0b;
 }
 
-/* Floating Flyout Drawer Dropping from Top Center Dock */
-.top-flyout-drawer {
-  position: absolute;
-  top: calc(100% + 10px);
-  left: 50%;
-  transform: translateX(-50%);
-  width: 340px;
-  max-height: calc(100vh - 80px);
-  background: var(--bg-surface-elevated, #0f172a);
-  border: 1px solid var(--border-default, rgba(255, 255, 255, 0.12));
-  border-radius: 16px;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), 0 4px 16px rgba(0, 0, 0, 0.35);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  z-index: 1000;
-  pointer-events: auto;
-  animation: flyoutDropdownIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-@keyframes flyoutDropdownIn {
-  from {
-    opacity: 0;
-    transform: translate(-50%, -8px) scale(0.97);
-  }
-  to {
-    opacity: 1;
-    transform: translate(-50%, 0) scale(1);
-  }
-}
 
 .meta-pill {
   display: flex;
@@ -3979,7 +3990,11 @@ body.is-resizing-sidebar * {
   align-items: center;
   justify-content: center;
   user-select: none;
-  z-index: 10;
+  z-index: 20;
+}
+
+.custom-edge-badge-container.is-cross-group {
+  z-index: 30;
 }
 
 /* Conditional Badge Pill */
@@ -4012,9 +4027,17 @@ body.is-resizing-sidebar * {
 }
 
 .custom-edge-pill.pill-cross-group {
-  border-color: rgba(139, 92, 246, 0.6);
+  border-color: rgba(139, 92, 246, 0.7);
   color: #c084fc;
-  background: rgba(139, 92, 246, 0.15);
+  background: var(--bg-surface-elevated, #111827);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.55), 0 0 10px rgba(139, 92, 246, 0.3);
+  z-index: 25;
+  max-width: 220px;
+  box-sizing: border-box;
+}
+
+.custom-edge-pill.pill-cross-group .edge-pill-text {
+  max-width: 100px;
 }
 
 .custom-edge-pill.pill-cross-group:hover,
@@ -7016,11 +7039,11 @@ body.is-resizing-sidebar * {
 .react-flow__node-groupContainer.selected,
 .react-flow__node-groupContainer.dragging {
   z-index: 0 !important;
-  pointer-events: none !important;
+  pointer-events: auto !important;
 }
 
 .group-frame-boundary {
-  pointer-events: none !important;
+  pointer-events: auto !important;
 }
 
 .group-frame-header,
@@ -8549,6 +8572,87 @@ body.is-resizing-sidebar * {
   background: var(--bg-surface-hover, rgba(255, 255, 255, 0.08));
 }
 
+.figma-zoom-percent-btn.is-active {
+  color: #22d3ee;
+  background: rgba(6, 182, 212, 0.16);
+}
+
+.figma-zoom-dropdown-container {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.figma-zoom-dropdown-menu {
+  position: absolute;
+  bottom: calc(100% + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg-surface-elevated, #0f172a);
+  border: 1px solid var(--border-default, rgba(255, 255, 255, 0.15));
+  border-radius: var(--radius-md, 8px);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6), 0 0 1px rgba(255, 255, 255, 0.2);
+  padding: 6px;
+  min-width: 145px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 100;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  user-select: none;
+}
+
+.figma-zoom-menu-header {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted, #64748b);
+  padding: 4px 8px 2px;
+}
+
+.figma-zoom-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 8px;
+  border-radius: 4px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary, #94a3b8);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast, 0.15s ease);
+  text-align: left;
+  width: 100%;
+}
+
+.figma-zoom-menu-item:hover {
+  background: var(--bg-surface-hover, rgba(255, 255, 255, 0.08));
+  color: var(--text-primary, #f8fafc);
+}
+
+.figma-zoom-menu-item.is-active {
+  color: #22d3ee;
+  font-weight: 600;
+  background: rgba(6, 182, 212, 0.14);
+}
+
+.figma-zoom-menu-shortcut {
+  font-size: 10px;
+  font-family: var(--font-mono, monospace);
+  color: var(--text-muted, #64748b);
+  margin-left: 10px;
+}
+
+.figma-zoom-menu-divider {
+  height: 1px;
+  background: var(--border-subtle, rgba(255, 255, 255, 0.1));
+  margin: 3px 0;
+}
+
 .figma-fit-btn {
   margin-left: 2px;
 }
@@ -8606,22 +8710,24 @@ body.is-resizing-sidebar * {
 }
 
 /* ==========================================================================
-   Figma Floating Bottom Bar: Inline Expandable Actions on Hover
+   Figma Floating Bottom Bar: Integrated Actions in Figma Dock Pill
    ========================================================================== */
 
-.figma-expandable-dock-section {
-  display: flex;
-  align-items: center;
-  position: relative;
+.figma-dock-pill.is-actions-expanded {
+  box-shadow: 0 10px 36px rgba(0, 0, 0, 0.52), 0 2px 10px rgba(0, 0, 0, 0.35);
 }
 
 .figma-hamburger-btn {
   color: var(--text-secondary, #94a3b8);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.figma-hamburger-btn svg {
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .figma-hamburger-btn:hover,
-.figma-hamburger-btn.is-active,
-.figma-expandable-dock-section:hover .figma-hamburger-btn {
+.figma-hamburger-btn.is-active {
   background: var(--bg-surface-hover, rgba(255, 255, 255, 0.08));
   color: var(--text-primary, #f8fafc);
   transform: scale(1.08);
@@ -8633,33 +8739,50 @@ body.is-resizing-sidebar * {
   border-color: rgba(16, 185, 129, 0.35);
 }
 
-/* The 4 action icons inside the bottom dock: collapsed by default, expands on hover */
-.figma-inline-actions-tray {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  max-width: 0;
-  opacity: 0;
-  overflow: hidden;
-  pointer-events: none;
-  transform: scale(0.9) translateX(-4px);
-  transform-origin: left center;
-  transition: max-width 0.28s cubic-bezier(0.16, 1, 0.3, 1),
-              opacity 0.22s ease,
-              transform 0.28s cubic-bezier(0.16, 1, 0.3, 1),
-              margin 0.28s cubic-bezier(0.16, 1, 0.3, 1);
-  margin-left: 0;
-  white-space: nowrap;
+.figma-hamburger-btn.is-active svg {
+  transform: rotate(90deg);
 }
 
-/* Hovering or active state expands the bottom bar inline to reveal all 4 icons */
-.figma-expandable-dock-section.is-expanded .figma-inline-actions-tray,
-.figma-expandable-dock-section:hover .figma-inline-actions-tray {
-  max-width: 180px;
+/* Hidden action items are direct inline members of .figma-dock-pill */
+.figma-action-btn.figma-dock-action {
+  transition: width 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+              max-width 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+              min-width 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+              opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+              margin 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+              padding 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+              background 0.15s ease,
+              border-color 0.15s ease,
+              color 0.15s ease;
+  will-change: width, max-width, opacity, transform, margin;
+}
+
+/* Collapsed state: completely zero-footprint inside .figma-dock-pill */
+.figma-action-btn.figma-dock-action.is-collapsed {
+  width: 0 !important;
+  max-width: 0 !important;
+  min-width: 0 !important;
+  opacity: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  margin-left: -4px !important; /* Neutralizes the 4px flex gap of .figma-dock-pill */
+  border-width: 0 !important;
+  border-color: transparent !important;
+  overflow: hidden !important;
+  pointer-events: none !important;
+  transform: scale(0.6) translateX(-4px);
+}
+
+/* Expanded state: active, visible, and fully interactive in .figma-dock-pill */
+.figma-action-btn.figma-dock-action.is-expanded {
+  width: 28px;
+  max-width: 28px;
+  min-width: 28px;
   opacity: 1;
   pointer-events: auto;
   transform: scale(1) translateX(0);
-  margin-left: 3px;
+  margin-left: 0;
 }
 
 /* Canvas Mode Cursor Classes */
@@ -9155,6 +9278,8 @@ body.is-resizing-sidebar * {
 /* Light Mode Overrides for Floating Islands & Dock */
 [data-theme="light"] .header-brand,
 [data-theme="light"] .header-meta,
+[data-theme="light"] .header-center-dock,
+[data-theme="light"] .header-floating-back,
 [data-theme="light"] .header-actions,
 [data-theme="light"] .figma-dock-pill,
 [data-theme="light"] .figma-left-pill,

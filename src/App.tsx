@@ -9,22 +9,19 @@ import {
   MiniMap,
   BackgroundVariant,
   useReactFlow,
+  useUpdateNodeInternals,
   MarkerType,
 } from '@xyflow/react';
 import type { Edge, Node, EdgeChange, NodeChange, Connection } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import {
-  PanelRightOpen,
   Crop,
-  GitFork,
-  X,
   Plus,
   AlertTriangle,
 } from 'lucide-react';
 
 import { Header } from './components/layout/Header';
 import { GroupTemplateHeader } from './components/layout/GroupTemplateHeader';
-import { AdminLeftSidebar } from './components/layout/AdminLeftSidebar';
 import { InputTypeViewsPanel } from './components/layout/InputTypeViewsPanel';
 import { FigmaToolbar, type CanvasToolMode } from './components/canvas/FigmaToolbar';
 import { FlowchartListView } from './components/dashboard/FlowchartListView';
@@ -89,7 +86,6 @@ import {
   calculateDependencyTrace,
   getTraceNodeRole,
   getTraceEdgeRole,
-  getNodeTraceLabel,
 } from './utils/dependencyTracing';
 
 import { useProjectManager } from './hooks/useProjectManager';
@@ -126,7 +122,8 @@ const edgeTypes = {
 
 const FlowEditor: React.FC = () => {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
-  const { screenToFlowPosition, fitView, setCenter } = useReactFlow();
+  const { screenToFlowPosition, fitView, setCenter, zoomIn, zoomOut, zoomTo } = useReactFlow();
+  const updateNodeInternals = useUpdateNodeInternals();
 
   const [activeView, setActiveView] = useState<'editor' | 'list' | 'groups'>('editor');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -194,7 +191,7 @@ const FlowEditor: React.FC = () => {
   } = useSidebarResizer();
 
   // Dark / Light / System Theme hook
-  const { theme, resolvedTheme, setTheme, cycleTheme } = useTheme();
+  const { theme, resolvedTheme, cycleTheme } = useTheme();
 
   // Global keyboard shortcuts: Cmd+J (right inspector)
   useEffect(() => {
@@ -429,6 +426,7 @@ const FlowEditor: React.FC = () => {
     setActiveView,
     setCenter,
     setGroupMeta,
+    updateNodeInternals,
   });
 
   const handleToggleGroupCollapse = useCallback(
@@ -547,6 +545,7 @@ const FlowEditor: React.FC = () => {
   } = useFlowCanvasConnections({
     nodes,
     edges,
+    setNodes,
     setEdges,
     onContainmentWarning: showContainmentToast,
   });
@@ -574,6 +573,10 @@ const FlowEditor: React.FC = () => {
         edgeId: string;
         centerX?: number;
         centerY?: number;
+        labelOffsetX?: number;
+        labelOffsetY?: number;
+        corridorOffsetX?: number;
+        corridorOffsetY?: number;
         curvature?: number;
       }>;
       const detail = customEvt.detail;
@@ -586,8 +589,12 @@ const FlowEditor: React.FC = () => {
               ...edge,
               data: {
                 ...(edge.data || {}),
-                ...(detail.centerX !== undefined ? { centerX: detail.centerX } : {}),
-                ...(detail.centerY !== undefined ? { centerY: detail.centerY } : {}),
+                ...(detail.labelOffsetX !== undefined ? { labelOffsetX: detail.labelOffsetX, centerX: undefined } : {}),
+                ...(detail.labelOffsetY !== undefined ? { labelOffsetY: detail.labelOffsetY, centerY: undefined } : {}),
+                ...(detail.corridorOffsetX !== undefined ? { corridorOffsetX: detail.corridorOffsetX } : {}),
+                ...(detail.corridorOffsetY !== undefined ? { corridorOffsetY: detail.corridorOffsetY } : {}),
+                ...(detail.centerX !== undefined && detail.labelOffsetX === undefined ? { centerX: detail.centerX } : {}),
+                ...(detail.centerY !== undefined && detail.labelOffsetY === undefined ? { centerY: detail.centerY } : {}),
                 ...(detail.curvature !== undefined ? { curvature: detail.curvature } : {}),
               },
             };
@@ -602,6 +609,10 @@ const FlowEditor: React.FC = () => {
         edgeId: string;
         centerX?: number;
         centerY?: number;
+        labelOffsetX?: number;
+        labelOffsetY?: number;
+        corridorOffsetX?: number;
+        corridorOffsetY?: number;
         curvature?: number;
         reset?: boolean;
       }>;
@@ -616,7 +627,17 @@ const FlowEditor: React.FC = () => {
         eds.map((edge) => {
           if (edge.id === detail.edgeId) {
             if (detail.reset) {
-              const { centerX, centerY, offset, curvature, ...restData } = (edge.data || {}) as any;
+              const {
+                centerX,
+                centerY,
+                labelOffsetX,
+                labelOffsetY,
+                corridorOffsetX,
+                corridorOffsetY,
+                offset,
+                curvature,
+                ...restData
+              } = (edge.data || {}) as any;
               return {
                 ...edge,
                 data: restData,
@@ -626,8 +647,12 @@ const FlowEditor: React.FC = () => {
               ...edge,
               data: {
                 ...(edge.data || {}),
-                ...(detail.centerX !== undefined ? { centerX: detail.centerX } : {}),
-                ...(detail.centerY !== undefined ? { centerY: detail.centerY } : {}),
+                ...(detail.labelOffsetX !== undefined ? { labelOffsetX: detail.labelOffsetX, centerX: undefined } : {}),
+                ...(detail.labelOffsetY !== undefined ? { labelOffsetY: detail.labelOffsetY, centerY: undefined } : {}),
+                ...(detail.corridorOffsetX !== undefined ? { corridorOffsetX: detail.corridorOffsetX } : {}),
+                ...(detail.corridorOffsetY !== undefined ? { corridorOffsetY: detail.corridorOffsetY } : {}),
+                ...(detail.centerX !== undefined && detail.labelOffsetX === undefined ? { centerX: detail.centerX } : {}),
+                ...(detail.centerY !== undefined && detail.labelOffsetY === undefined ? { centerY: detail.centerY } : {}),
                 ...(detail.curvature !== undefined ? { curvature: detail.curvature } : {}),
               },
             };
@@ -895,13 +920,29 @@ const FlowEditor: React.FC = () => {
     setSelectedNodeId(newFrameId);
   }, [selectedQuestionNodes, groupMeta, nodes, edges, recordSnapshot, setNodes, setGroupMeta]);
 
-  // Global Figma-style Hotkeys: V (Select), H (Hand), F (Draw Area), Space (Hold for Hand), Cmd+G (Wrap)
+  // Global Figma-style Hotkeys: V (Select), H (Hand), F (Draw Area), Space (Hold for Hand), Cmd+G (Wrap), Zoom (+, -, 0, Shift+1)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
       if (tag === 'input' || tag === 'textarea' || tag === 'select' || (e.target as HTMLElement)?.isContentEditable) return;
 
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'g') {
+      // Global Canvas Zoom Controls
+      if ((e.metaKey || e.ctrlKey) && (e.key === '=' || e.key === '+' || e.code === 'Equal' || e.code === 'NumpadAdd')) {
+        e.preventDefault();
+        zoomIn({ duration: 150 });
+      } else if ((e.metaKey || e.ctrlKey) && (e.key === '-' || e.key === '_' || e.code === 'Minus' || e.code === 'NumpadSubtract')) {
+        e.preventDefault();
+        zoomOut({ duration: 150 });
+      } else if ((e.metaKey || e.ctrlKey) && (e.key === '0' || e.code === 'Digit0' || e.code === 'Numpad0')) {
+        e.preventDefault();
+        zoomTo(1, { duration: 200 });
+      } else if (e.shiftKey && (e.key === '1' || e.code === 'Digit1' || e.code === 'Numpad1') && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault();
+        fitView({ padding: 0.2, duration: 300 });
+      } else if (e.shiftKey && (e.key === '0' || e.code === 'Digit0' || e.code === 'Numpad0') && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault();
+        zoomTo(1, { duration: 200 });
+      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'g') {
         e.preventDefault();
         handleWrapSelectionInFrame();
       } else if (!e.metaKey && !e.ctrlKey && !e.shiftKey) {
@@ -942,7 +983,7 @@ const FlowEditor: React.FC = () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [handleWrapSelectionInFrame, isSpacePressed]);
+  }, [handleWrapSelectionInFrame, isSpacePressed, zoomIn, zoomOut, zoomTo, fitView]);
 
   // Selected entities across Flowchart Canvas
   const activeSelectedNode = useMemo(() => {
@@ -961,12 +1002,6 @@ const FlowEditor: React.FC = () => {
     if (!isPathTracingEnabled || !selectedNodeId) return null;
     return calculateDependencyTrace(nodes, edges, selectedNodeId);
   }, [isPathTracingEnabled, selectedNodeId, nodes, edges]);
-
-  const activeTraceTargetName = useMemo(() => {
-    if (!activeTrace) return '';
-    const node = nodes.find((n) => n.id === activeTrace.selectedNodeId);
-    return node ? getNodeTraceLabel(node) : activeTrace.selectedNodeId;
-  }, [activeTrace, nodes]);
 
   // Derived display nodes with highlight/dim classes without mutating base nodes state
   const displayNodes = useMemo(() => {
@@ -1025,13 +1060,10 @@ const FlowEditor: React.FC = () => {
     setSelectedEdgeId(null);
   }, []);
 
-  // Instant Creation of a Group Area (Group Frame)
-  const handleCreateNewGroupArea = useCallback(
-    (targetPos?: { x: number; y: number }) => {
-      const existingFrames = nodes.filter(
-        (n) => n.type === 'groupFrame' || n.type === 'groupContainer'
-      );
-      const existingGroupNumbers = existingFrames
+  // Helper to calculate non-overlapping coordinates and metadata for a brand-new group frame
+  const getNextGroupAreaConfig = useCallback(
+    (frames: Node[], targetPos?: { x: number; y: number }) => {
+      const existingGroupNumbers = frames
         .map((f) => (f.data as any)?.numericGroupId || parseInt((f.data as any)?.groupId) || 1)
         .filter((g) => !isNaN(g) && g > 0);
       const nextGroupNumber =
@@ -1041,7 +1073,7 @@ const FlowEditor: React.FC = () => {
       const GROUP_PALETTE = ['#0284c7', '#8b5cf6', '#10b981', '#f59e0b', '#ec4899', '#06b6d4'];
       const frameColor = GROUP_PALETTE[(nextGroupNumber - 1) % GROUP_PALETTE.length];
 
-      const lastFrame = existingFrames[existingFrames.length - 1];
+      const lastFrame = frames[frames.length - 1];
       let resolvedPos =
         targetPos ||
         (lastFrame
@@ -1050,7 +1082,7 @@ const FlowEditor: React.FC = () => {
 
       // Strict Non-Overlap Enforcement: Nudge new frame to the right until guaranteed non-overlapping
       while (
-        existingFrames.some((frame) => {
+        frames.some((frame) => {
           const fW =
             (frame.style?.width ? parseInt(String(frame.style.width), 10) : 0) ||
             frame.measured?.width ||
@@ -1068,6 +1100,22 @@ const FlowEditor: React.FC = () => {
       ) {
         resolvedPos = { x: resolvedPos.x + 500, y: resolvedPos.y };
       }
+
+      return { frameId, nextGroupNumber, frameColor, resolvedPos };
+    },
+    []
+  );
+
+  // Instant Creation of a Group Area (Group Frame)
+  const handleCreateNewGroupArea = useCallback(
+    (targetPos?: { x: number; y: number }) => {
+      const existingFrames = nodes.filter(
+        (n) => n.type === 'groupFrame' || n.type === 'groupContainer'
+      );
+      const { frameId, nextGroupNumber, frameColor, resolvedPos } = getNextGroupAreaConfig(
+        existingFrames,
+        targetPos
+      );
 
       const newFrame: Node = {
         id: frameId,
@@ -1098,7 +1146,7 @@ const FlowEditor: React.FC = () => {
         hasNextGroup: newTotal > (prev.groupNumber || 1),
       }));
     },
-    [nodes, edges, groupMeta, recordSnapshot, setNodes, setSelectedNodeId, setGroupMeta]
+    [nodes, edges, groupMeta, recordSnapshot, setNodes, setSelectedNodeId, setGroupMeta, getNextGroupAreaConfig]
   );
 
   // Figma-style Canvas Mouse Drawing Handlers for Group Area
@@ -2057,27 +2105,44 @@ const FlowEditor: React.FC = () => {
 
       // If dropped inside a container or frame, place it cleanly inside
       let nodePos = position;
+      let dropNeededWidth: number | undefined;
+      let dropNeededHeight: number | undefined;
       if (targetContainer) {
+        const { fX, fY, fW, fH } = getContainerBounds(targetContainer);
+        const { width: itemW, height: itemH } = getNodeDimensions({
+          type: nodeType,
+          data: nodeData,
+        } as any);
+
         if (nodeType === 'question') {
-          const existingChildIds = (targetContainer.data as any)?.questionIds || [];
-          const xOffset = targetContainer.type === 'groupFrame' ? 85 : 35;
-          nodePos = {
-            x: targetContainer.position.x + xOffset,
-            y: targetContainer.position.y + 60 + existingChildIds.length * 200,
-          };
+          const existingChildren = nodes.filter((n) => isNodeInContainer(n, targetContainer, nodes));
+          dropNeededWidth = Math.max(fW, itemW + 48);
+          const posX = fX + Math.max(20, Math.round((dropNeededWidth - itemW) / 2));
+
+          const headerBottom = fY + GROUP_HEADER_INSET;
+          let lowestBottom = headerBottom + 16;
+          for (const child of existingChildren) {
+            const { height: childH } = getNodeDimensions(child);
+            const b = child.position.y + childH;
+            if (b > lowestBottom) {
+              lowestBottom = b;
+            }
+          }
+          const posY = existingChildren.length === 0 ? fY + 60 : lowestBottom + 20;
+          dropNeededHeight = Math.max(fH, (posY + itemH + 36) - fY);
+          nodePos = { x: posX, y: posY };
         } else {
           // Clamp symbol position so it stays comfortably inside the target frame, away from all borders
-          const { fW: frameWidth, fH: frameHeight } = getContainerBounds(targetContainer);
-          const symbolW = 180;
-          const symbolH = 100;
+          dropNeededWidth = Math.max(fW, itemW + 48);
           const clampedX = Math.max(
-            targetContainer.position.x + 20,
-            Math.min(position.x, targetContainer.position.x + frameWidth - symbolW - 20)
+            fX + GROUP_BORDER_INSET + 8,
+            Math.min(position.x, fX + dropNeededWidth - itemW - GROUP_BORDER_INSET - 8)
           );
           const clampedY = Math.max(
-            targetContainer.position.y + 55,
-            Math.min(position.y, targetContainer.position.y + frameHeight - symbolH - 20)
+            fY + GROUP_HEADER_INSET + 12,
+            Math.min(position.y, fY + fH - itemH - GROUP_BORDER_INSET - 8)
           );
+          dropNeededHeight = Math.max(fH, (clampedY + itemH + 36) - fY);
           nodePos = { x: clampedX, y: clampedY };
         }
       }
@@ -2101,16 +2166,20 @@ const FlowEditor: React.FC = () => {
               const prevIds = (n.data as any).questionIds || [];
               const updatedIds = prevIds.includes(newNodeId) ? prevIds : [...prevIds, newNodeId];
               const newCount = updatedIds.length;
-              const currentHeight = (n.style?.height ? parseInt(String(n.style.height), 10) : 0) || 220;
-              const neededHeight = nodeType === 'question' ? Math.max(currentHeight, newCount * 220 + 120) : currentHeight;
+              const curW = dropNeededWidth || (n.style?.width ? parseInt(String(n.style.width), 10) : 440);
+              const curH = dropNeededHeight || (n.style?.height ? parseInt(String(n.style.height), 10) : 480);
               return {
                 ...n,
-                style: n.type === 'groupFrame' ? { ...n.style, height: neededHeight } : n.style,
+                width: curW,
+                height: curH,
+                style: n.type === 'groupFrame' ? { ...n.style, width: curW, height: curH } : n.style,
                 data: {
                   ...n.data,
+                  width: curW,
+                  height: curH,
                   questionIds: updatedIds,
                   questionCount: newCount,
-                  expandedHeight: neededHeight,
+                  expandedHeight: curH,
                 },
               };
             }
@@ -2124,6 +2193,60 @@ const FlowEditor: React.FC = () => {
     [nodes, edges, groupMeta, recordSnapshot, screenToFlowPosition, setNodes, handleInsertGroupIntoCanvas]
   );
 
+  // Helper to authoritatively resolve target frame for adding inputs / symbols
+  const resolveTargetFrame = useCallback(
+    (currentNodes: Node[], preferredId: string | null) => {
+      const existingFrames = currentNodes.filter(
+        (n) => n.type === 'groupFrame' || n.type === 'groupContainer'
+      );
+      // 1. Direct match with preferredId (e.g. selectedNodeId)
+      let targetFrame = existingFrames.find((f) => f.id === preferredId);
+
+      // 2. If a child node is selected, find its container frame
+      if (!targetFrame && preferredId) {
+        const sel = currentNodes.find((n) => n.id === preferredId);
+        if (sel) {
+          targetFrame = existingFrames.find((f) => isNodeInContainer(sel, f, currentNodes));
+          if (!targetFrame && (sel.data as any)?.containerId) {
+            targetFrame = existingFrames.find((f) => f.id === (sel.data as any).containerId);
+          }
+          if (!targetFrame && (sel.data as any)?.group) {
+            const gNum = (sel.data as any).group;
+            targetFrame = existingFrames.find(
+              (f) =>
+                (f.data as any)?.numericGroupId === gNum ||
+                (f.data as any)?.groupId === gNum ||
+                (f.data as any)?.groupId === String(gNum)
+            );
+          }
+        }
+      }
+
+      // 3. If preferredId is null or unmatched, check if any frame has selected === true
+      if (!targetFrame) {
+        targetFrame = existingFrames.find((f) => f.selected);
+      }
+
+      // 4. Check if any selected child node belongs to a frame
+      if (!targetFrame) {
+        const selChild = currentNodes.find(
+          (n) => n.selected && n.type !== 'groupFrame' && n.type !== 'groupContainer'
+        );
+        if (selChild) {
+          targetFrame = existingFrames.find((f) => isNodeInContainer(selChild, f, currentNodes));
+        }
+      }
+
+      // 5. If there is only 1 group frame on canvas, default to that frame
+      if (!targetFrame && existingFrames.length === 1) {
+        targetFrame = existingFrames[0];
+      }
+
+      return targetFrame;
+    },
+    []
+  );
+
   // Click-to-add from Flowchart Symbols palette
   const handleAddSymbol = useCallback(
     (nodeType: FlowNodeType, name: string, nameBn: string) => {
@@ -2135,16 +2258,7 @@ const FlowEditor: React.FC = () => {
       const existingFrames = nodes.filter(
         (n) => n.type === 'groupFrame' || n.type === 'groupContainer'
       );
-      let targetFrame = existingFrames.find((f) => f.id === selectedNodeId);
-      if (!targetFrame && selectedNodeId) {
-        const sel = nodes.find((n) => n.id === selectedNodeId);
-        if (sel && (sel.data as any)?.containerId) {
-          targetFrame = existingFrames.find((f) => f.id === (sel.data as any).containerId);
-        }
-      }
-      if (!targetFrame && existingFrames.length > 0) {
-        targetFrame = existingFrames[existingFrames.length - 1];
-      }
+      const targetFrame = resolveTargetFrame(nodes, selectedNodeId);
 
       const currentHighestId = nodes.reduce((max, n) => {
         if (n.type === 'question' && (n.data as any)?.question_id) {
@@ -2159,24 +2273,22 @@ const FlowEditor: React.FC = () => {
           ? `q-${newQId}`
           : `${nodeType}-${Date.now().toString().slice(-4)}`;
 
+      // If no group is selected on canvas and no default applies: automatically create a new group with this symbol!
       if (!targetFrame) {
-        // Auto-create Group Area 1 and nest the symbol inside
-        const newFrameId = `grp-frame-${Date.now().toString().slice(-4)}`;
-        const frameX = 300;
-        const frameY = 150;
+        const { frameId, nextGroupNumber, frameColor, resolvedPos } = getNextGroupAreaConfig(existingFrames);
         const newFrameNode: Node = {
-          id: newFrameId,
+          id: frameId,
           type: 'groupFrame',
-          position: { x: frameX, y: frameY },
+          position: resolvedPos,
           zIndex: 0,
           style: { width: 440, height: 480 },
           data: {
-            groupId: newFrameId,
-            numericGroupId: 1,
-            title: 'Group Area 1',
-            titleBn: 'গ্রুপ এলাকা ১',
+            groupId: frameId,
+            numericGroupId: nextGroupNumber,
+            title: `Group Area ${nextGroupNumber}`,
+            titleBn: `গ্রুপ এলাকা ${nextGroupNumber}`,
             category: 'custom',
-            color: '#0284c7',
+            color: frameColor,
             questionIds: [newNodeId],
             questionCount: 1,
             expandedHeight: 480,
@@ -2187,9 +2299,9 @@ const FlowEditor: React.FC = () => {
         if (nodeType === 'question') {
           nodeData = {
             question_id: newQId,
-            group: 1,
-            containerId: newFrameId,
-            customColor: '#0284c7',
+            group: nextGroupNumber,
+            containerId: frameId,
+            customColor: frameColor,
             question: name || 'New Question',
             question_bn: nameBn || name || 'নতুন প্রশ্ন',
             answer_type: 'string',
@@ -2204,28 +2316,28 @@ const FlowEditor: React.FC = () => {
             label: 'Condition Check',
             conditionType: 'match',
             comparisonValue: 'Yes',
-            containerId: newFrameId,
-            group: 1,
+            containerId: frameId,
+            group: nextGroupNumber,
           };
         } else if (nodeType === 'groupJump') {
           nodeData = {
-            targetGroupId: 2,
-            targetGroupTitle: 'Group 2',
-            containerId: newFrameId,
-            group: 1,
+            targetGroupId: nextGroupNumber + 1,
+            targetGroupTitle: `Group ${nextGroupNumber + 1}`,
+            containerId: frameId,
+            group: nextGroupNumber,
           };
         } else {
           nodeData = {
             label: name || nodeType.toUpperCase(),
-            containerId: newFrameId,
-            group: 1,
+            containerId: frameId,
+            group: nextGroupNumber,
           };
         }
 
         const newNode: Node = {
           id: newNodeId,
           type: nodeType,
-          position: { x: frameX + 85, y: frameY + 60 },
+          position: { x: resolvedPos.x + 85, y: resolvedPos.y + 60 },
           zIndex: 10,
           data: nodeData,
         };
@@ -2237,10 +2349,6 @@ const FlowEditor: React.FC = () => {
       }
 
       // If targetFrame exists, nest neatly inside it
-      const childIds = (targetFrame.data as any)?.questionIds || [];
-      const xOffset = targetFrame.type === 'groupFrame' ? 85 : 35;
-      const posX = targetFrame.position.x + xOffset;
-      const posY = targetFrame.position.y + 60 + childIds.length * 200;
       const cData = targetFrame.data as any;
       const numGrp = cData.numericGroupId || parseInt(cData.groupId) || groupMeta.groupNumber;
 
@@ -2283,6 +2391,28 @@ const FlowEditor: React.FC = () => {
         };
       }
 
+      const existingChildren = nodes.filter((n) => isNodeInContainer(n, targetFrame, nodes));
+      const { fX, fY, fW, fH } = getContainerBounds(targetFrame);
+      const { width: symW, height: symH } = getNodeDimensions({
+        type: nodeType,
+        data: nodeData,
+      } as any);
+
+      const neededWidth = Math.max(fW, symW + 48);
+      const posX = fX + Math.max(20, Math.round((neededWidth - symW) / 2));
+
+      const headerBottom = fY + GROUP_HEADER_INSET;
+      let lowestBottom = headerBottom + 16;
+      for (const child of existingChildren) {
+        const { height: childH } = getNodeDimensions(child);
+        const b = child.position.y + childH;
+        if (b > lowestBottom) {
+          lowestBottom = b;
+        }
+      }
+      const posY = existingChildren.length === 0 ? fY + 60 : lowestBottom + 20;
+      const neededHeight = Math.max(fH, (posY + symH + 36) - fY);
+
       const newNode: Node = {
         id: newNodeId,
         type: nodeType,
@@ -2295,19 +2425,26 @@ const FlowEditor: React.FC = () => {
       setNodes((nds) => {
         const nextNodes = nds.concat(newNode);
         return nextNodes.map((n) => {
-          if (n.id === targetFrame!.id) {
-            const updatedIds = [...childIds, newNodeId];
+          if (n.id === targetFrame.id) {
+            const prevIds = (n.data as any)?.questionIds || [];
+            const updatedIds = prevIds.includes(newNodeId) ? prevIds : [...prevIds, newNodeId];
             const newCount = updatedIds.length;
-            const currentHeight = (n.style?.height ? parseInt(String(n.style.height), 10) : 0) || 220;
-            const neededHeight = Math.max(currentHeight, newCount * 220 + 120);
             return {
               ...n,
-              style: n.type === 'groupFrame' ? { ...n.style, height: neededHeight } : n.style,
+              width: neededWidth,
+              height: neededHeight,
+              style: {
+                ...n.style,
+                width: neededWidth,
+                height: neededHeight,
+              },
               data: {
                 ...n.data,
+                width: neededWidth,
+                height: neededHeight,
+                expandedHeight: neededHeight,
                 questionIds: updatedIds,
                 questionCount: newCount,
-                expandedHeight: neededHeight,
               },
             };
           }
@@ -2316,7 +2453,7 @@ const FlowEditor: React.FC = () => {
       });
       setSelectedNodeId(newNodeId);
     },
-    [nodes, edges, groupMeta, recordSnapshot, setNodes, selectedNodeId, handleCreateNewGroupArea]
+    [nodes, edges, groupMeta, recordSnapshot, setNodes, selectedNodeId, handleCreateNewGroupArea, getNextGroupAreaConfig, resolveTargetFrame]
   );
 
   // Click-to-add from Input Type Views palette
@@ -2325,16 +2462,7 @@ const FlowEditor: React.FC = () => {
       const existingFrames = nodes.filter(
         (n) => n.type === 'groupFrame' || n.type === 'groupContainer'
       );
-      let targetFrame = existingFrames.find((f) => f.id === selectedNodeId);
-      if (!targetFrame && selectedNodeId) {
-        const sel = nodes.find((n) => n.id === selectedNodeId);
-        if (sel && (sel.data as any)?.containerId) {
-          targetFrame = existingFrames.find((f) => f.id === (sel.data as any).containerId);
-        }
-      }
-      if (!targetFrame && existingFrames.length > 0) {
-        targetFrame = existingFrames[existingFrames.length - 1];
-      }
+      const targetFrame = resolveTargetFrame(nodes, selectedNodeId);
 
       const currentHighestId = nodes.reduce((max, n) => {
         if (n.type === 'question' && (n.data as any)?.question_id) {
@@ -2346,24 +2474,22 @@ const FlowEditor: React.FC = () => {
       const newQId = currentHighestId + 1;
       const newNodeId = `q-${newQId}`;
 
+      // If no group is selected in the canvas: automatically create a new group with this question!
       if (!targetFrame) {
-        // Auto-create Group Area 1 and nest the question inside
-        const newFrameId = `grp-frame-${Date.now().toString().slice(-4)}`;
-        const frameX = 300;
-        const frameY = 150;
+        const { frameId, nextGroupNumber, frameColor, resolvedPos } = getNextGroupAreaConfig(existingFrames);
         const newFrameNode: Node = {
-          id: newFrameId,
+          id: frameId,
           type: 'groupFrame',
-          position: { x: frameX, y: frameY },
+          position: resolvedPos,
           zIndex: 0,
           style: { width: 440, height: 480 },
           data: {
-            groupId: newFrameId,
-            numericGroupId: 1,
-            title: 'Group Area 1',
-            titleBn: 'গ্রুপ এলাকা ১',
+            groupId: frameId,
+            numericGroupId: nextGroupNumber,
+            title: `Group Area ${nextGroupNumber}`,
+            titleBn: `গ্রুপ এলাকা ${nextGroupNumber}`,
             category: 'custom',
-            color: '#0284c7',
+            color: frameColor,
             questionIds: [newNodeId],
             questionCount: 1,
             expandedHeight: 480,
@@ -2373,13 +2499,13 @@ const FlowEditor: React.FC = () => {
         const newNode: Node = {
           id: newNodeId,
           type: 'question',
-          position: { x: frameX + 85, y: frameY + 60 },
+          position: { x: resolvedPos.x + 85, y: resolvedPos.y + 60 },
           zIndex: 10,
           data: {
             question_id: newQId,
-            group: 1,
-            containerId: newFrameId,
-            customColor: '#0284c7',
+            group: nextGroupNumber,
+            containerId: frameId,
+            customColor: frameColor,
             question: name || 'New Question',
             question_bn: nameBn || name || 'নতুন প্রশ্ন',
             answer_type: answerType,
@@ -2398,51 +2524,82 @@ const FlowEditor: React.FC = () => {
       }
 
       // If targetFrame exists, nest cleanly inside it
-      const childIds = (targetFrame.data as any)?.questionIds || [];
-      const xOffset = targetFrame.type === 'groupFrame' ? 85 : 35;
-      const posX = targetFrame.position.x + xOffset;
-      const posY = targetFrame.position.y + 60 + childIds.length * 200;
       const cData = targetFrame.data as any;
       const numGrp = cData.numericGroupId || parseInt(cData.groupId) || groupMeta.groupNumber;
+
+      const nodeData = {
+        question_id: newQId,
+        group: numGrp,
+        containerId: targetFrame.id,
+        customColor: cData.color,
+        question: name || 'New Question',
+        question_bn: nameBn || name || 'নতুন প্রশ্ন',
+        answer_type: answerType,
+        mandatory: true,
+        editable: true,
+        placeholder: '',
+        hint: '',
+        options: options || '',
+      };
+
+      const existingChildren = nodes.filter((n) => isNodeInContainer(n, targetFrame, nodes));
+      const { fX, fY, fW, fH } = getContainerBounds(targetFrame);
+      const { width: nodeW, height: nodeH } = getNodeDimensions({
+        type: 'question',
+        data: nodeData,
+      } as any);
+
+      // Ensure targetFrame is wide enough for the question
+      const neededWidth = Math.max(fW, nodeW + 48);
+      const posX = fX + Math.max(20, Math.round((neededWidth - nodeW) / 2));
+
+      // Calculate vertical position: 20px below lowest child, or 60px below top if empty
+      const headerBottom = fY + GROUP_HEADER_INSET;
+      let lowestBottom = headerBottom + 16;
+      for (const child of existingChildren) {
+        const { height: childH } = getNodeDimensions(child);
+        const b = child.position.y + childH;
+        if (b > lowestBottom) {
+          lowestBottom = b;
+        }
+      }
+      const posY = existingChildren.length === 0 ? fY + 60 : lowestBottom + 20;
+
+      // Expand frame height to enclose the new question with 36px bottom cushion
+      const neededHeight = Math.max(fH, (posY + nodeH + 36) - fY);
 
       const newNode: Node = {
         id: newNodeId,
         type: 'question',
         position: { x: posX, y: posY },
         zIndex: 10,
-        data: {
-          question_id: newQId,
-          group: numGrp,
-          containerId: targetFrame.id,
-          customColor: cData.color,
-          question: name || 'New Question',
-          question_bn: nameBn || name || 'নতুন প্রশ্ন',
-          answer_type: answerType,
-          mandatory: true,
-          editable: true,
-          placeholder: '',
-          hint: '',
-          options: options || '',
-        },
+        data: nodeData,
       };
 
       recordSnapshot(nodes, edges, groupMeta);
       setNodes((nds) => {
         const nextNodes = nds.concat(newNode);
         return nextNodes.map((n) => {
-          if (n.id === targetFrame!.id) {
-            const updatedIds = [...childIds, newNodeId];
+          if (n.id === targetFrame.id) {
+            const prevIds = (n.data as any)?.questionIds || [];
+            const updatedIds = prevIds.includes(newNodeId) ? prevIds : [...prevIds, newNodeId];
             const newCount = updatedIds.length;
-            const currentHeight = (n.style?.height ? parseInt(String(n.style.height), 10) : 0) || 220;
-            const neededHeight = Math.max(currentHeight, newCount * 220 + 120);
             return {
               ...n,
-              style: n.type === 'groupFrame' ? { ...n.style, height: neededHeight } : n.style,
+              width: neededWidth,
+              height: neededHeight,
+              style: {
+                ...n.style,
+                width: neededWidth,
+                height: neededHeight,
+              },
               data: {
                 ...n.data,
+                width: neededWidth,
+                height: neededHeight,
+                expandedHeight: neededHeight,
                 questionIds: updatedIds,
                 questionCount: newCount,
-                expandedHeight: neededHeight,
               },
             };
           }
@@ -2451,7 +2608,7 @@ const FlowEditor: React.FC = () => {
       });
       setSelectedNodeId(newNodeId);
     },
-    [nodes, edges, groupMeta, recordSnapshot, setNodes, selectedNodeId]
+    [nodes, edges, groupMeta, recordSnapshot, setNodes, selectedNodeId, getNextGroupAreaConfig, resolveTargetFrame]
   );
 
   // Update Node Data
@@ -2659,15 +2816,51 @@ const FlowEditor: React.FC = () => {
       const newNodeId = `q-${newQId}`;
       const childCount = edges.filter((e) => e.source === parentNodeId).length;
 
+      const existingFrames = nodes.filter(
+        (n) => n.type === 'groupFrame' || n.type === 'groupContainer'
+      );
+      const parentFrame = existingFrames.find((f) => isNodeInContainer(parentNode, f, nodes));
+
+      let posX = parentNode.position.x + 360;
+      let posY = parentNode.position.y + childCount * 170;
+      let neededWidth: number | undefined;
+      let neededHeight: number | undefined;
+
+      if (parentFrame) {
+        const existingChildren = nodes.filter((n) => isNodeInContainer(n, parentFrame, nodes));
+        const { fX, fY, fW, fH } = getContainerBounds(parentFrame);
+        const nodeW = 270;
+        const nodeH = 180;
+        neededWidth = Math.max(fW, nodeW + 48);
+        posX = fX + Math.max(20, Math.round((neededWidth - nodeW) / 2));
+
+        const headerBottom = fY + GROUP_HEADER_INSET;
+        let lowestBottom = headerBottom + 16;
+        for (const child of existingChildren) {
+          const { height: childH } = getNodeDimensions(child);
+          const b = child.position.y + childH;
+          if (b > lowestBottom) {
+            lowestBottom = b;
+          }
+        }
+        posY = lowestBottom + 20;
+        neededHeight = Math.max(fH, (posY + nodeH + 36) - fY);
+      }
+
+      const pData = parentNode.data as any;
+      const fData = parentFrame ? (parentFrame.data as any) : null;
+      const groupNum = fData?.numericGroupId || parseInt(fData?.groupId) || pData?.group || 1;
+
       const newNode: Node = {
         id: newNodeId,
         type: 'question',
-        position: {
-          x: parentNode.position.x + 360,
-          y: parentNode.position.y + childCount * 170,
-        },
+        position: { x: posX, y: posY },
+        zIndex: 10,
         data: {
           question_id: newQId,
+          group: groupNum,
+          containerId: parentFrame ? parentFrame.id : pData?.containerId,
+          customColor: fData?.color || pData?.customColor,
           question: `Follow-up for: ${optionValue}`,
           question_bn: `${optionValue} সম্পর্কিত বিস্তারিত প্রশ্ন`,
           answer_type: 'string',
@@ -2704,7 +2897,38 @@ const FlowEditor: React.FC = () => {
         },
       };
 
-      setNodes((nds) => nds.concat(newNode));
+      setNodes((nds) => {
+        const nextNodes = nds.concat(newNode);
+        if (parentFrame) {
+          return nextNodes.map((n) => {
+            if (n.id === parentFrame.id) {
+              const prevIds = (n.data as any)?.questionIds || [];
+              const updatedIds = prevIds.includes(newNodeId) ? prevIds : [...prevIds, newNodeId];
+              const newCount = updatedIds.length;
+              return {
+                ...n,
+                width: neededWidth,
+                height: neededHeight,
+                style: {
+                  ...n.style,
+                  width: neededWidth,
+                  height: neededHeight,
+                },
+                data: {
+                  ...n.data,
+                  width: neededWidth,
+                  height: neededHeight,
+                  expandedHeight: neededHeight,
+                  questionIds: updatedIds,
+                  questionCount: newCount,
+                },
+              };
+            }
+            return n;
+          });
+        }
+        return nextNodes;
+      });
       setEdges((eds) => eds.concat(newEdge));
       setSelectedNodeId(newNodeId);
     },
@@ -2824,40 +3048,7 @@ const FlowEditor: React.FC = () => {
 
   return (
     <div className="app-container">
-      {/* 1. ADMIN LEFT SIDEBAR (Shown in List & Groups dashboard views; edge-to-edge full canvas in Studio) */}
-      {activeView !== 'editor' && (
-        <AdminLeftSidebar
-          activeView={activeView}
-          onSelectView={(view) => {
-            if (view === 'list') {
-              refreshProjects();
-            } else if (view === 'groups') {
-              refreshGroups();
-            } else if (view === 'editor') {
-              if (projects.length === 0) {
-                handleCreateNewProject(
-                  'My Survey Flowchart',
-                  '',
-                  'Dynamic KYC and field assessment survey flowchart',
-                  1
-                );
-                return;
-              }
-            }
-            setActiveView(view);
-          }}
-          onOpenCreateModal={() => setIsCreateModalOpen(true)}
-          activeProjectTitle={activeProject?.title || 'Survey Flowchart'}
-          totalProjectsCount={projects.length}
-          totalGroupsCount={groups.length}
-          theme={theme}
-          resolvedTheme={resolvedTheme}
-          onSelectTheme={setTheme}
-          onCycleTheme={cycleTheme}
-        />
-      )}
-
-      {/* 2. MAIN APPLICATION CONTENT AREA */}
+      {/* MAIN APPLICATION CONTENT AREA (Edge-to-edge full width layout) */}
       <div className="admin-main-viewport">
         {activeView === 'list' ? (
           <FlowchartListView
@@ -2885,6 +3076,26 @@ const FlowEditor: React.FC = () => {
               setVersionHistoryTargetProject(proj);
               setIsVersionHistoryModalOpen(true);
             }}
+            onNavigateToStudio={() => {
+              if (projects.length === 0) {
+                handleCreateNewProject(
+                  'My Survey Flowchart',
+                  '',
+                  'Dynamic KYC and field assessment survey flowchart',
+                  1
+                );
+                return;
+              }
+              setActiveView('editor');
+            }}
+            onNavigateToGroups={() => {
+              refreshGroups();
+              setActiveView('groups');
+            }}
+            activeProjectTitle={activeProject?.title || 'Survey Flowchart'}
+            theme={theme}
+            resolvedTheme={resolvedTheme}
+            onCycleTheme={cycleTheme}
           />
         ) : activeView === 'groups' ? (
           <QuestionGroupListView
@@ -2894,23 +3105,19 @@ const FlowEditor: React.FC = () => {
             onDeleteGroup={handleDeleteGroup}
             onInsertGroupIntoCanvas={(grp) => handleInsertGroupIntoCanvas(grp)}
             onResetDefaults={handleResetDefaultGroups}
+            onNavigateToStudio={() => setActiveView('editor')}
+            onNavigateToList={() => {
+              refreshProjects();
+              setActiveView('list');
+            }}
+            activeProjectTitle={activeProject?.title || 'Survey Flowchart'}
+            theme={theme}
+            resolvedTheme={resolvedTheme}
+            onCycleTheme={cycleTheme}
           />
         ) : (
           <div className="studio-editor-wrapper">
             <div className="studio-body app-body">
-              {/* Floating Dock Toggle Button when Inspector is Collapsed */}
-              {!isRightSidebarOpen && (
-                <button
-                  type="button"
-                  className="floating-sidebar-toggle right-dock"
-                  onClick={toggleRightSidebar}
-                  title="Expand Inspector & Settings (Ctrl+J)"
-                >
-                  <PanelRightOpen size={14} />
-                  <span className="dock-label">Inspector</span>
-                </button>
-              )}
-
               {/* CENTER: React Flow Canvas & Floating Top HUD Elements */}
               <div
                 className="canvas-and-dock-container"
@@ -3015,63 +3222,6 @@ const FlowEditor: React.FC = () => {
                   onDragOver={onDragOver}
                   style={{ flex: 1, minHeight: 0 }}
                 >
-                  {/* Floating Dependency Path Tracing Indicator */}
-                  {activeTrace && (
-                    <div className="floating-trace-indicator">
-                      <div className="trace-indicator-pill">
-                        <GitFork size={14} className="text-cyan-400" />
-                        <span className="trace-target-title">
-                          Tracing: <strong>{activeTraceTargetName}</strong>
-                        </span>
-                        <span className="trace-divider">•</span>
-                        <span
-                          className="trace-badge-cyan"
-                          title="Upstream Predecessors / Ancestors"
-                        >
-                          ↑ {activeTrace.ancestorNodeIds.size} Upstream
-                        </span>
-                        <span
-                          className="trace-badge-amber"
-                          title="Downstream Dependents / Successors"
-                        >
-                          ↓ {activeTrace.descendantNodeIds.size} Downstream
-                        </span>
-                        <button
-                          type="button"
-                          className="trace-clear-btn"
-                          onClick={() => setSelectedNodeId(null)}
-                          title="Clear Selection / Stop Tracing"
-                        >
-                          <X size={12} />
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Draw Area Active Mode Top Banner */}
-                  {isDrawAreaMode && (
-                    <div className="draw-area-banner animate-in">
-                      <div className="draw-area-banner-content">
-                        <Crop size={15} className="text-cyan-400 animate-pulse" />
-                        <span>
-                          <strong>Draw Group Area:</strong> Click and drag on canvas to define an area and enclose questions.
-                        </span>
-                        <span className="draw-area-banner-hint">Press <strong>Esc</strong> to cancel</span>
-                        <button
-                          type="button"
-                          className="draw-area-banner-cancel-btn"
-                          onClick={() => {
-                            setActiveToolMode('select');
-                            setDrawStartPos(null);
-                            setDrawCurrentPos(null);
-                          }}
-                        >
-                          Exit
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
                   {/* Interactive Figma-style Frame Draw Overlay */}
                   {isDrawAreaMode && (
                     <div
@@ -3165,6 +3315,12 @@ const FlowEditor: React.FC = () => {
                       },
                     }}
                     fitView
+                    minZoom={0.05}
+                    maxZoom={5.0}
+                    zoomOnPinch={true}
+                    zoomOnScroll={true}
+                    zoomOnDoubleClick={false}
+                    preventScrolling={true}
                     deleteKeyCode={['Backspace', 'Delete']}
                     elevateNodesOnSelect={false}
                     className={`survey-flow-canvas ${isHandMode ? 'is-tool-hand' : isDrawAreaMode ? 'is-tool-draw' : ''

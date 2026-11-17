@@ -10,7 +10,7 @@ export const GroupJumpNode = memo(({ data, selected }: NodeProps) => {
 
   return (
     <div className={`survey-node group-jump-node ${selected ? 'is-selected' : ''}`}>
-      <EightWayHandles hideBottom={true} />
+      <EightWayHandles />
       <div className="jump-inner">
         <FastForward size={16} className="jump-icon" />
         <div className="jump-text">

@@ -104,7 +104,7 @@ export const GroupFrameNode = memo(({ id, data, selected, onDeleteFrame }: Group
           : selected
             ? `0 0 0 2px #10b981, 0 8px 24px -4px rgba(0,0,0,0.5)`
             : `0 4px 16px -2px rgba(0,0,0,0.3)`,
-        pointerEvents: 'none',
+        pointerEvents: 'auto',
       }}
     >
       <NodeResizer
