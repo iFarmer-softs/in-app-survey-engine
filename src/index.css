@@ -7298,6 +7298,36 @@ body.is-resizing-sidebar * {
   padding: 4px 8px;
 }
 
+/* Header Tools & Reset */
+.header-center-dock .tools-menu-item,
+.header-icon-btn.tools-menu-item {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 50%;
+  justify-content: center;
+  display: inline-flex;
+  flex-shrink: 0;
+  position: relative;
+  background: transparent;
+  border: 1px solid transparent;
+}
+
+.header-center-dock .tools-menu-item.item-danger,
+.header-icon-btn.item-danger,
+.header-icon-btn.tools-menu-item.item-danger {
+  color: #f87171;
+}
+
+.header-center-dock .tools-menu-item.item-danger:hover:not(:disabled),
+.header-icon-btn.item-danger:hover:not(:disabled),
+.header-icon-btn.tools-menu-item.item-danger:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.35);
+  transform: scale(1.06);
+}
+
 .tools-menu-item {
   width: 100%;
   display: flex;

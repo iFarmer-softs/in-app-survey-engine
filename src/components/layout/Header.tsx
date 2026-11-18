@@ -1,12 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  RotateCcw,
-  Sparkles,
   ArrowLeft,
   CheckCircle2,
   AlertTriangle,
-  AlignHorizontalDistributeCenter,
-  AlignVerticalDistributeCenter,
   GitBranch,
   GitCommit,
   Rocket,
@@ -57,17 +53,17 @@ interface HeaderProps {
   groupMeta: GroupMeta;
   onOpenJsonModal?: () => void;
   onOpenMobileModal?: () => void;
-  onResetSample: () => void;
+  onResetSample?: () => void;
   onClearCanvas?: () => void;
-  onAutoLayout: () => void;
+  onAutoLayout?: () => void;
   onBackToList?: () => void;
   nodeCount: number;
   edgeCount: number;
   diagnosticsCount: number;
   diagnosticsErrors: number;
   onOpenDiagnostics: () => void;
-  onAlignHorizontal: () => void;
-  onAlignVertical: () => void;
+  onAlignHorizontal?: () => void;
+  onAlignVertical?: () => void;
   onOpenVersionHistory?: () => void;
   onOpenCreateSnapshot?: () => void;
   onPublishVersion?: () => void;
@@ -106,17 +102,17 @@ export const Header: React.FC<HeaderProps> = ({
   groupMeta: _groupMeta,
   onOpenJsonModal: _onOpenJsonModal,
   onOpenMobileModal: _onOpenMobileModal,
-  onResetSample,
+  onResetSample: _onResetSample,
   onClearCanvas,
-  onAutoLayout,
+  onAutoLayout: _onAutoLayout,
   onBackToList,
   nodeCount: _nodeCount,
   edgeCount: _edgeCount,
   diagnosticsCount,
   diagnosticsErrors,
   onOpenDiagnostics,
-  onAlignHorizontal,
-  onAlignVertical,
+  onAlignHorizontal: _onAlignHorizontal,
+  onAlignVertical: _onAlignVertical,
   onOpenVersionHistory,
   onOpenCreateSnapshot,
   onPublishVersion,
@@ -143,10 +139,8 @@ export const Header: React.FC<HeaderProps> = ({
   onCycleTheme: _onCycleTheme,
 }) => {
   const [isVersionMenuOpen, setIsVersionMenuOpen] = useState(false);
-  const [isToolsMenuOpen, setIsToolsMenuOpen] = useState(false);
 
   const versionDropdownRef = useRef<HTMLDivElement>(null);
-  const toolsDropdownRef = useRef<HTMLDivElement>(null);
 
   // Close menus on outside click
   useEffect(() => {
@@ -157,12 +151,6 @@ export const Header: React.FC<HeaderProps> = ({
         !versionDropdownRef.current.contains(target)
       ) {
         setIsVersionMenuOpen(false);
-      }
-      if (
-        toolsDropdownRef.current &&
-        !toolsDropdownRef.current.contains(target)
-      ) {
-        setIsToolsMenuOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -176,7 +164,6 @@ export const Header: React.FC<HeaderProps> = ({
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setIsVersionMenuOpen(false);
-        setIsToolsMenuOpen(false);
       }
     };
 
@@ -480,114 +467,17 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         )}
 
-        {/* Canvas Tools & Alignment Dropdown */}
-        <div className="header-tools-dropdown-container" ref={toolsDropdownRef}>
-          <button
-            type="button"
-            className={`header-icon-btn ${isToolsMenuOpen ? 'is-active' : ''}`}
-            onClick={() => setIsToolsMenuOpen((prev) => !prev)}
-            data-tooltip="Canvas Layout & Alignment"
-            data-tooltip-pos="bottom"
-            aria-label="Canvas Layout & Alignment"
-          >
-            <SlidersHorizontal size={15} />
-          </button>
-
-          {isToolsMenuOpen && (
-            <div className="header-tools-menu animate-in">
-              <div className="tools-section-title">Layout & Alignment</div>
-              <button
-                type="button"
-                className="tools-menu-item"
-                onClick={() => {
-                  setIsToolsMenuOpen(false);
-                  onAutoLayout();
-                }}
-              >
-                <Sparkles size={14} className="text-emerald-400" />
-                <div className="tools-item-text">
-                  <span className="tools-title">Tree Auto Layout</span>
-                  <span className="tools-sub">Re-arrange hierarchy neatly</span>
-                </div>
-              </button>
-
-              {onAddGroupArea && (
-                <button
-                  type="button"
-                  className="tools-menu-item"
-                  onClick={() => {
-                    setIsToolsMenuOpen(false);
-                    onAddGroupArea();
-                  }}
-                >
-                  <Crop size={14} className="text-cyan-400" />
-                  <div className="tools-item-text">
-                    <span className="tools-title">Add Group Area</span>
-                    <span className="tools-sub">Create a new bounded section</span>
-                  </div>
-                </button>
-              )}
-
-              <div className="tools-align-row">
-                <button
-                  type="button"
-                  className="tools-compact-btn"
-                  onClick={() => {
-                    onAlignHorizontal();
-                  }}
-                  title="Align selected nodes horizontally (Center Y)"
-                >
-                  <AlignHorizontalDistributeCenter size={13} />
-                  <span>Align Horizontal</span>
-                </button>
-                <button
-                  type="button"
-                  className="tools-compact-btn"
-                  onClick={() => {
-                    onAlignVertical();
-                  }}
-                  title="Align selected nodes vertically (Center X)"
-                >
-                  <AlignVerticalDistributeCenter size={13} />
-                  <span>Align Vertical</span>
-                </button>
-              </div>
-
-              <div className="menu-divider" />
-
-              <div className="tools-section-title">Canvas Reset</div>
-              <button
-                type="button"
-                className="tools-menu-item item-danger"
-                onClick={() => {
-                  setIsToolsMenuOpen(false);
-                  onClearCanvas?.();
-                }}
-              >
-                <Trash2 size={14} />
-                <div className="tools-item-text">
-                  <span className="tools-title">Clear Canvas (Blank)</span>
-                  <span className="tools-sub">Empty flowchart canvas</span>
-                </div>
-              </button>
-
-              <button
-                type="button"
-                className="tools-menu-item"
-                onClick={() => {
-                  setIsToolsMenuOpen(false);
-                  onResetSample();
-                }}
-              >
-                <RotateCcw size={14} />
-                <div className="tools-item-text">
-                  <span className="tools-title">Load Sample KYC Flowchart</span>
-                  <span className="tools-sub">Preview reference KYC survey</span>
-                </div>
-              </button>
-            </div>
-          )}
-        </div>
+        {/* Clear Canvas */}
+        <button
+          type="button"
+          className="header-icon-btn tools-menu-item item-danger"
+          onClick={() => onClearCanvas?.()}
+          data-tooltip="Clear Canvas (Blank)"
+          data-tooltip-pos="bottom"
+          aria-label="Clear Canvas (Blank)"
+        >
+          <Trash2 size={15} />
+        </button>
 
         <div className="header-dock-divider" />
 

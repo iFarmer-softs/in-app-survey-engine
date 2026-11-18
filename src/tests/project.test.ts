@@ -6529,5 +6529,53 @@ assert.strictEqual(clearedData.labelOffsetX, undefined, 'Moving group must clear
 
 console.log('   ✅ Group Connector Clean Routing, Straight Line, Attached Label & Smooth Group Dragging validated with 100% precision.');
 
-console.log('\n🎉 ALL TESTS PASSED SUCCESSFULLY! (60/60 test suites passed)\n');
+// ---------------------------------------------------------------------------
+// SUITE 61: Header Tools Dropdown Replacement with Direct Danger Clear Canvas
+// ---------------------------------------------------------------------------
+console.log('\n6️⃣1️⃣ Testing Header Tools Dropdown Replacement with Direct Danger Clear Canvas Button...');
+
+const updatedHeaderSource = fs.readFileSync(path.resolve(process.cwd(), 'src/components/layout/Header.tsx'), 'utf-8');
+
+// 61A: header-tools-dropdown-container is completely removed
+assert.strictEqual(
+  updatedHeaderSource.includes('header-tools-dropdown-container'),
+  false,
+  'header-tools-dropdown-container must be removed from Header.tsx'
+);
+
+// 61B: Replaced with tools-menu-item item-danger button for Clear Canvas
+assert.ok(
+  updatedHeaderSource.includes('tools-menu-item item-danger'),
+  'Header must contain tools-menu-item item-danger button'
+);
+assert.ok(
+  updatedHeaderSource.includes('onClearCanvas'),
+  'Clear Canvas button must invoke onClearCanvas callback'
+);
+
+// 61C: Other unused options from the old dropdown are eliminated
+assert.strictEqual(
+  updatedHeaderSource.includes('Tree Auto Layout'),
+  false,
+  'Tree Auto Layout option must be removed from Header'
+);
+assert.strictEqual(
+  updatedHeaderSource.includes('Align Horizontal'),
+  false,
+  'Align Horizontal option must be removed from Header'
+);
+assert.strictEqual(
+  updatedHeaderSource.includes('Align Vertical'),
+  false,
+  'Align Vertical option must be removed from Header'
+);
+assert.strictEqual(
+  updatedHeaderSource.includes('Load Sample KYC Flowchart'),
+  false,
+  'Load Sample KYC option must be removed from Header'
+);
+
+console.log('   ✅ Header Tools Dropdown Replacement with Direct Danger Clear Canvas Button validated with 100% precision.');
+
+console.log('\n🎉 ALL TESTS PASSED SUCCESSFULLY! (61/61 test suites passed)\n');
 
