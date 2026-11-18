@@ -716,6 +716,175 @@ export function getCrossGroupOrthogonalPath({
     isHorizFlow = Math.abs(entryPoint.x - exitPoint.x) >= Math.abs(entryPoint.y - exitPoint.y);
   }
 
+  const isOutsideY = Boolean(
+    prefY !== undefined &&
+    sc &&
+    tc &&
+    (prefY < Math.min(sc.minY, tc.minY) - 10 ||
+      prefY > Math.max(sc.maxY, tc.maxY) + 10)
+  );
+  const isOutsideX = Boolean(
+    prefX !== undefined &&
+    sc &&
+    tc &&
+    (prefX < Math.min(sc.minX, tc.minX) - 10 ||
+      prefX > Math.max(sc.maxX, tc.maxX) + 10)
+  );
+
+  // Explicit user-dragged outside detour above/below/beside groups (e.g. Test 50B)
+  if (isOutsideY) {
+    const rawPts: Array<{ x: number; y: number }> = [
+      { x: sourceX, y: sourceY },
+      { x: exitPoint.x, y: sourceY },
+      { x: exitPoint.x, y: prefY },
+      { x: entryPoint.x, y: prefY },
+      { x: entryPoint.x, y: targetY },
+      { x: targetX, y: targetY },
+    ];
+    const simplified = simplifyPoints(rawPts);
+    const labelX = (exitPoint.x + entryPoint.x) / 2 + (corridorOffsetX ?? 0);
+    const labelY = prefY;
+    return [buildSvgPath(simplified, borderRadius), labelX, labelY];
+  }
+
+  if (isOutsideX) {
+    const rawPts: Array<{ x: number; y: number }> = [
+      { x: sourceX, y: sourceY },
+      { x: sourceX, y: exitPoint.y },
+      { x: prefX, y: exitPoint.y },
+      { x: prefX, y: entryPoint.y },
+      { x: targetX, y: entryPoint.y },
+      { x: targetX, y: targetY },
+    ];
+    const simplified = simplifyPoints(rawPts);
+    const labelX = prefX;
+    const labelY = (exitPoint.y + entryPoint.y) / 2 + (corridorOffsetY ?? 0);
+    return [buildSvgPath(simplified, borderRadius), labelX, labelY];
+  }
+
+  const isLevelHoriz = Math.abs(sourceY - targetY) <= 16;
+  const isLevelVert = Math.abs(sourceX - targetX) <= 16;
+
+  // 1. Straight line when items are nearly level (prevents any detour)
+  if (isHorizFlow && isLevelHoriz) {
+    const pts = [
+      { x: sourceX, y: sourceY },
+      { x: targetX, y: targetY },
+    ];
+    const labelX = prefX !== undefined ? prefX : (sourceX + targetX) / 2 + (corridorOffsetX ?? 0);
+    const labelY = (sourceY + targetY) / 2 + (corridorOffsetY ?? 0);
+    return [buildSvgPath(pts, borderRadius), labelX, labelY];
+  }
+
+  if (!isHorizFlow && isLevelVert) {
+    const pts = [
+      { x: sourceX, y: sourceY },
+      { x: targetX, y: targetY },
+    ];
+    const labelX = (sourceX + targetX) / 2 + (corridorOffsetX ?? 0);
+    const labelY = prefY !== undefined ? prefY : (sourceY + targetY) / 2 + (corridorOffsetY ?? 0);
+    return [buildSvgPath(pts, borderRadius), labelX, labelY];
+  }
+
+  // 2. Single, clean middle bend between groups
+  if (isHorizFlow) {
+    let rawPts: Array<{ x: number; y: number }>;
+    if (targetPosition === Position.Top) {
+      const entryY = Math.min(targetY - safeMargin, tc ? tc.minY - safeMargin : targetY - safeMargin);
+      rawPts = [
+        { x: sourceX, y: sourceY },
+        { x: prefX, y: sourceY },
+        { x: prefX, y: entryY },
+        { x: targetX, y: entryY },
+        { x: targetX, y: targetY },
+      ];
+    } else if (targetPosition === Position.Bottom) {
+      const entryY = Math.max(targetY + safeMargin, tc ? tc.maxY + safeMargin : targetY + safeMargin);
+      rawPts = [
+        { x: sourceX, y: sourceY },
+        { x: prefX, y: sourceY },
+        { x: prefX, y: entryY },
+        { x: targetX, y: entryY },
+        { x: targetX, y: targetY },
+      ];
+    } else {
+      rawPts = [
+        { x: sourceX, y: sourceY },
+        { x: prefX, y: sourceY },
+        { x: prefX, y: targetY },
+        { x: targetX, y: targetY },
+      ];
+    }
+
+    let needsFallback = false;
+    for (let i = 1; i < rawPts.length - 2; i++) {
+      if (sc && segmentIntersectsRect(rawPts[i], rawPts[i + 1], sc)) {
+        needsFallback = true;
+        break;
+      }
+      if (tc && segmentIntersectsRect(rawPts[i], rawPts[i + 1], tc)) {
+        needsFallback = true;
+        break;
+      }
+    }
+
+    if (!needsFallback) {
+      const simplified = simplifyPoints(rawPts);
+      const labelX = prefX;
+      const labelY = (sourceY + targetY) / 2 + (corridorOffsetY ?? 0);
+      return [buildSvgPath(simplified, borderRadius), labelX, labelY];
+    }
+  } else {
+    // Vertical flow
+    let rawPts: Array<{ x: number; y: number }>;
+    if (targetPosition === Position.Left) {
+      const entryX = Math.min(targetX - safeMargin, tc ? tc.minX - safeMargin : targetX - safeMargin);
+      rawPts = [
+        { x: sourceX, y: sourceY },
+        { x: sourceX, y: prefY },
+        { x: entryX, y: prefY },
+        { x: entryX, y: targetY },
+        { x: targetX, y: targetY },
+      ];
+    } else if (targetPosition === Position.Right) {
+      const entryX = Math.max(targetX + safeMargin, tc ? tc.maxX + safeMargin : targetX + safeMargin);
+      rawPts = [
+        { x: sourceX, y: sourceY },
+        { x: sourceX, y: prefY },
+        { x: entryX, y: prefY },
+        { x: entryX, y: targetY },
+        { x: targetX, y: targetY },
+      ];
+    } else {
+      rawPts = [
+        { x: sourceX, y: sourceY },
+        { x: sourceX, y: prefY },
+        { x: targetX, y: prefY },
+        { x: targetX, y: targetY },
+      ];
+    }
+
+    let needsFallback = false;
+    for (let i = 1; i < rawPts.length - 2; i++) {
+      if (sc && segmentIntersectsRect(rawPts[i], rawPts[i + 1], sc)) {
+        needsFallback = true;
+        break;
+      }
+      if (tc && segmentIntersectsRect(rawPts[i], rawPts[i + 1], tc)) {
+        needsFallback = true;
+        break;
+      }
+    }
+
+    if (!needsFallback) {
+      const simplified = simplifyPoints(rawPts);
+      const labelX = (sourceX + targetX) / 2 + (corridorOffsetX ?? 0);
+      const labelY = prefY;
+      return [buildSvgPath(simplified, borderRadius), labelX, labelY];
+    }
+  }
+
+  // Fallback for complex obstacle bypass (e.g. far side handles)
   const userShiftedX =
     (corridorOffsetX !== undefined && Math.abs(corridorOffsetX) > 0.5) ||
     (centerX !== undefined && Math.abs(centerX - defaultPrefX) > 0.5);
@@ -1334,24 +1503,10 @@ export const CustomFlowchartEdge: React.FC<EdgeProps> = ({
   let pillX = derivedMidX;
   let pillY = derivedMidY;
 
-  if (isCrossGroupConnection && (crossGroupContainers?.sourceContainer || crossGroupContainers?.targetContainer)) {
-    const crossGroupPos = computeDerivedCrossGroupPillPosition({
-      sourceX,
-      sourceY,
-      targetX: effectiveTargetX,
-      targetY: effectiveTargetY,
-      corridorX: labelX,
-      corridorY: labelY,
-      sourceContainer: crossGroupContainers?.sourceContainer,
-      targetContainer: crossGroupContainers?.targetContainer,
-      otherContainers: crossGroupContainers?.otherContainers,
-      offset: {
-        x: edgeData.labelOffsetX,
-        y: edgeData.labelOffsetY,
-      },
-    });
-    pillX = crossGroupPos.x;
-    pillY = crossGroupPos.y;
+  if (isCrossGroupConnection) {
+    // For cross-group connectors: label stays attached directly to the middle of the line (labelX, labelY)
+    pillX = (labelX !== undefined && !isNaN(labelX) ? labelX : derivedMidX) + (edgeData.labelOffsetX ?? 0);
+    pillY = (labelY !== undefined && !isNaN(labelY) ? labelY : derivedMidY) + (edgeData.labelOffsetY ?? 0);
   } else {
     pillX = edgeData.labelOffsetX !== undefined ? derivedMidX + edgeData.labelOffsetX : derivedMidX;
     pillY = edgeData.labelOffsetY !== undefined ? derivedMidY + edgeData.labelOffsetY : derivedMidY;
@@ -1382,23 +1537,7 @@ export const CustomFlowchartEdge: React.FC<EdgeProps> = ({
     const peerIndex = peerIds.indexOf(id);
     if (peerIndex > 0) {
       const staggerY = (peerIndex % 2 === 1 ? 1 : -1) * Math.ceil(peerIndex / 2) * 36;
-      if (crossGroupContainers?.sourceContainer || crossGroupContainers?.targetContainer) {
-        const staggeredPos = computeDerivedCrossGroupPillPosition({
-          sourceX,
-          sourceY,
-          targetX: effectiveTargetX,
-          targetY: effectiveTargetY,
-          corridorX: pillX,
-          corridorY: pillY + staggerY,
-          sourceContainer: crossGroupContainers?.sourceContainer,
-          targetContainer: crossGroupContainers?.targetContainer,
-          otherContainers: crossGroupContainers?.otherContainers,
-        });
-        pillX = staggeredPos.x;
-        pillY = staggeredPos.y;
-      } else {
-        pillY += staggerY;
-      }
+      pillY += staggerY;
     }
   }
 
@@ -1526,18 +1665,11 @@ export const CustomFlowchartEdge: React.FC<EdgeProps> = ({
 
     const startWorld = toWorld(e.clientX, e.clientY);
 
-    const basePill = isCrossGroupConnection && (crossGroupContainers?.sourceContainer || crossGroupContainers?.targetContainer)
-      ? computeDerivedCrossGroupPillPosition({
-        sourceX,
-        sourceY,
-        targetX: effectiveTargetX,
-        targetY: effectiveTargetY,
-        corridorX: labelX,
-        corridorY: labelY,
-        sourceContainer: crossGroupContainers?.sourceContainer,
-        targetContainer: crossGroupContainers?.targetContainer,
-        otherContainers: crossGroupContainers?.otherContainers,
-      })
+    const basePill = isCrossGroupConnection
+      ? {
+        x: labelX !== undefined && !isNaN(labelX) ? labelX : derivedMidX,
+        y: labelY !== undefined && !isNaN(labelY) ? labelY : derivedMidY,
+      }
       : { x: derivedMidX, y: derivedMidY };
 
     // Initial offsets relative to derived midpoints / dynamic corridors
@@ -1585,23 +1717,6 @@ export const CustomFlowchartEdge: React.FC<EdgeProps> = ({
       if (intraGroupBounds) {
         targetPillX = Math.max(intraGroupBounds.minX, Math.min(targetPillX, intraGroupBounds.maxX));
         targetPillY = Math.max(intraGroupBounds.minY, Math.min(targetPillY, intraGroupBounds.maxY));
-        currentLabelOffsetX = targetPillX - basePill.x;
-        currentLabelOffsetY = targetPillY - basePill.y;
-      } else if (isCrossGroupConnection && (crossGroupContainers?.sourceContainer || crossGroupContainers?.targetContainer)) {
-        const clamped = computeDerivedCrossGroupPillPosition({
-          sourceX,
-          sourceY,
-          targetX: effectiveTargetX,
-          targetY: effectiveTargetY,
-          corridorX: labelX,
-          corridorY: labelY,
-          sourceContainer: crossGroupContainers?.sourceContainer,
-          targetContainer: crossGroupContainers?.targetContainer,
-          otherContainers: crossGroupContainers?.otherContainers,
-          offset: { x: currentLabelOffsetX, y: currentLabelOffsetY },
-        });
-        targetPillX = clamped.x;
-        targetPillY = clamped.y;
         currentLabelOffsetX = targetPillX - basePill.x;
         currentLabelOffsetY = targetPillY - basePill.y;
       }

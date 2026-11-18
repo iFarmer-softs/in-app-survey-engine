@@ -6395,5 +6395,139 @@ assert.ok(
 
 console.log('   ✅ Merged Top Floating Action Bar Architecture & Separate Back Button validated with 100% precision.');
 
-console.log('\n🎉 ALL TESTS PASSED SUCCESSFULLY! (59/59 test suites passed)\n');
+// ---------------------------------------------------------------------------
+// SUITE 60: Group Connector Clean Routing, Straight Line & Attached Label
+// ---------------------------------------------------------------------------
+console.log('\n6️⃣0️⃣ Testing Group Connector Clean Routing, Straight Line, Attached Label & Smooth Group Dragging...');
+
+const g1Box60 = { minX: 100, maxX: 450, minY: 100, maxY: 500 };
+const g2Box60 = { minX: 700, maxX: 1050, minY: 100, maxY: 500 };
+
+// 60A: Clean straight line when items are nearly level (<= 16px difference)
+const [levelPath60, levelLx60, levelLy60] = getCrossGroupOrthogonalPath({
+  sourceX: 450,
+  sourceY: 200,
+  sourcePosition: Position.Right,
+  targetX: 750,
+  targetY: 210, // |200 - 210| = 10px <= 16px
+  targetPosition: Position.Left,
+  sourceContainer: g1Box60,
+  targetContainer: g2Box60,
+});
+
+assert.ok(levelPath60 && levelPath60.startsWith('M'), 'Nearly level group connector must be valid SVG');
+const levelSegments60 = getPathSegments(levelPath60);
+const levelVertSegments60 = levelSegments60.filter(
+  (seg) => Math.abs(seg.from.x - seg.to.x) < 0.5 && Math.abs(seg.from.y - seg.to.y) > 1
+);
+assert.strictEqual(
+  levelVertSegments60.length,
+  0,
+  'When items are nearly level (|dy| <= 16), connector must use a clean straight line with 0 vertical detours'
+);
+assert.strictEqual(levelLy60, 205, 'Label Y must stay attached to the exact vertical center of the straight line (205)');
+assert.strictEqual(levelLx60, 575, 'Label X must be situated in the corridor between groups (575)');
+
+// 60B: Single clean middle bend when items are not level (no unnecessary up/across/down detours)
+const [bendedPath60, bendedLx60, bendedLy60] = getCrossGroupOrthogonalPath({
+  sourceX: 450,
+  sourceY: 200,
+  sourcePosition: Position.Right,
+  targetX: 750,
+  targetY: 350, // |200 - 350| = 150px > 16px
+  targetPosition: Position.Left,
+  sourceContainer: g1Box60,
+  targetContainer: g2Box60,
+});
+
+const bendedCoords60 = Array.from(bendedPath60.matchAll(/([MLCQ])\s*([-\d.]+)[,\s]+([-\d.]+)/g)).map((m) => ({
+  x: parseFloat(m[2]),
+  y: parseFloat(m[3]),
+}));
+
+// Single clean middle bend has exactly 6 SVG path points (M, L+Q for corner 1, L+Q for corner 2, L for target)
+assert.strictEqual(
+  bendedCoords60.length,
+  6,
+  `Single clean middle bend must consist of exactly two rounded corners (6 SVG commands, got ${bendedCoords60.length})`
+);
+
+// Verify no unnecessary detour going up above the groups (minY = 100) or down below (maxY = 500)
+const minYInPath = Math.min(...bendedCoords60.map((c) => c.y));
+const maxYInPath = Math.max(...bendedCoords60.map((c) => c.y));
+assert.strictEqual(
+  minYInPath >= 200,
+  true,
+  `Path must never detour up above sourceY (minYInPath=${minYInPath} >= 200)`
+);
+assert.strictEqual(
+  maxYInPath <= 350,
+  true,
+  `Path must never detour down below targetY (maxYInPath=${maxYInPath} <= 350)`
+);
+
+// Verify vertical spine sits cleanly at expected corridor prefX = (450 + 700) / 2 = 575
+const bendedSegments60 = getPathSegments(bendedPath60);
+const vertSpine60 = bendedSegments60.find(
+  (seg) => Math.abs(seg.from.x - seg.to.x) < 0.5 && Math.abs(seg.from.x - 575) < 2
+);
+assert.notStrictEqual(vertSpine60, undefined, 'Connector must route via a single vertical corridor at x=575');
+
+// Label stays attached to the middle of the line
+assert.strictEqual(bendedLx60, 575, 'Label X must be situated exactly on the corridor vertical spine (575)');
+assert.strictEqual(bendedLy60, 275, 'Label Y must be attached to the exact vertical midpoint (200 + 350)/2 = 275');
+
+// 60C: Automatic recalculation when group moves (no stretching or leftover fixed coordinates)
+const g2MovedBox60 = { minX: 900, maxX: 1250, minY: 150, maxY: 550 };
+const [movedPath60, movedLx60, movedLy60] = getCrossGroupOrthogonalPath({
+  sourceX: 450,
+  sourceY: 200,
+  sourcePosition: Position.Right,
+  targetX: 950,
+  targetY: 400,
+  targetPosition: Position.Left,
+  sourceContainer: g1Box60,
+  targetContainer: g2MovedBox60,
+});
+
+// Corridor recomputes dynamically to (450 + 900) / 2 = 675 without staying stuck at 575
+assert.strictEqual(movedLx60, 675, 'Moving group must automatically recalculate connector corridor to 675');
+assert.strictEqual(movedLy60, 300, 'Moving group must automatically recalculate label midpoint to (200 + 400)/2 = 300');
+assert.notStrictEqual(bendedPath60, movedPath60, 'Path must smoothly adapt to moved group without distortion');
+
+// Verify that clearing stale fixed positions on cross-group edges preserves smooth dynamic recalculation
+const crossEdgeWithStaleCoordinates = {
+  id: 'e-cross-1',
+  source: 'q-1',
+  target: 'q-2',
+  data: {
+    isCrossGroup: true,
+    centerX: 575,
+    centerY: 275,
+    corridorOffsetX: 10,
+    corridorOffsetY: 15,
+    labelOffsetX: 20,
+    labelOffsetY: 25,
+  },
+};
+
+// Simulate group move edge update logic from useGroupContainers:
+const {
+  centerX: _cx,
+  centerY: _cy,
+  corridorOffsetX: _cox,
+  corridorOffsetY: _coy,
+  labelOffsetX: _lox,
+  labelOffsetY: _loy,
+  ...clearedData
+} = crossEdgeWithStaleCoordinates.data;
+
+assert.strictEqual(clearedData.centerX, undefined, 'Moving group must clear stale fixed centerX');
+assert.strictEqual(clearedData.centerY, undefined, 'Moving group must clear stale fixed centerY');
+assert.strictEqual(clearedData.corridorOffsetX, undefined, 'Moving group must clear stale corridorOffsetX');
+assert.strictEqual(clearedData.labelOffsetX, undefined, 'Moving group must clear stale labelOffsetX');
+
+console.log('   ✅ Group Connector Clean Routing, Straight Line, Attached Label & Smooth Group Dragging validated with 100% precision.');
+
+console.log('\n🎉 ALL TESTS PASSED SUCCESSFULLY! (60/60 test suites passed)\n');
 

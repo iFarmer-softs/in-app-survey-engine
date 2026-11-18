@@ -71,10 +71,10 @@ export function useGroupContainers({
               }
             });
 
-            if (childIdSet.size > 0) {
-              const dx = change.position.x - node.position.x;
-              const dy = change.position.y - node.position.y;
-              if (dx !== 0 || dy !== 0) {
+            const dx = change.position.x - node.position.x;
+            const dy = change.position.y - node.position.y;
+            if (dx !== 0 || dy !== 0) {
+              if (childIdSet.size > 0) {
                 childIdSet.forEach((childId) => {
                   // Guard against double-shifting if this child position was already in the changes array
                   if (changes.some((c) => 'id' in c && c.id === childId && c.type === 'position')) return;
@@ -91,64 +91,111 @@ export function useGroupContainers({
                     });
                   }
                 });
+              }
 
-                // Recompute edge paths & fire updates on group transform changes
-                setEdges((currentEdges) =>
-                  currentEdges.map((edge) => {
-                    const srcIn = childIdSet.has(edge.source);
-                    const tgtIn = childIdSet.has(edge.target);
-                    const isGroupEdge = edge.source === node.id || edge.target === node.id;
-                    if (srcIn && tgtIn && edge.data) {
-                      const eData = edge.data as any;
-                      if (eData.centerX !== undefined || eData.centerY !== undefined) {
-                        return {
-                          ...edge,
-                          data: {
-                            ...eData,
-                            centerX: eData.centerX !== undefined ? eData.centerX + dx : undefined,
-                            centerY: eData.centerY !== undefined ? eData.centerY + dy : undefined,
-                            _groupTransformTick: Date.now(),
-                          },
-                        };
-                      }
-                    }
-                    if (srcIn || tgtIn || isGroupEdge) {
+              // Recompute edge paths & fire updates on group transform changes
+              setEdges((currentEdges) =>
+                currentEdges.map((edge) => {
+                  const srcIn = childIdSet.has(edge.source);
+                  const tgtIn = childIdSet.has(edge.target);
+                  const isGroupEdge = edge.source === node.id || edge.target === node.id;
+                  if (srcIn && tgtIn && edge.data) {
+                    const eData = edge.data as any;
+                    if (eData.centerX !== undefined || eData.centerY !== undefined) {
                       return {
                         ...edge,
                         data: {
-                          ...(edge.data || {}),
+                          ...eData,
+                          centerX: eData.centerX !== undefined ? eData.centerX + dx : undefined,
+                          centerY: eData.centerY !== undefined ? eData.centerY + dy : undefined,
                           _groupTransformTick: Date.now(),
                         },
                       };
                     }
-                    return edge;
-                  })
-                );
-
-                // Fire "update edges" call for all ports of its children & group container
-                if (updateNodeInternals) {
-                  try {
-                    updateNodeInternals(node.id);
-                    childIdSet.forEach((childId) => updateNodeInternals(childId));
-                  } catch {
-                    // ignore if not mounted
                   }
-                }
-
-                if (typeof window !== 'undefined') {
-                  window.dispatchEvent(
-                    new CustomEvent('canvas-update-edges', {
-                      detail: {
-                        groupId: node.id,
-                        childIds: Array.from(childIdSet),
-                        dx,
-                        dy,
+                  if (srcIn || tgtIn || isGroupEdge) {
+                    const isCross = (srcIn && !tgtIn) || (!srcIn && tgtIn) || isGroupEdge;
+                    if (isCross && edge.data) {
+                      const {
+                        centerX,
+                        centerY,
+                        corridorOffsetX,
+                        corridorOffsetY,
+                        labelOffsetX,
+                        labelOffsetY,
+                        ...restData
+                      } = (edge.data || {}) as any;
+                      return {
+                        ...edge,
+                        data: {
+                          ...restData,
+                          _groupTransformTick: Date.now(),
+                        },
+                      };
+                    }
+                    return {
+                      ...edge,
+                      data: {
+                        ...(edge.data || {}),
+                        _groupTransformTick: Date.now(),
                       },
-                    })
-                  );
+                    };
+                  }
+                  return edge;
+                })
+              );
+
+              // Fire "update edges" call for all ports of its children & group container
+              if (updateNodeInternals) {
+                try {
+                  updateNodeInternals(node.id);
+                  childIdSet.forEach((childId) => updateNodeInternals(childId));
+                } catch {
+                  // ignore if not mounted
                 }
               }
+
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(
+                  new CustomEvent('canvas-update-edges', {
+                    detail: {
+                      groupId: node.id,
+                      childIds: Array.from(childIdSet),
+                      dx,
+                      dy,
+                    },
+                  })
+                );
+              }
             }
+          } else if (node) {
+            // A regular node moved: clear fixed bend/corridor coordinates on any cross-group edge connected to it
+            setEdges((currentEdges) =>
+              currentEdges.map((edge) => {
+                if (edge.source === node.id || edge.target === node.id) {
+                  const eData = (edge.data || {}) as any;
+                  if (eData.isCrossGroup || eData.centerX !== undefined || eData.corridorOffsetX !== undefined) {
+                    const {
+                      centerX,
+                      centerY,
+                      corridorOffsetX,
+                      corridorOffsetY,
+                      labelOffsetX,
+                      labelOffsetY,
+                      ...restData
+                    } = eData;
+                    return {
+                      ...edge,
+                      data: {
+                        ...restData,
+                        _groupTransformTick: Date.now(),
+                      },
+                    };
+                  }
+                }
+                return edge;
+              })
+            );
           }
         }
       });
