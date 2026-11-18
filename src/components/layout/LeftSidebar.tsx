@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
   Play,
   CheckCircle2,
-  GitBranch,
+  Split,
   FastForward,
   HelpCircle,
   Type,
@@ -61,7 +61,7 @@ const PALETTE_ITEMS: PaletteItem[] = [
     name: 'Decision / Branch',
     nameBn: 'শর্ত / লজিক্যাল শাখা',
     nodeType: 'decision',
-    icon: <GitBranch size={16} />,
+    icon: <Split size={16} />,
     category: 'flowchart',
     color: '#f59e0b',
     description: 'Routes questions by Match, Greater, or Less rules',

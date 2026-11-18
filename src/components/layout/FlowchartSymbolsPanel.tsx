@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import {
   Search,
   GripVertical,
-  GitBranch,
+  Split,
   X,
   PanelLeftClose,
   Sparkles,
@@ -30,7 +30,7 @@ const FLOW_LOGIC_ITEMS: FlowLogicItem[] = [
     title: 'Condition / Branch',
     titleBn: 'শর্ত / লজিক্যাল শাখা',
     badge: 'if / else',
-    icon: <GitBranch size={16} />,
+    icon: <Split size={16} />,
     color: '#f59e0b',
     description: 'Evaluates conditional logic (Match, Greater, Less) based on answer',
   },

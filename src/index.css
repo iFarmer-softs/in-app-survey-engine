@@ -8815,6 +8815,187 @@ body.is-resizing-sidebar * {
   margin-left: 0;
 }
 
+/* Header Center Dock Integrated Hamburger & Expandable Actions */
+.header-center-dock .figma-hamburger-btn {
+  width: 32px;
+  height: 32px;
+}
+
+/* Header Center Dock History Controls (Undo / Redo) Smooth Right-to-Left Transition */
+.header-center-dock .header-history-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+  transition: max-width 0.32s cubic-bezier(0.16, 1, 0.3, 1),
+              width 0.32s cubic-bezier(0.16, 1, 0.3, 1),
+              min-width 0.32s cubic-bezier(0.16, 1, 0.3, 1),
+              opacity 0.24s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 0.32s cubic-bezier(0.16, 1, 0.3, 1),
+              margin 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: max-width, opacity, transform, margin;
+}
+
+.header-center-dock .header-history-controls.is-visible {
+  max-width: 90px;
+  opacity: 1;
+  transform: translateX(0) scale(1);
+  pointer-events: auto;
+  margin-left: 0;
+}
+
+.header-center-dock .header-history-controls.is-hidden {
+  width: 0 !important;
+  max-width: 0 !important;
+  min-width: 0 !important;
+  opacity: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  margin-left: -4px !important; /* Neutralizes gap in .header-center-dock */
+  border-width: 0 !important;
+  overflow: hidden !important;
+  pointer-events: none !important;
+  transform: translateX(14px) scale(0.92); /* Enters smoothly from right to left */
+}
+
+.header-center-dock .header-history-controls .header-icon-btn {
+  transition: opacity 0.24s ease, transform 0.24s cubic-bezier(0.16, 1, 0.3, 1), background 0.15s ease, color 0.15s ease;
+}
+
+.header-center-dock .header-history-controls.is-hidden .header-icon-btn {
+  opacity: 0;
+  transform: translateX(10px);
+}
+
+.header-center-dock .header-history-controls.is-visible .header-icon-btn {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.header-center-dock .figma-action-btn.figma-dock-action.is-collapsed {
+  width: 0 !important;
+  max-width: 0 !important;
+  min-width: 0 !important;
+  opacity: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  margin-left: -6px !important; /* Neutralizes the 6px gap of .header-center-dock */
+  border-width: 0 !important;
+  border-color: transparent !important;
+  overflow: hidden !important;
+  pointer-events: none !important;
+  transform: scale(0.6) translateX(-4px);
+}
+
+.header-center-dock .figma-action-btn.figma-dock-action.is-expanded {
+  width: 32px;
+  max-width: 32px;
+  min-width: 32px;
+  height: 32px;
+  opacity: 1;
+  pointer-events: auto;
+  transform: scale(1) translateX(0);
+  margin-left: 0;
+}
+
+.header-center-dock .figma-action-btn.item-danger {
+  color: #f87171;
+}
+
+.header-center-dock .figma-action-btn.item-danger:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.35);
+  transform: scale(1.08);
+}
+
+.header-center-dock .figma-action-btn.diagnostics-btn.has-error {
+  color: #ef4444;
+}
+
+.header-center-dock .figma-action-btn.diagnostics-btn.has-warning {
+  color: #f59e0b;
+}
+
+.header-center-dock .figma-action-btn.diagnostics-btn.is-healthy {
+  color: #10b981;
+}
+
+.header-center-dock .figma-action-btn .header-dot-indicator {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+}
+
+/* Version Control & History Dropdown in Header Center Dock */
+.header-center-dock .header-version-dropdown-container {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  transition: all 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.header-center-dock .header-version-dropdown-container.is-collapsed {
+  width: 0 !important;
+  max-width: 0 !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  margin-left: -6px !important;
+  padding: 0 !important;
+  border-width: 0 !important;
+  overflow: visible !important;
+  pointer-events: none !important;
+}
+
+.header-center-dock .header-version-dropdown-container.is-expanded {
+  width: 32px;
+  max-width: 32px;
+  min-width: 32px;
+  height: 32px;
+  margin-left: 0;
+  pointer-events: auto;
+}
+
+.header-center-dock .figma-action-btn.header-version-btn {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid transparent;
+}
+
+.header-center-dock .figma-action-btn.header-version-btn.is-active {
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.14);
+  border-color: rgba(16, 185, 129, 0.35);
+}
+
+.header-center-dock .header-version-btn .version-status-dot {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.header-center-dock .header-version-btn .version-status-dot.is-published {
+  background: #10b981;
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.7);
+}
+
+.header-center-dock .header-version-btn .version-status-dot.is-draft {
+  background: #f59e0b;
+  box-shadow: 0 0 6px rgba(245, 158, 11, 0.7);
+}
+
+.header-center-dock .header-version-dropdown-container .header-version-menu {
+  top: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+}
+
 /* Canvas Mode Cursor Classes */
 .survey-flow-canvas.is-tool-hand,
 .survey-flow-canvas.is-tool-hand .react-flow__pane {

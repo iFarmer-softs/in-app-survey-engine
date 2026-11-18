@@ -141,8 +141,8 @@ const FlowEditor: React.FC = () => {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
 
-  // Visual Inspection: Dependency Path Tracing state
-  const [isPathTracingEnabled, setIsPathTracingEnabled] = useState(true);
+  // Visual Inspection: Dependency Path Tracing state (disabled for now)
+  const [isPathTracingEnabled, setIsPathTracingEnabled] = useState(false);
   const togglePathTracing = useCallback(() => {
     setIsPathTracingEnabled((prev) => !prev);
   }, []);

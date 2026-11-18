@@ -6,15 +6,15 @@ import {
   GitBranch,
   GitCommit,
   Rocket,
-  ChevronDown,
   SlidersHorizontal,
   Undo2,
   Redo2,
-  GitFork,
   Crop,
   Trash2,
   Plus,
   Layers,
+  Menu,
+  Split,
 } from 'lucide-react';
 import type { GroupMeta } from '../../utils/schemaCompiler';
 import type { FlowNodeType, AnswerType } from '../../types/survey';
@@ -40,7 +40,7 @@ const FLOW_LOGIC_ITEMS: FlowLogicItem[] = [
     title: 'Condition / Branch',
     titleBn: 'শর্ত / লজিক্যাল শাখা',
     badge: 'if / else',
-    icon: <GitBranch size={16} />,
+    icon: <Split size={16} />,
     color: '#f59e0b',
     description: 'Evaluates conditional logic (Match, Greater, Less) based on answer',
   },
@@ -120,8 +120,8 @@ export const Header: React.FC<HeaderProps> = ({
   canRedo,
   onUndo,
   onRedo,
-  isPathTracingEnabled,
-  onTogglePathTracing,
+  isPathTracingEnabled: _isPathTracingEnabled,
+  onTogglePathTracing: _onTogglePathTracing,
   onAddGroupArea,
   isServerConnected,
   onSave: _onSave,
@@ -139,19 +139,62 @@ export const Header: React.FC<HeaderProps> = ({
   onCycleTheme: _onCycleTheme,
 }) => {
   const [isVersionMenuOpen, setIsVersionMenuOpen] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
+  const [isPinned, setIsPinned] = useState(false);
 
   const versionDropdownRef = useRef<HTMLDivElement>(null);
+  const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleMouseEnter = () => {
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+      hoverTimeoutRef.current = null;
+    }
+    setIsHovered(true);
+  };
+
+  const handleMouseLeave = () => {
+    if (isVersionMenuOpen) {
+      return;
+    }
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+    }
+    hoverTimeoutRef.current = setTimeout(() => {
+      setIsHovered(false);
+    }, 280);
+  };
+
+  const handleTogglePin = () => {
+    setIsPinned((prev) => {
+      const next = !prev;
+      if (!next) {
+        setIsHovered(false);
+      }
+      return next;
+    });
+  };
 
   // Close menus on outside click
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      const target = e.target as Node;
+      const target = e.target as HTMLElement | null;
       if (
         versionDropdownRef.current &&
-        !versionDropdownRef.current.contains(target)
+        !versionDropdownRef.current.contains(target as Node)
       ) {
         setIsVersionMenuOpen(false);
       }
+      if (
+        target &&
+        target.closest(
+          '.header-center-dock .figma-hamburger-btn, .header-center-dock .figma-dock-action, .header-version-dropdown-container'
+        )
+      ) {
+        return;
+      }
+      setIsPinned(false);
+      setIsHovered(false);
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => {
@@ -164,12 +207,16 @@ export const Header: React.FC<HeaderProps> = ({
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setIsVersionMenuOpen(false);
+        setIsPinned(false);
+        setIsHovered(false);
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
+
+  const isExpanded = isHovered || isPinned;
 
   const onDragStartQuestion = (event: React.DragEvent) => {
     const payload = JSON.stringify({
@@ -241,107 +288,6 @@ export const Header: React.FC<HeaderProps> = ({
               {projectTitle || 'SurveyFlow Studio'}
             </span>
 
-            {/* Version Indicator Dropdown */}
-            <div
-              className="header-version-dropdown-container"
-              ref={versionDropdownRef}
-            >
-              <button
-                type="button"
-                className="header-version-pill"
-                onClick={() => setIsVersionMenuOpen((prev) => !prev)}
-                data-tooltip="Flowchart Releases & History"
-                data-tooltip-pos="bottom-right"
-                aria-label="Flowchart Releases & History"
-              >
-                <GitBranch size={12} className="version-pill-icon" />
-                <span className="version-pill-text">v{currentVersion}</span>
-                <span className={`version-pill-tag tag-${versionStatus}`}>
-                  {versionStatus === 'published' ? 'Live' : 'Draft'}
-                </span>
-                <ChevronDown
-                  size={11}
-                  className={`version-chevron ${
-                    isVersionMenuOpen ? 'is-rotated' : ''
-                  }`}
-                />
-              </button>
-
-              {isVersionMenuOpen && (
-                <div className="header-version-menu animate-in">
-                  <div className="menu-header-info">
-                    <span className="menu-current-ver">
-                      Current: v{currentVersion}
-                    </span>
-                    <span className="menu-current-status">
-                      {versionStatus === 'published'
-                        ? '🟢 Published production release'
-                        : '🟡 Working draft (unreleased)'}
-                    </span>
-                  </div>
-
-                  <div className="menu-divider" />
-
-                  {onOpenCreateSnapshot && (
-                    <button
-                      type="button"
-                      className="version-menu-item"
-                      onClick={() => {
-                        setIsVersionMenuOpen(false);
-                        onOpenCreateSnapshot();
-                      }}
-                    >
-                      <GitCommit size={15} className="menu-icon text-blue-400" />
-                      <div className="menu-text-wrap">
-                        <span className="menu-title">Save Draft Snapshot</span>
-                        <span className="menu-desc">
-                          Record an immutable working checkpoint
-                        </span>
-                      </div>
-                    </button>
-                  )}
-
-                  {onPublishVersion && (
-                    <button
-                      type="button"
-                      className="version-menu-item"
-                      onClick={() => {
-                        setIsVersionMenuOpen(false);
-                        onPublishVersion();
-                      }}
-                    >
-                      <Rocket size={15} className="menu-icon text-emerald-400" />
-                      <div className="menu-text-wrap">
-                        <span className="menu-title">Publish Version (Release)</span>
-                        <span className="menu-desc">
-                          Bump SemVer & deploy live schema
-                        </span>
-                      </div>
-                    </button>
-                  )}
-
-                  {onOpenVersionHistory && (
-                    <button
-                      type="button"
-                      className="version-menu-item"
-                      onClick={() => {
-                        setIsVersionMenuOpen(false);
-                        onOpenVersionHistory();
-                      }}
-                    >
-                      <SlidersHorizontal size={15} className="menu-icon text-violet-400" />
-                      <div className="menu-text-wrap">
-                        <span className="menu-title">Version History & Rollback</span>
-                        <span className="menu-desc">
-                          Compare & rollback across releases
-                        </span>
-                      </div>
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-
             {/* Backend Server Connectivity Status Dot */}
             <div
               className={`header-server-status-dot ${isServerConnected ? 'connected' : 'offline'}`}
@@ -380,7 +326,7 @@ export const Header: React.FC<HeaderProps> = ({
           data-tooltip-pos="bottom"
           aria-label="Condition / Branch"
         >
-          <GitBranch size={15} className="text-amber-400" />
+          <Split size={15} className="text-amber-400" />
         </div>
 
         {/* Creation Tool 3: Group Area Mode Toggle (Crop) */}
@@ -408,99 +354,211 @@ export const Header: React.FC<HeaderProps> = ({
           />
         </button>
 
-        {/* Creation Tool 4: Reusable Question Groups Library */}
+        {/* History Controls (Undo / Redo) - Hidden by default, reveals smoothly from right to left upon canvas changes */}
+        <div
+          className={`header-history-controls ${
+            canUndo || canRedo ? 'is-visible' : 'is-hidden'
+          }`}
+          aria-hidden={!canUndo && !canRedo}
+        >
+          <div className="header-dock-divider" />
+
+          {/* History: Undo */}
+          <button
+            type="button"
+            className="header-icon-btn"
+            onClick={onUndo}
+            disabled={!canUndo}
+            data-tooltip="Undo (Ctrl+Z)"
+            data-tooltip-pos="bottom"
+            aria-label="Undo"
+            tabIndex={canUndo || canRedo ? 0 : -1}
+          >
+            <Undo2 size={15} />
+          </button>
+
+          {/* History: Redo */}
+          <button
+            type="button"
+            className="header-icon-btn"
+            onClick={onRedo}
+            disabled={!canRedo}
+            data-tooltip="Redo (Ctrl+Y)"
+            data-tooltip-pos="bottom"
+            aria-label="Redo"
+            tabIndex={canUndo || canRedo ? 0 : -1}
+          >
+            <Redo2 size={15} />
+          </button>
+        </div>
+
+        <div className="header-dock-divider" />
+
+        {/* Hamburger Menu Trigger Icon */}
         <button
           type="button"
-          className="header-icon-btn"
+          className={`figma-action-btn figma-hamburger-btn ${isExpanded ? 'is-active' : ''}`}
+          onClick={handleTogglePin}
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
+          data-tooltip={isExpanded ? 'Collapse Actions' : 'Expand Actions'}
+          data-tooltip-pos="bottom"
+          aria-label="Actions Menu"
+        >
+          <Menu size={16} />
+        </button>
+
+        {/* 1. Question Group Library */}
+        <button
+          type="button"
+          className={`figma-action-btn figma-dock-action ${isExpanded ? 'is-expanded' : 'is-collapsed'}`}
           onClick={onNavigateToGroups}
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
           data-tooltip="Question Groups Library"
           data-tooltip-pos="bottom"
           aria-label="Question Groups Library"
+          tabIndex={isExpanded ? 0 : -1}
+          aria-hidden={!isExpanded}
         >
           <Layers size={15} />
           {groups.length > 0 && <span className="header-dot-indicator" />}
         </button>
 
-        <div className="header-dock-divider" />
-
-        {/* History: Undo */}
-        <button
-          type="button"
-          className="header-icon-btn"
-          onClick={onUndo}
-          disabled={!canUndo}
-          data-tooltip="Undo (Ctrl+Z)"
-          data-tooltip-pos="bottom"
-          aria-label="Undo"
+        {/* 2. Version Releases & Snapshots Dropdown */}
+        <div
+          ref={versionDropdownRef}
+          className={`header-version-dropdown-container ${isExpanded || isVersionMenuOpen ? 'is-expanded' : 'is-collapsed'
+            }`}
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
         >
-          <Undo2 size={15} />
-        </button>
-
-        {/* History: Redo */}
-        <button
-          type="button"
-          className="header-icon-btn"
-          onClick={onRedo}
-          disabled={!canRedo}
-          data-tooltip="Redo (Ctrl+Y)"
-          data-tooltip-pos="bottom"
-          aria-label="Redo"
-        >
-          <Redo2 size={15} />
-        </button>
-
-        {/* Dependency Path Tracing */}
-        {onTogglePathTracing && (
           <button
             type="button"
-            className={`header-icon-btn ${isPathTracingEnabled ? 'is-active-cyan' : ''}`}
-            onClick={onTogglePathTracing}
-            data-tooltip={
-              isPathTracingEnabled
-                ? 'Dependency Path Tracing (ON)'
-                : 'Dependency Path Tracing (OFF)'
-            }
+            className={`figma-action-btn figma-dock-action header-version-btn header-version-pill ${isVersionMenuOpen ? 'is-active' : ''
+              } ${isExpanded || isVersionMenuOpen ? 'is-expanded' : 'is-collapsed'}`}
+            onClick={() => {
+              setIsPinned(true);
+              setIsVersionMenuOpen((prev) => !prev);
+            }}
+            data-tooltip={`Version v${currentVersion} (${versionStatus === 'published' ? 'Live' : 'Draft'
+              }) — Releases & Snapshots`}
             data-tooltip-pos="bottom"
-            aria-label="Dependency Path Tracing"
+            aria-label="Flowchart Releases & History"
+            tabIndex={isExpanded || isVersionMenuOpen ? 0 : -1}
+            aria-hidden={!isExpanded && !isVersionMenuOpen}
           >
-            <GitFork size={15} />
+            <GitBranch size={15} />
+            <span
+              className={`header-dot-indicator version-status-dot ${versionStatus === 'published' ? 'is-published' : 'is-draft'
+                }`}
+            />
           </button>
-        )}
 
-        {/* Clear Canvas */}
+          {isVersionMenuOpen && (
+            <div className="header-version-menu animate-in">
+              <div className="menu-header-info">
+                <span className="menu-current-ver">
+                  Current: v{currentVersion}
+                </span>
+                <span className="menu-current-status">
+                  {versionStatus === 'published'
+                    ? '🟢 Published production release'
+                    : '🟡 Working draft (unreleased)'}
+                </span>
+              </div>
+
+              <div className="menu-divider" />
+
+              {onOpenCreateSnapshot && (
+                <button
+                  type="button"
+                  className="version-menu-item"
+                  onClick={() => {
+                    setIsVersionMenuOpen(false);
+                    setIsPinned(false);
+                    setIsHovered(false);
+                    onOpenCreateSnapshot();
+                  }}
+                >
+                  <GitCommit size={15} className="menu-icon text-blue-400" />
+                  <div className="menu-text-wrap">
+                    <span className="menu-title">Save Draft Snapshot</span>
+                    <span className="menu-desc">
+                      Record an immutable working checkpoint
+                    </span>
+                  </div>
+                </button>
+              )}
+
+              {onPublishVersion && (
+                <button
+                  type="button"
+                  className="version-menu-item"
+                  onClick={() => {
+                    setIsVersionMenuOpen(false);
+                    setIsPinned(false);
+                    setIsHovered(false);
+                    onPublishVersion();
+                  }}
+                >
+                  <Rocket size={15} className="menu-icon text-emerald-400" />
+                  <div className="menu-text-wrap">
+                    <span className="menu-title">Publish Version (Release)</span>
+                    <span className="menu-desc">
+                      Bump SemVer & deploy live schema
+                    </span>
+                  </div>
+                </button>
+              )}
+
+              {onOpenVersionHistory && (
+                <button
+                  type="button"
+                  className="version-menu-item"
+                  onClick={() => {
+                    setIsVersionMenuOpen(false);
+                    setIsPinned(false);
+                    setIsHovered(false);
+                    onOpenVersionHistory();
+                  }}
+                >
+                  <SlidersHorizontal size={15} className="menu-icon text-violet-400" />
+                  <div className="menu-text-wrap">
+                    <span className="menu-title">Version History & Rollback</span>
+                    <span className="menu-desc">
+                      Compare & rollback across releases
+                    </span>
+                  </div>
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* 3. Real-time Flow Diagnostics Icon Button */}
         <button
           type="button"
-          className="header-icon-btn tools-menu-item item-danger"
-          onClick={() => onClearCanvas?.()}
-          data-tooltip="Clear Canvas (Blank)"
-          data-tooltip-pos="bottom"
-          aria-label="Clear Canvas (Blank)"
-        >
-          <Trash2 size={15} />
-        </button>
-
-        <div className="header-dock-divider" />
-
-        {/* Real-time Flow Diagnostics Icon Button */}
-        <button
-          type="button"
-          className={`header-icon-btn diagnostics-btn ${
-            diagnosticsErrors > 0
-              ? 'has-error'
-              : diagnosticsCount > 0
+          className={`figma-action-btn figma-dock-action diagnostics-btn ${diagnosticsErrors > 0
+            ? 'has-error'
+            : diagnosticsCount > 0
               ? 'has-warning'
               : 'is-healthy'
-          }`}
+            } ${isExpanded ? 'is-expanded' : 'is-collapsed'}`}
           onClick={onOpenDiagnostics}
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
           data-tooltip={
             diagnosticsErrors > 0
               ? `${diagnosticsErrors} Errors Detected`
               : diagnosticsCount > 0
-              ? `${diagnosticsCount} Warnings`
-              : 'Flow Valid — No Errors'
+                ? `${diagnosticsCount} Warnings`
+                : 'Flow Valid — No Errors'
           }
           data-tooltip-pos="bottom"
           aria-label="Flow Diagnostics"
+          tabIndex={isExpanded ? 0 : -1}
+          aria-hidden={!isExpanded}
         >
           {diagnosticsErrors > 0 ? (
             <>
@@ -515,6 +573,22 @@ export const Header: React.FC<HeaderProps> = ({
           ) : (
             <CheckCircle2 size={15} className="text-emerald-400" />
           )}
+        </button>
+
+        {/* 4. Clear Canvas Icon */}
+        <button
+          type="button"
+          className={`figma-action-btn figma-dock-action tools-menu-item item-danger ${isExpanded ? 'is-expanded' : 'is-collapsed'}`}
+          onClick={() => onClearCanvas?.()}
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
+          data-tooltip="Clear Canvas (Blank)"
+          data-tooltip-pos="bottom"
+          aria-label="Clear Canvas (Blank)"
+          tabIndex={isExpanded ? 0 : -1}
+          aria-hidden={!isExpanded}
+        >
+          <Trash2 size={15} />
         </button>
       </div>
     </header>

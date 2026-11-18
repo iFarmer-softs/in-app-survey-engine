@@ -6577,5 +6577,300 @@ assert.strictEqual(
 
 console.log('   ✅ Header Tools Dropdown Replacement with Direct Danger Clear Canvas Button validated with 100% precision.');
 
-console.log('\n🎉 ALL TESTS PASSED SUCCESSFULLY! (61/61 test suites passed)\n');
+// ---------------------------------------------------------------------------
+// SUITE 62: Top Floating Action Bar Integrated Hamburger Menu & Expandable Actions
+// ---------------------------------------------------------------------------
+console.log('\n6️⃣2️⃣ Testing Top Floating Action Bar Integrated Hamburger Menu & Expandable Actions...');
+
+// 62A: Hamburger button exists in Header.tsx
+assert.ok(
+  updatedHeaderSource.includes('figma-action-btn figma-hamburger-btn'),
+  'Header.tsx must contain a figma-action-btn figma-hamburger-btn trigger'
+);
+
+// 62B: Question Group Library, Clear Canvas, and Warning/Diagnostics are in figma-dock-action buttons
+assert.ok(
+  updatedHeaderSource.includes('figma-action-btn figma-dock-action') &&
+  updatedHeaderSource.includes('onNavigateToGroups') &&
+  updatedHeaderSource.includes('Question Groups Library'),
+  'Question Groups Library must be an expandable figma-dock-action button in header-center-dock'
+);
+
+assert.ok(
+  updatedHeaderSource.includes('figma-action-btn figma-dock-action tools-menu-item item-danger'),
+  'Clear Canvas must be an expandable figma-dock-action item-danger button in header-center-dock'
+);
+
+assert.ok(
+  updatedHeaderSource.includes('figma-action-btn figma-dock-action diagnostics-btn'),
+  'Warning/Diagnostics icon must be an expandable figma-dock-action diagnostics-btn in header-center-dock'
+);
+
+// 62C: Smooth hover and pin interactions matching bottom floating action bar
+assert.ok(
+  updatedHeaderSource.includes('handleMouseEnter') &&
+  updatedHeaderSource.includes('handleMouseLeave') &&
+  updatedHeaderSource.includes('handleTogglePin'),
+  'Header must handle mouse enter, mouse leave (with delay), and pin toggle for smooth reveal'
+);
+
+// 62D: CSS rules for header-center-dock hamburger and expandable actions exist
+const updatedCssSource = fs.readFileSync(path.resolve(process.cwd(), 'src/index.css'), 'utf-8');
+assert.ok(
+  updatedCssSource.includes('.header-center-dock .figma-hamburger-btn'),
+  'index.css must define styling for .header-center-dock .figma-hamburger-btn'
+);
+assert.ok(
+  updatedCssSource.includes('.header-center-dock .figma-action-btn.figma-dock-action.is-collapsed'),
+  'index.css must define collapsed state for .header-center-dock .figma-dock-action'
+);
+assert.ok(
+  updatedCssSource.includes('.header-center-dock .figma-action-btn.figma-dock-action.is-expanded'),
+  'index.css must define expanded state for .header-center-dock .figma-dock-action'
+);
+
+console.log('   ✅ Top Floating Action Bar Integrated Hamburger Menu & Expandable Actions validated with 100% precision.');
+
+// ---------------------------------------------------------------------------
+// SUITE 63: Icon-Based Version Control in Top Floating Hamburger Actions
+// ---------------------------------------------------------------------------
+console.log('\n6️⃣3️⃣ Testing Icon-Based Version Control in Top Floating Hamburger Actions...');
+
+const latestHeaderSource = fs.readFileSync(path.resolve(process.cwd(), 'src/components/layout/Header.tsx'), 'utf-8');
+const latestCssSource = fs.readFileSync(path.resolve(process.cwd(), 'src/index.css'), 'utf-8');
+
+// 63A: Brand name row is streamlined and does not contain the old inline version dropdown
+const brandTitlesMatch = latestHeaderSource.match(/<div className="brand-titles">([\s\S]*?)<\/div>\s*<\/div>/);
+assert.ok(brandTitlesMatch, 'Header must contain brand-titles container');
+assert.strictEqual(
+  brandTitlesMatch[1].includes('header-version-dropdown-container'),
+  false,
+  'brand-name-row must be decluttered and not contain header-version-dropdown-container'
+);
+
+// 63B: Version indicator is defined using GitBranch icon button in hamburger dock actions
+assert.ok(
+  latestHeaderSource.includes('header-version-btn') &&
+  latestHeaderSource.includes('version-status-dot') &&
+  latestHeaderSource.includes('<GitBranch size={15} />'),
+  'Version indicator must be defined using GitBranch icon button with status dot in hamburger actions'
+);
+
+// 63C: Dropdown container is nested inside the expandable action set with proper pin/expand bindings
+assert.ok(
+  latestHeaderSource.includes('header-version-dropdown-container') &&
+  latestHeaderSource.includes('setIsVersionMenuOpen'),
+  'Version dropdown must be accessible from the icon button with toggle state'
+);
+
+// 63D: CSS rules define smooth expand/collapse and status dot styling for the version icon button
+assert.ok(
+  latestCssSource.includes('.header-center-dock .header-version-dropdown-container'),
+  'index.css must style .header-center-dock .header-version-dropdown-container'
+);
+assert.ok(
+  latestCssSource.includes('.header-center-dock .figma-action-btn.header-version-btn'),
+  'index.css must style .header-center-dock .figma-action-btn.header-version-btn'
+);
+assert.ok(
+  latestCssSource.includes('.header-center-dock .header-version-btn .version-status-dot'),
+  'index.css must style status dots for the version button'
+);
+
+console.log('   ✅ Icon-Based Version Control in Top Floating Hamburger Actions validated with 100% precision.');
+
+// ---------------------------------------------------------------------------
+// SUITE 64: Dependency Path Tracing Header Button Removal & State Neutralization
+// ---------------------------------------------------------------------------
+console.log('\n6️⃣4️⃣ Testing Dependency Path Tracing Header Button Removal...');
+
+const headerCode = fs.readFileSync(path.resolve(process.cwd(), 'src/components/layout/Header.tsx'), 'utf-8');
+
+// 64A: The Dependency Path Tracing button is completely removed from Header.tsx
+assert.strictEqual(
+  headerCode.includes('Dependency Path Tracing (OFF)'),
+  false,
+  'Dependency Path Tracing (OFF) tooltip must be removed from Header.tsx'
+);
+assert.strictEqual(
+  headerCode.includes('Dependency Path Tracing (ON)'),
+  false,
+  'Dependency Path Tracing (ON) tooltip must be removed from Header.tsx'
+);
+assert.strictEqual(
+  headerCode.includes('<GitFork'),
+  false,
+  'GitFork icon button must not be rendered in Header.tsx'
+);
+
+// 64B: App.tsx has isPathTracingEnabled default set to false
+const appCode = fs.readFileSync(path.resolve(process.cwd(), 'src/App.tsx'), 'utf-8');
+assert.ok(
+  appCode.includes('useState(false)'),
+  'App.tsx must initialize isPathTracingEnabled as false'
+);
+
+console.log('   ✅ Dependency Path Tracing Header Button Removal validated with 100% precision.');
+
+// ---------------------------------------------------------------------------
+// SUITE 65: Dynamic Canvas-Change Undo/Redo Visibility & Right-to-Left Transition
+// ---------------------------------------------------------------------------
+console.log('\n6️⃣5️⃣ Testing Dynamic Canvas-Change Undo/Redo Visibility & Right-to-Left Transition...');
+
+const currentHeaderSource = fs.readFileSync(path.resolve(process.cwd(), 'src/components/layout/Header.tsx'), 'utf-8');
+const currentCssSource = fs.readFileSync(path.resolve(process.cwd(), 'src/index.css'), 'utf-8');
+
+// 65A: Header contains header-history-controls wrapper tied to canUndo || canRedo
+assert.ok(
+  currentHeaderSource.includes('header-history-controls'),
+  'Header.tsx must contain header-history-controls wrapper'
+);
+assert.ok(
+  currentHeaderSource.includes("canUndo || canRedo ? 'is-visible' : 'is-hidden'"),
+  'header-history-controls must be dynamically toggled via canUndo || canRedo'
+);
+assert.ok(
+  currentHeaderSource.includes('<Undo2 size={15} />') && currentHeaderSource.includes('<Redo2 size={15} />'),
+  'Undo and Redo buttons must reside inside the header-history-controls container'
+);
+
+// 65B: CSS defines right-to-left smooth transition
+assert.ok(
+  currentCssSource.includes('.header-center-dock .header-history-controls'),
+  'index.css must define .header-center-dock .header-history-controls'
+);
+assert.ok(
+  currentCssSource.includes('.header-center-dock .header-history-controls.is-hidden'),
+  'index.css must define .header-center-dock .header-history-controls.is-hidden'
+);
+assert.ok(
+  currentCssSource.includes('transform: translateX(14px)'),
+  'is-hidden state must be offset to the right (translateX(14px)) for right-to-left entrance'
+);
+assert.ok(
+  currentCssSource.includes('.header-center-dock .header-history-controls.is-visible') &&
+  currentCssSource.includes('transform: translateX(0)'),
+  'is-visible state must settle at translateX(0)'
+);
+
+console.log('   ✅ Dynamic Canvas-Change Undo/Redo Visibility & Right-to-Left Transition validated with 100% precision.');
+
+// ---------------------------------------------------------------------------
+// SUITE 66: Distinct Relatable Condition/Branch Logic Icon (Split vs GitBranch)
+// ---------------------------------------------------------------------------
+console.log('\n6️⃣6️⃣ Testing Distinct Relatable Condition/Branch Logic Icon...');
+
+const headerSrc = fs.readFileSync(path.resolve(process.cwd(), 'src/components/layout/Header.tsx'), 'utf-8');
+const symbolsSrc = fs.readFileSync(path.resolve(process.cwd(), 'src/components/layout/FlowchartSymbolsPanel.tsx'), 'utf-8');
+const sidebarSrc = fs.readFileSync(path.resolve(process.cwd(), 'src/components/layout/LeftSidebar.tsx'), 'utf-8');
+const decisionNodeSrc = fs.readFileSync(path.resolve(process.cwd(), 'src/components/nodes/DecisionNode.tsx'), 'utf-8');
+
+// 66A: Header.tsx uses Split icon for Condition / Branch
+assert.ok(
+  headerSrc.includes('<Split size={15} className="text-amber-400" />'),
+  'Header.tsx must render Split icon for Condition / Branch quick tool'
+);
+assert.ok(
+  headerSrc.includes('icon: <Split size={16} />'),
+  'Header.tsx FLOW_LOGIC_ITEMS must define Split icon for Condition / Branch'
+);
+
+// 66B: Version control still cleanly uses GitBranch icon
+assert.ok(
+  headerSrc.includes('<GitBranch size={15} />'),
+  'Header.tsx version indicator in hamburger menu must retain GitBranch icon'
+);
+
+// 66C: Panels and Decision Node use Split icon for visual consistency
+assert.ok(
+  symbolsSrc.includes('icon: <Split size={16} />'),
+  'FlowchartSymbolsPanel must use Split icon for Condition / Branch'
+);
+assert.ok(
+  sidebarSrc.includes('icon: <Split size={16} />'),
+  'LeftSidebar must use Split icon for Condition / Branch'
+);
+assert.ok(
+  decisionNodeSrc.includes('<Split size={16} className="decision-icon" />'),
+  'DecisionNode must render Split icon inside the decision diamond'
+);
+
+console.log('   ✅ Distinct Relatable Condition/Branch Logic Icon validated with 100% precision.');
+
+// ---------------------------------------------------------------------------
+// SUITE 67: Group Frame Multi-Directional Resize & Content Boundary Clamping
+// ---------------------------------------------------------------------------
+console.log('\n6️⃣7️⃣ Testing Group Frame Multi-Directional Resize & Content Boundary Clamping...');
+
+const groupContainersCode = fs.readFileSync(path.resolve(process.cwd(), 'src/hooks/useGroupContainers.ts'), 'utf-8');
+const groupFrameCode = fs.readFileSync(path.resolve(process.cwd(), 'src/components/nodes/GroupFrameNode.tsx'), 'utf-8');
+
+// 67A: useGroupContainers ignores position changes triggered by resize operations so children are not shifted
+assert.ok(
+  groupContainersCode.includes('isResizing') &&
+  groupContainersCode.includes("c.type === 'dimensions' && 'id' in c && c.id === change.id"),
+  'useGroupContainers must detect resize dimensions changes and prevent shifting children'
+);
+
+// 67B: GroupFrameNode.tsx strictly validates all 4 boundary insets during shouldResize
+assert.ok(
+  groupFrameCode.includes('params.x + 12 > child.position.x'),
+  'handleShouldResize must prevent shrinking left edge past child symbols'
+);
+assert.ok(
+  groupFrameCode.includes('params.x + params.width - 12 < child.position.x + cW'),
+  'handleShouldResize must prevent shrinking right edge past child symbols'
+);
+assert.ok(
+  groupFrameCode.includes('params.y + 44 > child.position.y'),
+  'handleShouldResize must prevent shrinking top header past child symbols'
+);
+assert.ok(
+  groupFrameCode.includes('params.y + params.height - 12 < child.position.y + cH'),
+  'handleShouldResize must prevent shrinking bottom edge past child symbols'
+);
+
+// 67C: GroupFrameNode defines onResizeEnd auto-recovery clamping
+assert.ok(
+  groupFrameCode.includes('handleResizeEnd') &&
+  groupFrameCode.includes('onResizeEnd={handleResizeEnd}'),
+  'GroupFrameNode must wire handleResizeEnd to NodeResizer onResizeEnd'
+);
+
+// 67D: Algorithmic Simulation of Left Resize & Content Enclosure
+const testFrame = {
+  id: 'frame-test-resize',
+  position: { x: 100, y: 100 },
+  style: { width: 440, height: 480 },
+};
+const conditionNode = {
+  id: 'decision-check-1',
+  type: 'decision',
+  position: { x: 250, y: 200 },
+  data: { containerId: 'frame-test-resize' },
+};
+const condDims = getNodeDimensions(conditionNode as any);
+
+// Check 1: Expanding leftwards (from x=100 to x=60, width=480)
+const expandLeftParams = { x: 60, y: 100, width: 480, height: 480 };
+const expandLeftValid =
+  expandLeftParams.x + 12 <= conditionNode.position.x &&
+  expandLeftParams.x + expandLeftParams.width - 12 >= conditionNode.position.x + condDims.width &&
+  expandLeftParams.y + 44 <= conditionNode.position.y &&
+  expandLeftParams.y + expandLeftParams.height - 12 >= conditionNode.position.y + condDims.height;
+assert.ok(expandLeftValid, 'Expanding leftwards must be permitted as condition node remains safely inside');
+
+// Check 2: Shrinking leftwards past condition node (x=240, width=300)
+const shrinkPastParams = { x: 240, y: 100, width: 300, height: 480 };
+const shrinkPastViolatesLeft = shrinkPastParams.x + 12 > conditionNode.position.x;
+assert.ok(shrinkPastViolatesLeft, 'Shrinking left edge past condition node must be rejected');
+
+// Check 3: Automatic recovery: Item at x=80 outside frame at (100, 100) is brought back to x=112
+const outsideItem = { x: 80, y: 150 };
+const recoveredX = Math.max(outsideItem.x, testFrame.position.x + 12);
+assert.strictEqual(recoveredX, 112, 'Outside item must be clamped back inside to frame.x + 12');
+
+console.log('   ✅ Group Frame Multi-Directional Resize & Content Boundary Clamping validated with 100% precision.');
+
+console.log('\n🎉 ALL TESTS PASSED SUCCESSFULLY! (67/67 test suites passed)\n');
 

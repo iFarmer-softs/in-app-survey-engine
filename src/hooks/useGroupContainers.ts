@@ -7,7 +7,7 @@ import {
   findNearestNonOverlappingPosition,
   type FrameRect,
 } from '../utils/flowLayout';
-import { isNodeInContainer } from '../utils/flowValidator';
+import { isNodeInContainer, getNodeDimensions } from '../utils/flowValidator';
 import type { GroupMeta } from '../utils/schemaCompiler';
 
 interface UseGroupContainersProps {
@@ -63,6 +63,15 @@ export function useGroupContainers({
         } else if (change.type === 'position' && change.position) {
           const node = nodes.find((n) => n.id === change.id);
           if (node && (node.type === 'groupContainer' || node.type === 'groupFrame')) {
+            // Guard: If this position change is part of a RESIZE operation (dimensions change exists for this node),
+            // do NOT shift children! When resizing, the boundary changes while child items stay at their canvas positions.
+            const isResizing = changes.some(
+              (c) => c.type === 'dimensions' && 'id' in c && c.id === change.id
+            );
+            if (isResizing) {
+              return;
+            }
+
             // Free movement during drag with lockstep child synchronisation (non-overlap resolved on release)
             const childIdSet = new Set<string>();
             nodes.forEach((n) => {
@@ -192,6 +201,74 @@ export function useGroupContainers({
                       },
                     };
                   }
+                }
+                return edge;
+              })
+            );
+          }
+        } else if (change.type === 'dimensions' && change.dimensions) {
+          const node = nodes.find((n) => n.id === change.id);
+          if (node && (node.type === 'groupContainer' || node.type === 'groupFrame')) {
+            const posChange = changes.find(
+              (c) => c.type === 'position' && 'id' in c && c.id === change.id
+            ) as any;
+            const fX = posChange?.position?.x ?? node.position.x;
+            const fY = posChange?.position?.y ?? node.position.y;
+            const fW = change.dimensions.width;
+            const fH = change.dimensions.height;
+
+            // Automatically bring back inside any child item that ended up outside after resize
+            nodes.forEach((child) => {
+              if (isNodeInContainer(child, node, nodes)) {
+                const { width: cW, height: cH } = getNodeDimensions(child);
+                let newX = child.position.x;
+                let newY = child.position.y;
+                let clamped = false;
+
+                if (newX < fX + 12) {
+                  newX = fX + 12;
+                  clamped = true;
+                }
+                if (newX + cW > fX + fW - 12) {
+                  newX = Math.max(fX + 12, fX + fW - 12 - cW);
+                  clamped = true;
+                }
+                if (newY < fY + 44) {
+                  newY = fY + 44;
+                  clamped = true;
+                }
+                if (newY + cH > fY + fH - 12) {
+                  newY = Math.max(fY + 44, fY + fH - 12 - cH);
+                  clamped = true;
+                }
+
+                if (clamped) {
+                  if (!changes.some((c) => 'id' in c && c.id === child.id && c.type === 'position')) {
+                    extraChanges.push({
+                      type: 'position',
+                      id: child.id,
+                      position: { x: newX, y: newY },
+                    });
+                  }
+                }
+              }
+            });
+
+            // Recompute edges & connectors on resize
+            setEdges((currentEdges) =>
+              currentEdges.map((edge) => {
+                const isGroupEdge = edge.source === node.id || edge.target === node.id;
+                const isChildEdge = nodes.some(
+                  (n) => (n.id === edge.source || n.id === edge.target) && isNodeInContainer(n, node, nodes)
+                );
+                if (isGroupEdge || isChildEdge) {
+                  return {
+                    ...edge,
+                    data: {
+                      ...(edge.data || {}),
+                      _groupTransformTick: Date.now(),
+                    },
+                  };
                 }
                 return edge;
               })

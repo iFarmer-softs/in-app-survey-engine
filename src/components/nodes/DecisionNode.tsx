@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import type { NodeProps } from '@xyflow/react';
-import { GitBranch } from 'lucide-react';
+import { Split } from 'lucide-react';
 import type { DecisionNodeData } from '../../types/survey';
 import { EightWayHandles } from './EightWayHandles';
 
@@ -16,7 +16,7 @@ export const DecisionNode = memo(({ data, selected }: NodeProps) => {
       />
 
       <div className="decision-diamond">
-        <GitBranch size={16} className="decision-icon" />
+        <Split size={16} className="decision-icon" />
         <div className="decision-content">
           <div className="decision-label">{nodeData.label || 'Condition Rule'}</div>
           <div className="decision-rule">

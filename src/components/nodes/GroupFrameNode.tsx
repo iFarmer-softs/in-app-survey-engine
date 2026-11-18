@@ -1,5 +1,5 @@
 import { memo, useCallback } from 'react';
-import { NodeResizer, useReactFlow } from '@xyflow/react';
+import { NodeResizer, useReactFlow, useUpdateNodeInternals } from '@xyflow/react';
 import type { NodeProps } from '@xyflow/react';
 import { Layers, Sparkles, Trash } from 'lucide-react';
 import type { GroupCategory } from '../../types/group';
@@ -29,7 +29,8 @@ export const GroupFrameNode = memo(({ id, data, selected, onDeleteFrame }: Group
   const color = nodeData.color || '#8b5cf6';
   const activeColor = isDropTarget ? '#10b981' : color;
   const deleteHandler = onDeleteFrame || nodeData.onDeleteFrame;
-  const { getNodes } = useReactFlow();
+  const { getNodes, setNodes, setEdges } = useReactFlow();
+  const updateNodeInternals = useUpdateNodeInternals();
 
   const allNodes = getNodes();
   const currentFrameNode = allNodes.find((n) => n.id === id);
@@ -61,24 +62,28 @@ export const GroupFrameNode = memo(({ id, data, selected, onDeleteFrame }: Group
         }
       }
 
-      // Ensure resized boundary doesn't clip or sit on top of any child symbols
+      // Ensure resized boundary doesn't shrink past any child symbols from any direction
       const currentFrame = allNodes.find((n) => n.id === id);
       const childNodes = allNodes.filter((n) =>
         isNodeInContainer(n, currentFrame || ({ id } as any), allNodes)
       );
-      const currentBounds = currentFrame ? getContainerBounds(currentFrame) : { fW: 440, fH: 480 };
-      const isExpandingRight = params.width > currentBounds.fW;
-      const isExpandingBottom = params.height > currentBounds.fH;
 
       for (const child of childNodes) {
         const { width: cW, height: cH } = getNodeDimensions(child);
-        if (child.position.x < params.x + 12 || child.position.y < params.y + 44) {
+        // Left border check: group left edge (+12px inset) cannot cross past child's left edge
+        if (params.x + 12 > child.position.x) {
           return false;
         }
-        if (child.position.x + cW > params.x + params.width - 12 && !isExpandingRight) {
+        // Right border check: group right edge (-12px inset) cannot cross past child's right edge
+        if (params.x + params.width - 12 < child.position.x + cW) {
           return false;
         }
-        if (child.position.y + cH > params.y + params.height - 12 && !isExpandingBottom) {
+        // Top header check: group top header (+44px inset) cannot cross past child's top edge
+        if (params.y + 44 > child.position.y) {
+          return false;
+        }
+        // Bottom border check: group bottom edge (-12px inset) cannot cross past child's bottom edge
+        if (params.y + params.height - 12 < child.position.y + cH) {
           return false;
         }
       }
@@ -86,6 +91,94 @@ export const GroupFrameNode = memo(({ id, data, selected, onDeleteFrame }: Group
       return true;
     },
     [getNodes, id]
+  );
+
+  // Automatically bring back inside any child item that was left outside after a resize
+  const handleResizeEnd = useCallback(
+    (_event: any, params: { x: number; y: number; width: number; height: number }) => {
+      const allNodes = getNodes();
+      const currentFrame = allNodes.find((n) => n.id === id);
+      if (!currentFrame) return;
+
+      const fX = params.x;
+      const fY = params.y;
+      const fW = params.width;
+      const fH = params.height;
+
+      const childNodes = allNodes.filter((n) =>
+        isNodeInContainer(n, currentFrame, allNodes)
+      );
+
+      let nodesUpdated = false;
+      const updatedNodes = allNodes.map((n) => {
+        if (childNodes.some((c) => c.id === n.id)) {
+          const { width: cW, height: cH } = getNodeDimensions(n);
+          let newX = n.position.x;
+          let newY = n.position.y;
+          let clamped = false;
+
+          if (newX < fX + 12) {
+            newX = fX + 12;
+            clamped = true;
+          }
+          if (newX + cW > fX + fW - 12) {
+            newX = Math.max(fX + 12, fX + fW - 12 - cW);
+            clamped = true;
+          }
+          if (newY < fY + 44) {
+            newY = fY + 44;
+            clamped = true;
+          }
+          if (newY + cH > fY + fH - 12) {
+            newY = Math.max(fY + 44, fY + fH - 12 - cH);
+            clamped = true;
+          }
+
+          if (clamped) {
+            nodesUpdated = true;
+            return {
+              ...n,
+              position: { x: newX, y: newY },
+            };
+          }
+        }
+        return n;
+      });
+
+      if (nodesUpdated) {
+        setNodes(updatedNodes);
+      }
+
+      // Recompute connectors and trigger edge tick
+      setEdges((edges) =>
+        edges.map((e) => {
+          const isRelated =
+            e.source === id ||
+            e.target === id ||
+            childNodes.some((c) => c.id === e.source || c.id === e.target);
+          if (isRelated) {
+            return {
+              ...e,
+              data: {
+                ...(e.data || {}),
+                _groupTransformTick: Date.now(),
+              },
+            };
+          }
+          return e;
+        })
+      );
+
+      if (updateNodeInternals) {
+        try {
+          updateNodeInternals(id);
+          childNodes.forEach((c) => updateNodeInternals(c.id));
+        } catch {
+          // ignore if unmounted
+        }
+      }
+    },
+    [getNodes, setNodes, setEdges, updateNodeInternals, id]
   );
 
   return (
@@ -115,6 +208,7 @@ export const GroupFrameNode = memo(({ id, data, selected, onDeleteFrame }: Group
         lineClassName="group-frame-resize-line"
         handleClassName="group-frame-resize-handle"
         shouldResize={handleShouldResize}
+        onResizeEnd={handleResizeEnd}
       />
 
       {/* Frame Header Bar */}
