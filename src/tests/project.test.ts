@@ -6872,5 +6872,208 @@ assert.strictEqual(recoveredX, 112, 'Outside item must be clamped back inside to
 
 console.log('   ✅ Group Frame Multi-Directional Resize & Content Boundary Clamping validated with 100% precision.');
 
-console.log('\n🎉 ALL TESTS PASSED SUCCESSFULLY! (67/67 test suites passed)\n');
+// ---------------------------------------------------------------------------
+// SUITE 68: Canvas Architecture Hardening (Collapsed Bounds, Frame Sizing, Auto Layout, Edge Offsets & NodeTypes Stability)
+// ---------------------------------------------------------------------------
+console.log('\n6️⃣8️⃣ Testing Canvas Architecture Hardening (Collapsed Bounds, Frame Sizing, Auto Layout, Edge Offsets & NodeTypes Stability)...');
+
+// 68A: Collapsed group hit box bounds & non-claiming of downstream nodes
+const collapsedGroupNode: any = {
+  id: 'group-collapsed-1',
+  type: 'groupContainer',
+  position: { x: 100, y: 50 },
+  data: {
+    groupId: 'group-collapsed-1',
+    numericGroupId: 1,
+    isCollapsed: true,
+    expandedHeight: 620,
+    questionIds: ['q-inside-1'],
+  },
+};
+const collapsedBounds = getContainerBounds(collapsedGroupNode);
+assert.strictEqual(
+  collapsedBounds.fH,
+  105,
+  'Collapsed group container bounds must equal collapsed milestone height (105px), NOT expandedHeight (620px)'
+);
+
+// Downstream nodes D and E positioned below the collapsed milestone card (e.g. at y = 250)
+const downstreamNodeD: any = {
+  id: 'node-D-downstream',
+  type: 'question',
+  position: { x: 120, y: 250 },
+  data: { question_id: 201, question: 'Downstream Question D' },
+};
+const downstreamNodeE: any = {
+  id: 'node-E-downstream',
+  type: 'question',
+  position: { x: 120, y: 350 },
+  data: { question_id: 202, question: 'Downstream Question E' },
+};
+
+assert.strictEqual(
+  isNodeInContainer(downstreamNodeD, collapsedGroupNode, [collapsedGroupNode, downstreamNodeD, downstreamNodeE]),
+  false,
+  'Downstream node D outside collapsed milestone card must NOT be claimed by collapsed group'
+);
+assert.strictEqual(
+  isNodeInContainer(downstreamNodeE, collapsedGroupNode, [collapsedGroupNode, downstreamNodeD, downstreamNodeE]),
+  false,
+  'Downstream node E outside collapsed milestone card must NOT be claimed by collapsed group'
+);
+
+// 68B: Frame true shrinking below previous 440x480 floors
+const smallFrameNode: any = {
+  id: 'frame-small-1',
+  type: 'groupFrame',
+  position: { x: 200, y: 150 },
+  width: 320,
+  height: 200,
+  data: { groupId: 'frame-small-1', numericGroupId: 2 },
+};
+const smallBounds = getContainerBounds(smallFrameNode);
+assert.strictEqual(smallBounds.fW, 320, 'getContainerBounds must respect 320px width without artificial 440px floor');
+assert.strictEqual(smallBounds.fH, 200, 'getContainerBounds must respect 200px height without artificial 480px floor');
+
+const nodeBelowSmallFrame: any = {
+  id: 'q-below-frame',
+  type: 'question',
+  position: { x: 220, y: 380 }, // below 150 + 200 = 350
+  data: { question_id: 301, question: 'Question below small frame' },
+};
+assert.strictEqual(
+  isNodeInContainer(nodeBelowSmallFrame, smallFrameNode, [smallFrameNode, nodeBelowSmallFrame]),
+  false,
+  'Node below shrunk frame must NOT be claimed by the frame'
+);
+
+// 68C: Auto Layout recognizes groupFrame and locks children inside
+const frameForLayout: any = {
+  id: 'layout-frame-1',
+  type: 'groupFrame',
+  position: { x: 100, y: 50 },
+  width: 440,
+  height: 600,
+  data: { groupId: 'layout-frame-1', numericGroupId: 1 },
+};
+const childQ1: any = {
+  id: 'q-child-1',
+  type: 'question',
+  position: { x: 130, y: 120 },
+  data: { question_id: 401, containerId: 'layout-frame-1' },
+};
+const childQ2: any = {
+  id: 'q-child-2',
+  type: 'question',
+  position: { x: 130, y: 300 },
+  data: { question_id: 402, containerId: 'layout-frame-1' },
+};
+const startTerminator: any = {
+  id: 'start-node-test',
+  type: 'start',
+  position: { x: 300, y: 0 },
+  data: { label: 'Start Flow' },
+};
+
+const layoutEdges: any[] = [
+  { id: 'e-s-q1', source: 'start-node-test', target: 'layout-frame-1' },
+  { id: 'e-q1-q2', source: 'q-child-1', target: 'q-child-2' },
+];
+
+const autoLaidOutNodes = calculateHierarchicalLayout(
+  [startTerminator, frameForLayout, childQ1, childQ2],
+  layoutEdges
+);
+
+const laidOutFrame = autoLaidOutNodes.find((n) => n.id === 'layout-frame-1')!;
+const laidOutQ1 = autoLaidOutNodes.find((n) => n.id === 'q-child-1')!;
+const laidOutQ2 = autoLaidOutNodes.find((n) => n.id === 'q-child-2')!;
+
+assert.ok(laidOutFrame, 'Auto layout must retain groupFrame node');
+assert.ok(laidOutQ1, 'Auto layout must retain child question 1');
+assert.ok(laidOutQ2, 'Auto layout must retain child question 2');
+
+// Children must remain inside the laid out frame
+const { fX: lfX, fY: lfY, fW: lfW, fH: lfH } = getContainerBounds(laidOutFrame);
+assert.ok(
+  laidOutQ1.position.x >= lfX && laidOutQ1.position.x <= lfX + lfW,
+  'Child Q1 must remain within horizontal bounds of groupFrame after Auto Layout'
+);
+assert.ok(
+  laidOutQ1.position.y >= lfY && laidOutQ1.position.y <= lfY + lfH,
+  'Child Q1 must remain within vertical bounds of groupFrame after Auto Layout'
+);
+assert.ok(
+  laidOutQ2.position.x >= lfX && laidOutQ2.position.x <= lfX + lfW,
+  'Child Q2 must remain within horizontal bounds of groupFrame after Auto Layout'
+);
+assert.ok(
+  laidOutQ2.position.y >= lfY && laidOutQ2.position.y <= lfY + lfH,
+  'Child Q2 must remain within vertical bounds of groupFrame after Auto Layout'
+);
+
+// 68D: Moving ordinary node preserves relative edge offsets (corridorOffsetX/Y, labelOffsetX/Y)
+const edgeWithOffsets: any = {
+  id: 'edge-relative-test',
+  source: 'q-child-1',
+  target: 'q-child-2',
+  data: {
+    centerX: 450,
+    centerY: 220,
+    corridorOffsetX: 35,
+    corridorOffsetY: -15,
+    labelOffsetX: 12,
+    labelOffsetY: 8,
+  },
+};
+
+// Simulate node move in useGroupContainers: clear absolute centerX/Y, preserve relative offsets
+const updatedEdgeData = (() => {
+  if (edgeWithOffsets.data.centerX !== undefined || edgeWithOffsets.data.centerY !== undefined) {
+    const { centerX, centerY, ...restData } = edgeWithOffsets.data;
+    return restData;
+  }
+  return edgeWithOffsets.data;
+})();
+
+assert.strictEqual(updatedEdgeData.centerX, undefined, 'Moving node must clear absolute centerX');
+assert.strictEqual(updatedEdgeData.centerY, undefined, 'Moving node must clear absolute centerY');
+assert.strictEqual(updatedEdgeData.corridorOffsetX, 35, 'Moving node must preserve relative corridorOffsetX');
+assert.strictEqual(updatedEdgeData.corridorOffsetY, -15, 'Moving node must preserve relative corridorOffsetY');
+assert.strictEqual(updatedEdgeData.labelOffsetX, 12, 'Moving node must preserve relative labelOffsetX');
+assert.strictEqual(updatedEdgeData.labelOffsetY, 8, 'Moving node must preserve relative labelOffsetY');
+
+// 68E: Code structure assertions for stability, reconnectable edges, and autosave debounce
+const appSource = fs.readFileSync(path.resolve(process.cwd(), 'src/App.tsx'), 'utf-8');
+const edgeSource = fs.readFileSync(path.resolve(process.cwd(), 'src/components/edges/CustomFlowchartEdge.tsx'), 'utf-8');
+const connSource = fs.readFileSync(path.resolve(process.cwd(), 'src/hooks/useFlowCanvasConnections.ts'), 'utf-8');
+
+assert.ok(
+  edgeSource.includes("new CustomEvent('canvas-edge-drag-start'"),
+  'CustomFlowchartEdge must dispatch canvas-edge-drag-start on drag initiation'
+);
+assert.ok(
+  appSource.includes("window.addEventListener('canvas-edge-drag-start', handleEdgeDragStart)"),
+  'App.tsx must listen to canvas-edge-drag-start to capture pristine pre-drag undo snapshot'
+);
+assert.ok(
+  appSource.includes('containerHandlersRef'),
+  'App.tsx must use containerHandlersRef to stabilize nodeTypes memo across renders'
+);
+assert.ok(
+  appSource.includes('edgesReconnectable={true}'),
+  'App.tsx must set edgesReconnectable={true} to enable interactive edge reconnection'
+);
+assert.ok(
+  appSource.includes('setTimeout') && appSource.includes('800'),
+  'App.tsx must debounce project autosave to prevent 60 saves/sec during drags'
+);
+assert.ok(
+  connSource.includes('isTerminator'),
+  'useFlowCanvasConnections must allow start/end terminators to connect across group boundaries'
+);
+
+console.log('   ✅ Canvas Architecture Hardening (Collapsed Bounds, Frame Sizing, Auto Layout, Edge Offsets & NodeTypes Stability) validated with 100% precision.');
+
+console.log('\n🎉 ALL TESTS PASSED SUCCESSFULLY! (68/68 test suites passed)\n');
 

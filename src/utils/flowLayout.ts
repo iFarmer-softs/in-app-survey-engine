@@ -1,4 +1,5 @@
 import type { Node, Edge } from '@xyflow/react';
+import { isNodeInContainer, getContainerBounds } from './flowValidator';
 
 interface LayoutOptions {
   nodeWidth?: number;
@@ -54,8 +55,8 @@ export function calculateHierarchicalLayout(
     startY = 50,
   } = options;
 
-  // 1. Map group containers and identify child questions
-  const groupContainers = nodes.filter((n) => n.type === 'groupContainer');
+  // 1. Map group containers and identify child questions (both groupContainer and groupFrame)
+  const groupContainers = nodes.filter((n) => n.type === 'groupContainer' || n.type === 'groupFrame');
   const childToContainer = new Map<string, string>();
   const containerChildren = new Map<string, string[]>();
 
@@ -75,6 +76,17 @@ export function calculateHierarchicalLayout(
       const existing = containerChildren.get(cId)!;
       if (!existing.includes(n.id)) {
         existing.push(n.id);
+      }
+    } else if (n.type !== 'groupContainer' && n.type !== 'groupFrame') {
+      const foundContainer = groupContainers.find((c) => isNodeInContainer(n, c, nodes));
+      if (foundContainer) {
+        if (!childToContainer.has(n.id)) {
+          childToContainer.set(n.id, foundContainer.id);
+        }
+        const existing = containerChildren.get(foundContainer.id)!;
+        if (!existing.includes(n.id)) {
+          existing.push(n.id);
+        }
       }
     }
   });
@@ -183,13 +195,18 @@ export function calculateHierarchicalLayout(
 
     idsInLevel.forEach((id) => {
       const node = topLevelNodeMap.get(id);
-      if (node && node.type === 'groupContainer') {
+      if (node && (node.type === 'groupContainer' || node.type === 'groupFrame')) {
         const isCollapsed = Boolean((node.data as any)?.isCollapsed);
         if (!isCollapsed) {
-          const children = containerChildren.get(id) || [];
-          const childNodes = children.map((cId) => nodeMap.get(cId)).filter(Boolean);
-          const { totalExpandedHeight } = calculateGroupQuestionLayout(childNodes);
-          maxH = Math.max(maxH, totalExpandedHeight + 60);
+          if (node.type === 'groupFrame') {
+            const { fH } = getContainerBounds(node);
+            maxH = Math.max(maxH, fH + 60);
+          } else {
+            const children = containerChildren.get(id) || [];
+            const childNodes = children.map((cId) => nodeMap.get(cId)).filter(Boolean);
+            const { totalExpandedHeight } = calculateGroupQuestionLayout(childNodes);
+            maxH = Math.max(maxH, totalExpandedHeight + 60);
+          }
         }
       }
     });
@@ -205,7 +222,7 @@ export function calculateHierarchicalLayout(
     currentY += levelHeight.get(lvl) || verticalSpacing;
   });
 
-  // Position top-level nodes and position child questions directly inside their group container
+  // Position top-level nodes and position child questions directly inside their group container / frame
   sortedLevels.forEach((lvl) => {
     const idsInLevel = nodesByLevel.get(lvl)!;
     const count = idsInLevel.length;
@@ -219,17 +236,35 @@ export function calculateHierarchicalLayout(
 
       newPositions.set(id, { x: roundedX, y: roundedY });
 
-      // If this is a groupContainer, lock its child questions inside it
+      // If this is a groupContainer or groupFrame, position its child items safely inside
       if (containerChildren.has(id)) {
         const children = containerChildren.get(id)!;
-        const childNodes = children.map((cId) => nodeMap.get(cId)).filter(Boolean);
-        const { offsets } = calculateGroupQuestionLayout(childNodes);
-        children.forEach((childId, cIdx) => {
-          newPositions.set(childId, {
-            x: roundedX + 30,
-            y: roundedY + (offsets[cIdx] ?? (115 + cIdx * 200)),
+        const containerNode = topLevelNodeMap.get(id);
+        if (containerNode?.type === 'groupFrame') {
+          // For groupFrame, translate children by the frame's translation delta to preserve internal relative layout
+          const origX = containerNode.position.x;
+          const origY = containerNode.position.y;
+          const deltaX = roundedX - origX;
+          const deltaY = roundedY - origY;
+          children.forEach((childId) => {
+            const childNode = nodeMap.get(childId);
+            if (childNode) {
+              newPositions.set(childId, {
+                x: Math.round(childNode.position.x + deltaX),
+                y: Math.round(childNode.position.y + deltaY),
+              });
+            }
           });
-        });
+        } else {
+          const childNodes = children.map((cId) => nodeMap.get(cId)).filter(Boolean);
+          const { offsets } = calculateGroupQuestionLayout(childNodes);
+          children.forEach((childId, cIdx) => {
+            newPositions.set(childId, {
+              x: roundedX + 30,
+              y: roundedY + (offsets[cIdx] ?? (115 + cIdx * 200)),
+            });
+          });
+        }
       }
     });
   });
@@ -246,17 +281,33 @@ export function calculateHierarchicalLayout(
 
       if (containerChildren.has(id)) {
         const children = containerChildren.get(id)!;
-        const childNodes = children.map((cId) => nodeMap.get(cId)).filter(Boolean);
-        const { offsets, totalExpandedHeight } = calculateGroupQuestionLayout(childNodes);
-        children.forEach((childId, cIdx) => {
-          newPositions.set(childId, {
-            x: roundedX + 30,
-            y: roundedY + (offsets[cIdx] ?? (115 + cIdx * 200)),
-          });
-        });
         const node = topLevelNodeMap.get(id);
-        const isCollapsed = Boolean((node?.data as any)?.isCollapsed);
-        orphanY += isCollapsed ? 140 : totalExpandedHeight + 40;
+        if (node?.type === 'groupFrame') {
+          const deltaX = roundedX - node.position.x;
+          const deltaY = roundedY - node.position.y;
+          children.forEach((childId) => {
+            const childNode = nodeMap.get(childId);
+            if (childNode) {
+              newPositions.set(childId, {
+                x: Math.round(childNode.position.x + deltaX),
+                y: Math.round(childNode.position.y + deltaY),
+              });
+            }
+          });
+          const { fH } = getContainerBounds(node);
+          orphanY += fH + 40;
+        } else {
+          const childNodes = children.map((cId) => nodeMap.get(cId)).filter(Boolean);
+          const { offsets, totalExpandedHeight } = calculateGroupQuestionLayout(childNodes);
+          children.forEach((childId, cIdx) => {
+            newPositions.set(childId, {
+              x: roundedX + 30,
+              y: roundedY + (offsets[cIdx] ?? (115 + cIdx * 200)),
+            });
+          });
+          const isCollapsed = Boolean((node?.data as any)?.isCollapsed);
+          orphanY += isCollapsed ? 140 : totalExpandedHeight + 40;
+        }
       } else {
         orphanY += 180;
       }

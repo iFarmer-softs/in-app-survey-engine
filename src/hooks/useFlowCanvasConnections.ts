@@ -34,6 +34,11 @@ export function useFlowCanvasConnections({
       let sourceGroup = resolveNodeGroupId(sourceNode, nodes, 1);
       let targetGroup = resolveNodeGroupId(targetNode, nodes, 1);
 
+      // Guard against self-loops
+      if (actualSource === actualTarget) {
+        return;
+      }
+
       // Detect and auto-correct reverse connections:
       // 1. Dragged from input port ('in*') to output port ('out*', 'opt-*', 'default-next')
       // 2. Intra-group: dragged from groupJump to question (flow must always be Question ➔ GroupJump)
@@ -137,9 +142,11 @@ export function useFlowCanvasConnections({
         sourceNode?.type === 'groupJump' || targetNode?.type === 'groupJump';
       const isDecision =
         sourceNode?.type === 'decision' || targetNode?.type === 'decision';
+      const isTerminator =
+        sourceNode?.type === 'start' || targetNode?.type === 'end';
 
-      // Internal connectors cannot cross group border, but question connectors, decision branches, and Group Connectors can cross border
-      if (isCrossGroup && !isQuestionToQuestion && !isGroupJump && !isDecision) {
+      // Internal connectors cannot cross group border, but question connectors, decision branches, terminators, and Group Connectors can cross border
+      if (isCrossGroup && !isQuestionToQuestion && !isGroupJump && !isDecision && !isTerminator) {
         if (onContainmentWarning) {
           onContainmentWarning('Only question connectors, decision branches, and Group Connectors can cross group borders.');
         }
@@ -315,6 +322,11 @@ export function useFlowCanvasConnections({
       let sourceGroup = resolveNodeGroupId(sourceNode, nodes, 1);
       let targetGroup = resolveNodeGroupId(targetNode, nodes, 1);
 
+      // Guard against self-loops
+      if (actualSource === actualTarget) {
+        return;
+      }
+
       // Detect and auto-correct reverse connections on reconnect
       const isReverseHandle =
         Boolean(actualSourceHandle?.startsWith('in')) &&
@@ -353,9 +365,11 @@ export function useFlowCanvasConnections({
         sourceNode?.type === 'groupJump' || targetNode?.type === 'groupJump';
       const isDecision =
         sourceNode?.type === 'decision' || targetNode?.type === 'decision';
+      const isTerminator =
+        sourceNode?.type === 'start' || targetNode?.type === 'end';
 
-      // Internal connectors cannot cross group border, but question connectors, decision branches, and Group Connectors can cross border
-      if (isCrossGroup && !isQuestionToQuestion && !isGroupJump && !isDecision) {
+      // Internal connectors cannot cross group border, but question connectors, decision branches, terminators, and Group Connectors can cross border
+      if (isCrossGroup && !isQuestionToQuestion && !isGroupJump && !isDecision && !isTerminator) {
         if (onContainmentWarning) {
           onContainmentWarning('Only question connectors, decision branches, and Group Connectors can cross group borders.');
         }

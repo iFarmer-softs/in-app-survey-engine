@@ -66,21 +66,43 @@ export function getContainerBounds(containerNode: Node): { fX: number; fY: numbe
   const cData = containerNode.data as any;
   const fX = containerNode.position.x;
   const fY = containerNode.position.y;
-  const fW = Math.max(
-    typeof containerNode.width === 'number' && containerNode.width > 0 ? containerNode.width : 0,
-    containerNode.measured?.width && containerNode.measured.width > 0 ? containerNode.measured.width : 0,
-    containerNode.style?.width ? parseInt(String(containerNode.style.width), 10) || 0 : 0,
-    typeof cData?.width === 'number' ? cData.width : 0,
-    containerNode.type === 'groupContainer' ? 350 : 440
-  );
-  const fH = Math.max(
-    typeof containerNode.height === 'number' && containerNode.height > 0 ? containerNode.height : 0,
-    containerNode.measured?.height && containerNode.measured.height > 0 ? containerNode.measured.height : 0,
-    containerNode.style?.height ? parseInt(String(containerNode.style.height), 10) || 0 : 0,
-    typeof cData?.expandedHeight === 'number' ? cData.expandedHeight : 0,
-    typeof cData?.height === 'number' ? cData.height : 0,
-    containerNode.type === 'groupContainer' ? 400 : 480
-  );
+  const isCollapsed = Boolean(cData?.isCollapsed);
+
+  // Width priority: width > measured.width > style.width > data.width > default fallback
+  const fW =
+    (typeof containerNode.width === 'number' && containerNode.width > 0)
+      ? containerNode.width
+      : (containerNode.measured?.width && containerNode.measured.width > 0)
+      ? containerNode.measured.width
+      : (containerNode.style?.width ? parseInt(String(containerNode.style.width), 10) || 0 : 0)
+      || (typeof cData?.width === 'number' && cData.width > 0 ? cData.width : 0)
+      || (containerNode.type === 'groupContainer' ? 350 : 440);
+
+  // Height priority:
+  // If collapsed: milestone card height (~105px)
+  // If expanded: height > measured.height > style.height > data.height > data.expandedHeight > default fallback
+  let fH: number;
+  if (isCollapsed) {
+    fH =
+      (typeof containerNode.height === 'number' && containerNode.height > 0)
+        ? containerNode.height
+        : (containerNode.measured?.height && containerNode.measured.height > 0)
+        ? containerNode.measured.height
+        : (containerNode.style?.height ? parseInt(String(containerNode.style.height), 10) || 0 : 0)
+        || (typeof cData?.height === 'number' && cData.height > 0 ? cData.height : 0)
+        || 105;
+  } else {
+    fH =
+      (typeof containerNode.height === 'number' && containerNode.height > 0)
+        ? containerNode.height
+        : (containerNode.measured?.height && containerNode.measured.height > 0)
+        ? containerNode.measured.height
+        : (containerNode.style?.height ? parseInt(String(containerNode.style.height), 10) || 0 : 0)
+        || (typeof cData?.height === 'number' && cData.height > 0 ? cData.height : 0)
+        || (typeof cData?.expandedHeight === 'number' && cData.expandedHeight > 0 ? cData.expandedHeight : 0)
+        || (containerNode.type === 'groupContainer' ? 400 : 480);
+  }
+
   return { fX, fY, fW, fH };
 }
 
@@ -169,7 +191,8 @@ export function isNodeInContainer(
   }
 
   // 3. Spatial containment check: symbol is positioned inside container boundary
-  if (childNode.position && containerNode.position) {
+  // Terminators ('start' / 'end') that are NOT explicitly bound via containerId do NOT get claimed spatially
+  if (childNode.type !== 'start' && childNode.type !== 'end' && childNode.position && containerNode.position) {
     const { fX, fY, fW, fH } = getContainerBounds(containerNode);
     const { width: nW, height: nH } = getNodeDimensions(childNode);
     const nCenterX = childNode.position.x + nW / 2;
@@ -187,18 +210,21 @@ export function isNodeInContainer(
   }
 
   // 4. Group number match (when numericGroupId matches child's group)
-  const cNum =
-    typeof cData?.numericGroupId === 'number' && cData.numericGroupId > 0
-      ? cData.numericGroupId
-      : parseInt(String(cData?.title || cData?.titleBn || cData?.groupId || '').replace(/\D+/g, ''), 10);
+  // Only apply when the container is not collapsed and child is not start/end
+  if (!cData?.isCollapsed && childNode.type !== 'start' && childNode.type !== 'end') {
+    const cNum =
+      typeof cData?.numericGroupId === 'number' && cData.numericGroupId > 0
+        ? cData.numericGroupId
+        : parseInt(String(cData?.title || cData?.titleBn || cData?.groupId || '').replace(/\D+/g, ''), 10);
 
-  const nGrp =
-    typeof nData?.group === 'number' && nData.group > 0
-      ? nData.group
-      : undefined;
+    const nGrp =
+      typeof nData?.group === 'number' && nData.group > 0
+        ? nData.group
+        : undefined;
 
-  if (typeof cNum === 'number' && !isNaN(cNum) && cNum > 0 && nGrp === cNum) {
-    return true;
+    if (typeof cNum === 'number' && !isNaN(cNum) && cNum > 0 && nGrp === cNum) {
+      return true;
+    }
   }
 
   return false;

@@ -568,6 +568,11 @@ const FlowEditor: React.FC = () => {
 
   // Live drag updates and Undo/Redo capture when edge line is dragged/resized
   useEffect(() => {
+    const handleEdgeDragStart = () => {
+      // Snapshot pristine edge coordinates before live dragging mutates them
+      recordSnapshot(nodes, edges, groupMeta);
+    };
+
     const handleEdgeLiveDrag = (event: Event) => {
       const customEvt = event as CustomEvent<{
         edgeId: string;
@@ -618,11 +623,12 @@ const FlowEditor: React.FC = () => {
       }>;
       const detail = customEvt.detail;
       if (!detail || !detail.edgeId) {
-        recordSnapshot(nodes, edges, groupMeta);
         return;
       }
 
-      recordSnapshot(nodes, edges, groupMeta);
+      if (detail.reset) {
+        recordSnapshot(nodes, edges, groupMeta);
+      }
       setEdges((eds) =>
         eds.map((edge) => {
           if (edge.id === detail.edgeId) {
@@ -672,10 +678,12 @@ const FlowEditor: React.FC = () => {
       setSelectedEdgeId((current) => (current === edgeId ? null : current));
     };
 
+    window.addEventListener('canvas-edge-drag-start', handleEdgeDragStart);
     window.addEventListener('canvas-edge-live-drag', handleEdgeLiveDrag);
     window.addEventListener('canvas-edge-bend-changed', handleEdgeBendChange);
     window.addEventListener('canvas-edge-delete', handleEdgeDelete);
     return () => {
+      window.removeEventListener('canvas-edge-drag-start', handleEdgeDragStart);
       window.removeEventListener('canvas-edge-live-drag', handleEdgeLiveDrag);
       window.removeEventListener('canvas-edge-bend-changed', handleEdgeBendChange);
       window.removeEventListener('canvas-edge-delete', handleEdgeDelete);
@@ -692,9 +700,13 @@ const FlowEditor: React.FC = () => {
     [diagnostics]
   );
 
-  // Sync active project state to storage whenever nodes, edges, or meta changes
+  // Sync active project state to storage whenever nodes, edges, or meta changes (debounced to 800ms)
   useEffect(() => {
-    syncActiveProject(nodes, edges, groupMeta, Boolean(groupDesignSession));
+    if (groupDesignSession) return;
+    const timer = setTimeout(() => {
+      syncActiveProject(nodes, edges, groupMeta, false);
+    }, 800);
+    return () => clearTimeout(timer);
   }, [nodes, edges, groupMeta, groupDesignSession, syncActiveProject]);
 
   // Switch active project
@@ -772,30 +784,45 @@ const FlowEditor: React.FC = () => {
     []
   );
 
-  // Memoized custom node types with active callbacks
-  const nodeTypes = useMemo(
-    () => ({
-      ...baseNodeTypes,
-      groupContainer: (props: any) => (
-        <GroupContainerNode
-          {...props}
-          onToggleCollapse={handleToggleGroupCollapse}
-          onUngroup={handleUngroup}
-          onDeleteGroup={handleDeleteGroupContainer}
-        />
-      ),
-      groupFrame: (props: any) => (
-        <GroupFrameNode
-          {...props}
-          onDeleteFrame={handleDeleteGroupContainer}
-        />
-      ),
-    }),
-    [
+  // Stable ref for container/frame action callbacks to prevent React Flow 002 nodeTypes churn
+  const containerHandlersRef = useRef({
+    handleToggleGroupCollapse,
+    handleUngroup,
+    handleDeleteGroupContainer,
+  });
+
+  useEffect(() => {
+    containerHandlersRef.current = {
       handleToggleGroupCollapse,
       handleUngroup,
       handleDeleteGroupContainer,
-    ]
+    };
+  });
+
+  const StableGroupContainerNode = useCallback((props: any) => (
+    <GroupContainerNode
+      {...props}
+      onToggleCollapse={(id: string) => containerHandlersRef.current.handleToggleGroupCollapse(id)}
+      onUngroup={(id: string) => containerHandlersRef.current.handleUngroup(id)}
+      onDeleteGroup={(id: string) => containerHandlersRef.current.handleDeleteGroupContainer(id)}
+    />
+  ), []);
+
+  const StableGroupFrameNode = useCallback((props: any) => (
+    <GroupFrameNode
+      {...props}
+      onDeleteFrame={(id: string) => containerHandlersRef.current.handleDeleteGroupContainer(id)}
+    />
+  ), []);
+
+  // Stabilized custom node types with static references across renders
+  const nodeTypes = useMemo(
+    () => ({
+      ...baseNodeTypes,
+      groupContainer: StableGroupContainerNode,
+      groupFrame: StableGroupFrameNode,
+    }),
+    [StableGroupContainerNode, StableGroupFrameNode]
   );
 
   // Derived selected question nodes for "Save Selection as Group"
@@ -1643,11 +1670,13 @@ const FlowEditor: React.FC = () => {
         return;
       }
 
-      // Case B: Symbol or Question was dragged
+      // Case B: Symbol or Question was dragged (exclude Start and End terminators from mandatory group containment)
       const activeList =
         draggedNodesList && draggedNodesList.length > 0
-          ? draggedNodesList.filter((n) => n.type !== 'groupFrame' && n.type !== 'groupContainer')
-          : [draggedNode];
+          ? draggedNodesList.filter((n) => n.type !== 'groupFrame' && n.type !== 'groupContainer' && n.type !== 'start' && n.type !== 'end')
+          : [draggedNode].filter((n) => n.type !== 'groupFrame' && n.type !== 'groupContainer' && n.type !== 'start' && n.type !== 'end');
+
+      if (activeList.length === 0) return;
 
       const existingContainers = nodes.filter(
         (n) => n.type === 'groupFrame' || n.type === 'groupContainer'
@@ -3292,7 +3321,7 @@ const FlowEditor: React.FC = () => {
                     onEdgesChange={handleEdgesChange}
                     onConnect={onConnect}
                     onReconnect={onReconnect}
-                    edgesReconnectable={false}
+                    edgesReconnectable={true}
                     panOnDrag={isHandMode ? true : [1, 2]}
                     selectionOnDrag={!isHandMode && !isDrawAreaMode}
                     nodesDraggable={!isHandMode && !isDrawAreaMode}

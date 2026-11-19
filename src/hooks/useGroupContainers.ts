@@ -178,19 +178,16 @@ export function useGroupContainers({
               }
             }
           } else if (node) {
-            // A regular node moved: clear fixed bend/corridor coordinates on any cross-group edge connected to it
+            // A regular node moved: clear only absolute fixed coordinates (centerX, centerY) so the line follows the moved node,
+            // but preserve relative offsets (corridorOffsetX/Y, labelOffsetX/Y) so manual routing intent is retained.
             setEdges((currentEdges) =>
               currentEdges.map((edge) => {
                 if (edge.source === node.id || edge.target === node.id) {
                   const eData = (edge.data || {}) as any;
-                  if (eData.isCrossGroup || eData.centerX !== undefined || eData.corridorOffsetX !== undefined) {
+                  if (eData.centerX !== undefined || eData.centerY !== undefined) {
                     const {
                       centerX,
                       centerY,
-                      corridorOffsetX,
-                      corridorOffsetY,
-                      labelOffsetX,
-                      labelOffsetY,
                       ...restData
                     } = eData;
                     return {

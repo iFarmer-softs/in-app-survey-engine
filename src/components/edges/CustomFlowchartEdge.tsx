@@ -1688,6 +1688,11 @@ export const CustomFlowchartEdge: React.FC<EdgeProps> = ({
     let hasMoved = false;
 
     setIsDragging(true);
+    window.dispatchEvent(
+      new CustomEvent('canvas-edge-drag-start', {
+        detail: { edgeId: id },
+      })
+    );
 
     const prevCursor = document.body.style.cursor;
     const prevUserSelect = document.body.style.userSelect;
