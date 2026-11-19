@@ -110,6 +110,36 @@ export function getPathMidpoint(pts: Array<{ x: number; y: number }>): { x: numb
   return { x: pts[pts.length - 1].x, y: pts[pts.length - 1].y };
 }
 
+/**
+ * Checks whether a given point (x, y) lies on any segment of a multi-segment polyline path within tolerance.
+ */
+export function isPointOnPolyline(
+  p: { x: number; y: number },
+  pts: Array<{ x: number; y: number }>,
+  tol = 4.0
+): boolean {
+  if (!pts || pts.length === 0) return false;
+  if (pts.length === 1) return Math.hypot(p.x - pts[0].x, p.y - pts[0].y) <= tol;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i];
+    const b = pts[i + 1];
+    const minX = Math.min(a.x, b.x) - tol;
+    const maxX = Math.max(a.x, b.x) + tol;
+    const minY = Math.min(a.y, b.y) - tol;
+    const maxY = Math.max(a.y, b.y) + tol;
+    if (p.x >= minX && p.x <= maxX && p.y >= minY && p.y <= maxY) {
+      const segLen = Math.hypot(b.x - a.x, b.y - a.y);
+      if (segLen === 0) {
+        if (Math.hypot(p.x - a.x, p.y - a.y) <= tol) return true;
+      } else {
+        const dist = Math.abs((b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x)) / segLen;
+        if (dist <= tol) return true;
+      }
+    }
+  }
+  return false;
+}
+
 export function getOrthogonalPathWithDetour({
   sourceX,
   sourceY,
@@ -794,9 +824,8 @@ export function getCrossGroupOrthogonalPath({
       { x: targetX, y: targetY },
     ];
     const simplified = simplifyPoints(rawPts);
-    const labelX = (exitPoint.x + entryPoint.x) / 2 + (corridorOffsetX ?? 0);
-    const labelY = prefY;
-    return [buildSvgPath(simplified, borderRadius), labelX, labelY];
+    const pathMid = getPathMidpoint(simplified);
+    return [buildSvgPath(simplified, borderRadius), pathMid.x, pathMid.y];
   }
 
   if (isOutsideX) {
@@ -809,9 +838,8 @@ export function getCrossGroupOrthogonalPath({
       { x: targetX, y: targetY },
     ];
     const simplified = simplifyPoints(rawPts);
-    const labelX = prefX;
-    const labelY = (exitPoint.y + entryPoint.y) / 2 + (corridorOffsetY ?? 0);
-    return [buildSvgPath(simplified, borderRadius), labelX, labelY];
+    const pathMid = getPathMidpoint(simplified);
+    return [buildSvgPath(simplified, borderRadius), pathMid.x, pathMid.y];
   }
 
   const isLevelHoriz = Math.abs(sourceY - targetY) <= 16;
@@ -823,8 +851,11 @@ export function getCrossGroupOrthogonalPath({
       { x: sourceX, y: sourceY },
       { x: targetX, y: targetY },
     ];
-    const labelX = prefX !== undefined ? prefX : (sourceX + targetX) / 2 + (corridorOffsetX ?? 0);
-    const labelY = (sourceY + targetY) / 2 + (corridorOffsetY ?? 0);
+    const minX = Math.min(sourceX, targetX);
+    const maxX = Math.max(sourceX, targetX);
+    let labelX = prefX !== undefined ? prefX : (sourceX + targetX) / 2 + (corridorOffsetX ?? 0);
+    labelX = Math.max(minX, Math.min(labelX, maxX));
+    const labelY = (sourceY + targetY) / 2;
     return [buildSvgPath(pts, borderRadius), labelX, labelY];
   }
 
@@ -833,16 +864,21 @@ export function getCrossGroupOrthogonalPath({
       { x: sourceX, y: sourceY },
       { x: targetX, y: targetY },
     ];
-    const labelX = (sourceX + targetX) / 2 + (corridorOffsetX ?? 0);
-    const labelY = prefY !== undefined ? prefY : (sourceY + targetY) / 2 + (corridorOffsetY ?? 0);
+    const minY = Math.min(sourceY, targetY);
+    const maxY = Math.max(sourceY, targetY);
+    let labelY = prefY !== undefined ? prefY : (sourceY + targetY) / 2 + (corridorOffsetY ?? 0);
+    labelY = Math.max(minY, Math.min(labelY, maxY));
+    const labelX = (sourceX + targetX) / 2;
     return [buildSvgPath(pts, borderRadius), labelX, labelY];
   }
 
   // 2. Single, clean middle bend between groups
   if (isHorizFlow) {
     let rawPts: Array<{ x: number; y: number }>;
+    let spineEndY = targetY;
     if (targetPosition === Position.Top) {
       const entryY = Math.min(targetY - safeMargin, tc ? tc.minY - safeMargin : targetY - safeMargin);
+      spineEndY = entryY;
       rawPts = [
         { x: sourceX, y: sourceY },
         { x: prefX, y: sourceY },
@@ -852,6 +888,7 @@ export function getCrossGroupOrthogonalPath({
       ];
     } else if (targetPosition === Position.Bottom) {
       const entryY = Math.max(targetY + safeMargin, tc ? tc.maxY + safeMargin : targetY + safeMargin);
+      spineEndY = entryY;
       rawPts = [
         { x: sourceX, y: sourceY },
         { x: prefX, y: sourceY },
@@ -860,6 +897,7 @@ export function getCrossGroupOrthogonalPath({
         { x: targetX, y: targetY },
       ];
     } else {
+      spineEndY = targetY;
       rawPts = [
         { x: sourceX, y: sourceY },
         { x: prefX, y: sourceY },
@@ -882,15 +920,29 @@ export function getCrossGroupOrthogonalPath({
 
     if (!needsFallback) {
       const simplified = simplifyPoints(rawPts);
+      const minSpineY = Math.min(sourceY, spineEndY);
+      const maxSpineY = Math.max(sourceY, spineEndY);
+      let labelY = (sourceY + spineEndY) / 2 + (corridorOffsetY ?? 0);
+      labelY = Math.max(minSpineY, Math.min(labelY, maxSpineY));
       const labelX = prefX;
-      const labelY = (sourceY + targetY) / 2 + (corridorOffsetY ?? 0);
-      return [buildSvgPath(simplified, borderRadius), labelX, labelY];
+
+      let finalLabelX = labelX;
+      let finalLabelY = labelY;
+      if (!isPointOnPolyline({ x: finalLabelX, y: finalLabelY }, simplified, 4.0)) {
+        const pathMid = getPathMidpoint(simplified);
+        finalLabelX = pathMid.x;
+        finalLabelY = pathMid.y;
+      }
+
+      return [buildSvgPath(simplified, borderRadius), finalLabelX, finalLabelY];
     }
   } else {
     // Vertical flow
     let rawPts: Array<{ x: number; y: number }>;
+    let spineEndX = targetX;
     if (targetPosition === Position.Left) {
       const entryX = Math.min(targetX - safeMargin, tc ? tc.minX - safeMargin : targetX - safeMargin);
+      spineEndX = entryX;
       rawPts = [
         { x: sourceX, y: sourceY },
         { x: sourceX, y: prefY },
@@ -900,6 +952,7 @@ export function getCrossGroupOrthogonalPath({
       ];
     } else if (targetPosition === Position.Right) {
       const entryX = Math.max(targetX + safeMargin, tc ? tc.maxX + safeMargin : targetX + safeMargin);
+      spineEndX = entryX;
       rawPts = [
         { x: sourceX, y: sourceY },
         { x: sourceX, y: prefY },
@@ -908,6 +961,7 @@ export function getCrossGroupOrthogonalPath({
         { x: targetX, y: targetY },
       ];
     } else {
+      spineEndX = targetX;
       rawPts = [
         { x: sourceX, y: sourceY },
         { x: sourceX, y: prefY },
@@ -930,9 +984,21 @@ export function getCrossGroupOrthogonalPath({
 
     if (!needsFallback) {
       const simplified = simplifyPoints(rawPts);
-      const labelX = (sourceX + targetX) / 2 + (corridorOffsetX ?? 0);
+      const minSpineX = Math.min(sourceX, spineEndX);
+      const maxSpineX = Math.max(sourceX, spineEndX);
+      let labelX = (sourceX + spineEndX) / 2 + (corridorOffsetX ?? 0);
+      labelX = Math.max(minSpineX, Math.min(labelX, maxSpineX));
       const labelY = prefY;
-      return [buildSvgPath(simplified, borderRadius), labelX, labelY];
+
+      let finalLabelX = labelX;
+      let finalLabelY = labelY;
+      if (!isPointOnPolyline({ x: finalLabelX, y: finalLabelY }, simplified, 4.0)) {
+        const pathMid = getPathMidpoint(simplified);
+        finalLabelX = pathMid.x;
+        finalLabelY = pathMid.y;
+      }
+
+      return [buildSvgPath(simplified, borderRadius), finalLabelX, finalLabelY];
     }
   }
 
@@ -963,14 +1029,9 @@ export function getCrossGroupOrthogonalPath({
   ];
 
   const simplified = simplifyPoints(rawPts);
-
-  // Label position directly follows user-dragged corridor coordinates (centerX, centerY)
-  // or defaults to the center of the inter-group corridor, NEVER inside the source/target container!
-  const labelX = prefX;
-  const labelY = prefY;
-
+  const pathMid = getPathMidpoint(simplified);
   const edgePath = buildSvgPath(simplified, borderRadius);
-  return [edgePath, labelX, labelY];
+  return [edgePath, pathMid.x, pathMid.y];
 }
 
 export interface CustomEdgeData {
@@ -1245,7 +1306,7 @@ export const CustomFlowchartEdge: React.FC<EdgeProps> = ({
   label,
   sourceHandleId,
 }) => {
-  const { setEdges, getNode, getNodes, getEdges, getZoom, getViewport, screenToFlowPosition } = useReactFlow();
+  const { setEdges, getNode, getNodes, getZoom, getViewport, screenToFlowPosition } = useReactFlow();
   const edgeData = (data as CustomEdgeData) || {};
 
   // Dynamically resolve source and target node groups to ensure 100% accurate live cross-group detection
@@ -1554,36 +1615,21 @@ export const CustomFlowchartEdge: React.FC<EdgeProps> = ({
   const currentPathMidX = labelX !== undefined && !isNaN(labelX) ? labelX : derivedMidX;
   const currentPathMidY = labelY !== undefined && !isNaN(labelY) ? labelY : derivedMidY;
 
-  let pillX = currentPathMidX + (edgeData.labelOffsetX ?? 0);
-  let pillY = currentPathMidY + (edgeData.labelOffsetY ?? 0);
+  // Edge pills must stay strictly anchored directly on the edge's current path under all circumstances,
+  // never floating away, detaching into empty canvas space, or drifting with peer stagger / double offset.
+  let pillX = currentPathMidX;
+  let pillY = currentPathMidY;
 
-  if (!isCrossGroupConnection && intraGroupBounds) {
-    pillX = Math.max(intraGroupBounds.minX, Math.min(pillX, intraGroupBounds.maxX));
-    pillY = Math.max(intraGroupBounds.minY, Math.min(pillY, intraGroupBounds.maxY));
-  }
-
-  // Anti-collision staggering for peer cross-group pills
-  const allEdges = getEdges ? getEdges() : [];
-  const peerCrossGroupEdges = React.useMemo(() => {
-    if (!isCrossGroupConnection || !effectiveSourceGroup || !effectiveTargetGroup) return [];
-    return allEdges.filter((e) => {
-      if (e.id === id) return false;
-      const eData = (e.data as CustomEdgeData) || {};
-      const sGroup = eData.sourceGroup;
-      const tGroup = eData.targetGroup;
-      return (
-        (sGroup === effectiveSourceGroup && tGroup === effectiveTargetGroup) ||
-        (sGroup === effectiveTargetGroup && tGroup === effectiveSourceGroup)
-      );
-    });
-  }, [allEdges, id, isCrossGroupConnection, effectiveSourceGroup, effectiveTargetGroup]);
-
-  if (isCrossGroupConnection && peerCrossGroupEdges.length > 0 && edgeData.labelOffsetY === undefined) {
-    const peerIds = [id, ...peerCrossGroupEdges.map((e) => e.id)].sort();
-    const peerIndex = peerIds.indexOf(id);
-    if (peerIndex > 0) {
-      const staggerY = (peerIndex % 2 === 1 ? 1 : -1) * Math.ceil(peerIndex / 2) * 36;
-      pillY += staggerY;
+  // Final fail-safe anchor: extract path points to guarantee the pill is strictly on the edge line
+  if (edgePath) {
+    const pathPoints = Array.from(edgePath.matchAll(/([MLCQ])\s*([-\d.]+)[,\s]+([-\d.]+)/g)).map((m) => ({
+      x: parseFloat(m[2]),
+      y: parseFloat(m[3]),
+    }));
+    if (pathPoints.length >= 2 && !isPointOnPolyline({ x: pillX, y: pillY }, pathPoints, 4.0)) {
+      const safeMid = getPathMidpoint(pathPoints);
+      pillX = safeMid.x;
+      pillY = safeMid.y;
     }
   }
 
@@ -1736,14 +1782,10 @@ export const CustomFlowchartEdge: React.FC<EdgeProps> = ({
     };
 
     // Initial offsets relative to derived midpoints / dynamic corridors
-    const initialLabelOffsetX = edgeData.labelOffsetX ?? (edgeData.centerX !== undefined ? edgeData.centerX - basePill.x : 0);
-    const initialLabelOffsetY = edgeData.labelOffsetY ?? (edgeData.centerY !== undefined ? edgeData.centerY - basePill.y : 0);
     const initialCorridorOffsetX = edgeData.corridorOffsetX ?? (edgeData.centerX !== undefined ? edgeData.centerX - labelX : 0);
     const initialCorridorOffsetY = edgeData.corridorOffsetY ?? (edgeData.centerY !== undefined ? edgeData.centerY - labelY : 0);
     const initialCurvature = edgeData.curvature ?? 0.25;
 
-    let currentLabelOffsetX = initialLabelOffsetX;
-    let currentLabelOffsetY = initialLabelOffsetY;
     let currentCorridorOffsetX = initialCorridorOffsetX;
     let currentCorridorOffsetY = initialCorridorOffsetY;
     let currentWorldX = startWorld.x;
@@ -1774,19 +1816,15 @@ export const CustomFlowchartEdge: React.FC<EdgeProps> = ({
         hasMoved = true;
       }
 
-      currentLabelOffsetX = Math.round(initialLabelOffsetX + dx);
-      currentLabelOffsetY = Math.round(initialLabelOffsetY + dy);
       currentCorridorOffsetX = Math.round(initialCorridorOffsetX + dx);
       currentCorridorOffsetY = Math.round(initialCorridorOffsetY + dy);
 
-      let targetPillX = basePill.x + currentLabelOffsetX;
-      let targetPillY = basePill.y + currentLabelOffsetY;
+      let targetPillX = basePill.x + currentCorridorOffsetX;
+      let targetPillY = basePill.y + currentCorridorOffsetY;
 
       if (intraGroupBounds) {
         targetPillX = Math.max(intraGroupBounds.minX, Math.min(targetPillX, intraGroupBounds.maxX));
         targetPillY = Math.max(intraGroupBounds.minY, Math.min(targetPillY, intraGroupBounds.maxY));
-        currentLabelOffsetX = targetPillX - basePill.x;
-        currentLabelOffsetY = targetPillY - basePill.y;
       }
 
       currentWorldX = targetPillX;
@@ -1822,8 +1860,8 @@ export const CustomFlowchartEdge: React.FC<EdgeProps> = ({
                 ...edge,
                 data: {
                   ...(edge.data || {}),
-                  labelOffsetX: currentLabelOffsetX,
-                  labelOffsetY: currentLabelOffsetY,
+                  labelOffsetX: 0,
+                  labelOffsetY: 0,
                   corridorOffsetX: currentCorridorOffsetX,
                   corridorOffsetY: currentCorridorOffsetY,
                   // Do not cache absolute points
@@ -1838,19 +1876,19 @@ export const CustomFlowchartEdge: React.FC<EdgeProps> = ({
         const deltaX = Math.abs(dx);
         const deltaY = Math.abs(dy);
         if (deltaX > 4 && deltaY > 4) {
-          setDragInfo(`↔ ΔX: ${currentLabelOffsetX > 0 ? '+' : ''}${currentLabelOffsetX}px, ↕ ΔY: ${currentLabelOffsetY > 0 ? '+' : ''}${currentLabelOffsetY}px`);
+          setDragInfo(`↔ ΔX: ${currentCorridorOffsetX > 0 ? '+' : ''}${currentCorridorOffsetX}px, ↕ ΔY: ${currentCorridorOffsetY > 0 ? '+' : ''}${currentCorridorOffsetY}px`);
         } else if (deltaX > 4) {
-          setDragInfo(`↔ ΔX: ${currentLabelOffsetX > 0 ? '+' : ''}${currentLabelOffsetX}px`);
+          setDragInfo(`↔ ΔX: ${currentCorridorOffsetX > 0 ? '+' : ''}${currentCorridorOffsetX}px`);
         } else {
-          setDragInfo(`↕ ΔY: ${currentLabelOffsetY > 0 ? '+' : ''}${currentLabelOffsetY}px`);
+          setDragInfo(`↕ ΔY: ${currentCorridorOffsetY > 0 ? '+' : ''}${currentCorridorOffsetY}px`);
         }
 
         window.dispatchEvent(
           new CustomEvent('canvas-edge-live-drag', {
             detail: {
               edgeId: id,
-              labelOffsetX: currentLabelOffsetX,
-              labelOffsetY: currentLabelOffsetY,
+              labelOffsetX: 0,
+              labelOffsetY: 0,
               corridorOffsetX: currentCorridorOffsetX,
               corridorOffsetY: currentCorridorOffsetY,
               centerX: currentWorldX,
@@ -1879,8 +1917,8 @@ export const CustomFlowchartEdge: React.FC<EdgeProps> = ({
           new CustomEvent('canvas-edge-bend-changed', {
             detail: {
               edgeId: id,
-              labelOffsetX: currentLabelOffsetX,
-              labelOffsetY: currentLabelOffsetY,
+              labelOffsetX: 0,
+              labelOffsetY: 0,
               corridorOffsetX: currentCorridorOffsetX,
               corridorOffsetY: currentCorridorOffsetY,
               centerX: currentWorldX,
@@ -1931,13 +1969,13 @@ export const CustomFlowchartEdge: React.FC<EdgeProps> = ({
   };
 
   const hasCustomBend =
-    edgeData.labelOffsetX !== undefined ||
-    edgeData.labelOffsetY !== undefined ||
-    edgeData.corridorOffsetX !== undefined ||
-    edgeData.corridorOffsetY !== undefined ||
+    (edgeData.labelOffsetX !== undefined && edgeData.labelOffsetX !== 0) ||
+    (edgeData.labelOffsetY !== undefined && edgeData.labelOffsetY !== 0) ||
+    (edgeData.corridorOffsetX !== undefined && edgeData.corridorOffsetX !== 0) ||
+    (edgeData.corridorOffsetY !== undefined && edgeData.corridorOffsetY !== 0) ||
     edgeData.centerX !== undefined ||
     edgeData.centerY !== undefined ||
-    edgeData.curvature !== undefined;
+    (edgeData.curvature !== undefined && edgeData.curvature !== 0.25);
 
   return (
     <>

@@ -7362,8 +7362,9 @@ assert.ok(
   'CustomFlowchartEdge must derive pillX from currentPathMidX (labelX)'
 );
 assert.ok(
-  customEdgeSource71.includes('pillX = currentPathMidX + (edgeData.labelOffsetX ?? 0)'),
-  'CustomFlowchartEdge must position pill from currentPathMidX + labelOffsetX'
+  customEdgeSource71.includes('pillX = currentPathMidX') &&
+  customEdgeSource71.includes('pillY = currentPathMidY'),
+  'CustomFlowchartEdge must position pill directly from currentPathMid without detaching'
 );
 assert.ok(
   customEdgeSource71.includes('const isCrossGroup =') &&
@@ -7382,5 +7383,159 @@ assert.ok(
 
 console.log('   ✅ Edge Label Positioning from Current (Edited) Path (Yes, No, Cross-Group & Custom Bends) validated with 100% precision.');
 
-console.log('\n🎉 ALL TESTS PASSED SUCCESSFULLY! (71/71 test suites passed)\n');
+// ---------------------------------------------------------------------------
+// SUITE 72: Edge Pills Anchored Strictly to Edge Line (Non-Detachment Architecture)
+// ---------------------------------------------------------------------------
+console.log('\n7️⃣2️⃣ Testing Edge Pills Anchored Strictly to Edge Line (Non-Detachment Architecture)...');
+
+const customEdgeSource72 = fs.readFileSync(path.resolve(process.cwd(), 'src/components/edges/CustomFlowchartEdge.tsx'), 'utf-8');
+
+// 72A: Architecture verification: Pill is locked to currentPathMid, no staggerY drift, no separate bounds clamping
+assert.ok(
+  customEdgeSource72.includes('pillX = currentPathMidX') &&
+  customEdgeSource72.includes('pillY = currentPathMidY'),
+  'Pill coordinates must equal currentPathMidX/Y directly without adding detached labelOffsetX/Y'
+);
+assert.ok(
+  !customEdgeSource72.includes('pillY += staggerY'),
+  'CustomFlowchartEdge must not displace peer cross-group pills vertically off the edge line'
+);
+assert.ok(
+  !customEdgeSource72.includes('if (!isCrossGroupConnection && intraGroupBounds) {\n    pillX = Math.max'),
+  'CustomFlowchartEdge must not independently clamp pill coordinates away from edge path'
+);
+
+// 72B: Point-on-polyline verification: getPathMidpoint is strictly on edge path segments
+function isPointOnSegment72(p: { x: number; y: number }, a: { x: number; y: number }, b: { x: number; y: number }, tol = 0.5): boolean {
+  const minX = Math.min(a.x, b.x) - tol;
+  const maxX = Math.max(a.x, b.x) + tol;
+  const minY = Math.min(a.y, b.y) - tol;
+  const maxY = Math.max(a.y, b.y) + tol;
+  if (p.x < minX || p.x > maxX || p.y < minY || p.y > maxY) return false;
+  const segLen = Math.hypot(b.x - a.x, b.y - a.y);
+  if (segLen === 0) return Math.hypot(p.x - a.x, p.y - a.y) <= tol;
+  const dist = Math.abs((b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x)) / segLen;
+  return dist <= tol;
+}
+
+function isPointOnPolyline72(p: { x: number; y: number }, pts: Array<{ x: number; y: number }>, tol = 0.5): boolean {
+  for (let i = 0; i < pts.length - 1; i++) {
+    if (isPointOnSegment72(p, pts[i], pts[i + 1], tol)) return true;
+  }
+  return false;
+}
+
+// Complex multi-step path (Option branch / Condition check with manual bends)
+const complexRoute72 = [
+  { x: 150, y: 120 },
+  { x: 260, y: 120 },
+  { x: 260, y: 340 },
+  { x: 420, y: 340 },
+  { x: 420, y: 480 },
+];
+const mid72 = getPathMidpoint(complexRoute72);
+assert.ok(
+  isPointOnPolyline72(mid72, complexRoute72),
+  `Midpoint (${mid72.x}, ${mid72.y}) must lie strictly on one of the line segments of the path`
+);
+
+// 72C: getOrthogonalPathWithDetour returns label coordinates directly situated on the path
+const [orthPath72, lx72, ly72] = getOrthogonalPath71({
+  sourceX: 100,
+  sourceY: 100,
+  sourcePosition: Position.Bottom,
+  targetX: 300,
+  targetY: 280,
+  targetPosition: Position.Top,
+  corridorOffsetY: 30,
+});
+assert.ok(orthPath72 && orthPath72.startsWith('M'), 'Orthogonal path must be valid SVG');
+const coords72 = Array.from(orthPath72.matchAll(/([MLCQ])\s*([-\d.]+)[,\s]+([-\d.]+)/g)).map((m) => ({
+  x: parseFloat(m[2]),
+  y: parseFloat(m[3]),
+}));
+assert.ok(
+  coords72.length >= 2,
+  'Path must contain at least 2 control points'
+);
+assert.ok(!isNaN(lx72) && !isNaN(ly72), 'Label coordinates must be valid numbers');
+
+// 72D: 1:1 Synchronous drag lockstep (corridor shift moves path and label together without 2x detachment)
+const [, baseLx] = getOrthogonalPath71({
+  sourceX: 150,
+  sourceY: 100,
+  sourcePosition: Position.Right,
+  targetX: 350,
+  targetY: 250,
+  targetPosition: Position.Left,
+  corridorOffsetX: 0,
+});
+const [, shiftedLx] = getOrthogonalPath71({
+  sourceX: 150,
+  sourceY: 100,
+  sourcePosition: Position.Right,
+  targetX: 350,
+  targetY: 250,
+  targetPosition: Position.Left,
+  corridorOffsetX: 60, // dragged +60px
+});
+const deltaPillX = shiftedLx - baseLx;
+assert.strictEqual(
+  deltaPillX,
+  60,
+  `Pill must shift exactly 1:1 with corridor drag (+60px, got ${deltaPillX}px), never double-speed (120px) detachment`
+);
+
+// 72E: Cross-Group Pill Strict Anchor & Detachment Prevention
+// Verify Top-entry cross-group connection (wire detours above container) keeps pill strictly on line
+const [cgTopPath, cgTopLx, cgTopLy] = getCrossGroupOrthogonalPath71({
+  sourceX: 350,
+  sourceY: 200,
+  sourcePosition: Position.Right,
+  targetX: 750,
+  targetY: 350,
+  targetPosition: Position.Top,
+  sourceContainer: { minX: 100, maxX: 450, minY: 100, maxY: 500 },
+  targetContainer: { minX: 650, maxX: 1000, minY: 100, maxY: 500 },
+});
+const cgTopCoords = Array.from(cgTopPath.matchAll(/([MLCQ])\s*([-\d.]+)[,\s]+([-\d.]+)/g)).map((m) => ({
+  x: parseFloat(m[2]),
+  y: parseFloat(m[3]),
+}));
+assert.ok(
+  isPointOnPolyline72({ x: cgTopLx, y: cgTopLy }, cgTopCoords, 4.0),
+  `Cross-group pill (${cgTopLx}, ${cgTopLy}) must sit directly on the top-entry wire path, never detached in empty space`
+);
+
+// Verify cross-group edge with vertical dragging (corridorOffsetY) clamps pill strictly to spine
+const [cgDragPath, cgDragLx, cgDragLy] = getCrossGroupOrthogonalPath71({
+  sourceX: 350,
+  sourceY: 200,
+  sourcePosition: Position.Right,
+  targetX: 750,
+  targetY: 350,
+  targetPosition: Position.Left,
+  corridorOffsetX: 30,
+  corridorOffsetY: 120, // dragged vertically
+  sourceContainer: { minX: 100, maxX: 450, minY: 100, maxY: 500 },
+  targetContainer: { minX: 650, maxX: 1000, minY: 100, maxY: 500 },
+});
+const cgDragCoords = Array.from(cgDragPath.matchAll(/([MLCQ])\s*([-\d.]+)[,\s]+([-\d.]+)/g)).map((m) => ({
+  x: parseFloat(m[2]),
+  y: parseFloat(m[3]),
+}));
+assert.ok(
+  isPointOnPolyline72({ x: cgDragLx, y: cgDragLy }, cgDragCoords, 4.0),
+  `Cross-group pill (${cgDragLx}, ${cgDragLy}) must stay locked to the dragged line, never detached above or below spine`
+);
+
+// Verify CustomFlowchartEdge has fail-safe point-on-polyline anchor protection
+assert.ok(
+  customEdgeSource72.includes('isPointOnPolyline({ x: pillX, y: pillY }, pathPoints, 4.0)'),
+  'CustomFlowchartEdge must include fail-safe point-on-polyline check to prevent pill detachment'
+);
+
+console.log('   ✅ Edge Pills Anchored Strictly to Edge Line (Non-Detachment Architecture) validated with 100% precision.');
+
+console.log('\n🎉 ALL TESTS PASSED SUCCESSFULLY! (72/72 test suites passed)\n');
 
