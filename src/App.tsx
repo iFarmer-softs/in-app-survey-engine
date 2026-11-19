@@ -2053,6 +2053,14 @@ const FlowEditor: React.FC = () => {
             label: 'Condition Check',
             conditionType: 'match',
             comparisonValue: 'Yes',
+            logicalOperator: 'ALL',
+            rules: [
+              {
+                id: 'rule-1',
+                conditionType: 'match',
+                comparisonValue: 'Yes',
+              },
+            ],
             containerId: newFrameId,
             group: nextGroupNumber,
           };
@@ -2124,6 +2132,14 @@ const FlowEditor: React.FC = () => {
           label: 'Condition Check',
           conditionType: 'match',
           comparisonValue: 'Yes',
+          logicalOperator: 'ALL',
+          rules: [
+            {
+              id: 'rule-1',
+              conditionType: 'match',
+              comparisonValue: 'Yes',
+            },
+          ],
           containerId: targetContainer?.id,
           group: (targetContainer?.data as any)?.numericGroupId || groupMeta.groupNumber,
         };
@@ -2355,6 +2371,14 @@ const FlowEditor: React.FC = () => {
             label: 'Condition Check',
             conditionType: 'match',
             comparisonValue: 'Yes',
+            logicalOperator: 'ALL',
+            rules: [
+              {
+                id: 'rule-1',
+                conditionType: 'match',
+                comparisonValue: 'Yes',
+              },
+            ],
             containerId: frameId,
             group: nextGroupNumber,
           };
@@ -2412,6 +2436,14 @@ const FlowEditor: React.FC = () => {
           label: 'Condition Check',
           conditionType: 'match',
           comparisonValue: 'Yes',
+          logicalOperator: 'ALL',
+          rules: [
+            {
+              id: 'rule-1',
+              conditionType: 'match',
+              comparisonValue: 'Yes',
+            },
+          ],
           containerId: targetFrame.id,
           group: numGrp,
         };

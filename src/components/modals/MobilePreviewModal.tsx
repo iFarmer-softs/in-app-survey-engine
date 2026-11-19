@@ -533,22 +533,44 @@ export const MobilePreviewModal: React.FC<MobilePreviewModalProps> = ({
         return true;
       }
 
-      for (const parentId of q.depends_on) {
-        const parentQ = allMap.get(parentId);
-        if (parentQ && !checkVisibility(parentQ, new Set(visiting))) {
+      const isAnyLogic = (q.validation as any)?.logical_operator === 'ANY';
+      if (isAnyLogic && q.depends_on.length > 1) {
+        let hasAnyAnswered = false;
+        let anySatisfied = false;
+        for (const parentId of q.depends_on) {
+          const parentAns = answers[String(parentId)] || '';
+          if (parentAns && parentAns.trim() !== '') {
+            hasAnyAnswered = true;
+            const rule = q.validation
+              ? q.validation[String(parentId)] || (q.validation as any)[parentId]
+              : null;
+            if (!rule || evaluateRule(rule, parentAns)) {
+              anySatisfied = true;
+              break;
+            }
+          }
+        }
+        if (!hasAnyAnswered || !anySatisfied) {
           return false;
         }
+      } else {
+        for (const parentId of q.depends_on) {
+          const parentQ = allMap.get(parentId);
+          if (parentQ && !checkVisibility(parentQ, new Set(visiting))) {
+            return false;
+          }
 
-        const parentAns = answers[String(parentId)] || '';
-        if (!parentAns || parentAns.trim() === '') {
-          return false;
-        }
+          const parentAns = answers[String(parentId)] || '';
+          if (!parentAns || parentAns.trim() === '') {
+            return false;
+          }
 
-        const rule = q.validation
-          ? q.validation[String(parentId)] || (q.validation as any)[parentId]
-          : null;
-        if (rule && !evaluateRule(rule, parentAns)) {
-          return false;
+          const rule = q.validation
+            ? q.validation[String(parentId)] || (q.validation as any)[parentId]
+            : null;
+          if (rule && !evaluateRule(rule, parentAns)) {
+            return false;
+          }
         }
       }
 

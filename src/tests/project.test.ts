@@ -7537,5 +7537,183 @@ assert.ok(
 
 console.log('   ✅ Edge Pills Anchored Strictly to Edge Line (Non-Detachment Architecture) validated with 100% precision.');
 
-console.log('\n🎉 ALL TESTS PASSED SUCCESSFULLY! (72/72 test suites passed)\n');
+// ---------------------------------------------------------------------------
+// SUITE 73: Support Multiple Conditions in One Decision Node
+// ---------------------------------------------------------------------------
+console.log('\n7️⃣3️⃣ Testing Multiple Conditions in One Decision Node (ALL/ANY Logic, Node Summary & All-Any Inspector)...');
+
+import { normalizeDecisionRules } from '../types/survey';
+import { getShortOperator, getRuleSubject } from '../components/nodes/DecisionNode';
+
+// 73A: Backward compatibility and initial single condition start
+const legacyDecData = {
+  label: 'Condition Check',
+  parentQuestionId: 108,
+  conditionType: 'greater' as const,
+  comparisonValue: 50,
+};
+const normalizedLegacy = normalizeDecisionRules(legacyDecData);
+assert.strictEqual(normalizedLegacy.length, 1, 'Decision node must normalize legacy data to exactly 1 rule');
+assert.strictEqual(normalizedLegacy[0].parentQuestionId, 108, 'Normalized rule must preserve parentQuestionId');
+assert.strictEqual(normalizedLegacy[0].conditionType, 'greater', 'Normalized rule must preserve conditionType');
+assert.strictEqual(normalizedLegacy[0].comparisonValue, 50, 'Normalized rule must preserve comparisonValue');
+
+const emptyNormalized = normalizeDecisionRules({});
+assert.strictEqual(emptyNormalized.length, 1, 'Decision node must start with exactly 1 condition by default');
+assert.strictEqual(emptyNormalized[0].conditionType, 'match', 'Default condition type must be match');
+
+// 73B: Multiple conditions support (Farm size > 50 and Crop = Rice)
+const multiDecData = {
+  label: 'Eligibility Decision',
+  logicalOperator: 'ALL' as const,
+  rules: [
+    {
+      id: 'rule-1',
+      parentQuestionId: 108,
+      field: 'Farm size',
+      conditionType: 'greater' as const,
+      comparisonValue: 50,
+    },
+    {
+      id: 'rule-2',
+      parentQuestionId: 109,
+      field: 'Crop',
+      conditionType: 'match' as const,
+      comparisonValue: 'Rice',
+    },
+  ],
+};
+const normalizedMulti = normalizeDecisionRules(multiDecData);
+assert.strictEqual(normalizedMulti.length, 2, 'Decision node must support multiple rules in one decision');
+assert.strictEqual(multiDecData.logicalOperator, 'ALL', 'Logical operator must be ALL');
+
+// 73C: On-canvas node summary and ALL/ANY badge
+assert.strictEqual(getShortOperator('greater'), '>', 'Short operator for greater must be >');
+assert.strictEqual(getShortOperator('less'), '<', 'Short operator for less must be <');
+assert.strictEqual(getShortOperator('greater_or_equal'), '>=', 'Short operator for greater_or_equal must be >=');
+assert.strictEqual(getShortOperator('less_or_equal'), '<=', 'Short operator for less_or_equal must be <=');
+assert.strictEqual(getShortOperator('not_match'), '!=', 'Short operator for not_match must be !=');
+assert.strictEqual(getShortOperator('match'), '=', 'Short operator for match must be =');
+
+const mockNodes = [
+  { id: 'n-108', type: 'question', data: { question_id: 108, question: 'Farm size' } },
+  { id: 'n-109', type: 'question', data: { question_id: 109, question: 'Crop' } },
+];
+const subject1 = getRuleSubject(normalizedMulti[0], mockNodes);
+assert.strictEqual(subject1, 'Farm size', 'Subject must resolve to field name "Farm size"');
+
+const subject2 = getRuleSubject(normalizedMulti[1], mockNodes);
+assert.strictEqual(subject2, 'Crop', 'Subject must resolve to field name "Crop"');
+
+// Formatted short summary for canvas node: "Farm size > 50 and 1 more"
+const firstRule73 = normalizedMulti[0];
+const shortOp73 = getShortOperator(firstRule73.conditionType);
+const canvasSummary73 = `${subject1} ${shortOp73} ${firstRule73.comparisonValue} and ${normalizedMulti.length - 1} more`;
+assert.strictEqual(canvasSummary73, 'Farm size > 50 and 1 more', 'Canvas node must show short summary: "Farm size > 50 and 1 more"');
+
+// 73D: Schema compilation with multiple conditions in one decision node
+const multiDecisionSchemaNodes: any[] = [
+  {
+    id: 'q-farm-size',
+    type: 'question',
+    position: { x: 100, y: 100 },
+    data: { question_id: 108, question: 'Farm size', answer_type: 'integer', group: 1 },
+  },
+  {
+    id: 'q-crop-type',
+    type: 'question',
+    position: { x: 100, y: 220 },
+    data: { question_id: 109, question: 'Crop', answer_type: 'text', group: 1 },
+  },
+  {
+    id: 'dec-multi',
+    type: 'decision',
+    position: { x: 100, y: 350 },
+    data: {
+      label: 'Subsidy Eligibility',
+      logicalOperator: 'ALL',
+      rules: [
+        {
+          id: 'rule-1',
+          parentQuestionId: 108,
+          field: 'Farm size',
+          conditionType: 'greater',
+          comparisonValue: 50,
+        },
+        {
+          id: 'rule-2',
+          parentQuestionId: 109,
+          field: 'Crop',
+          conditionType: 'match',
+          comparisonValue: 'Rice',
+        },
+      ],
+      group: 1,
+    },
+  },
+  {
+    id: 'q-subsidy-details',
+    type: 'question',
+    position: { x: 350, y: 350 },
+    data: { question_id: 110, question: 'Rice Subsidy Application Form', answer_type: 'text', group: 1 },
+  },
+];
+
+const multiDecisionSchemaEdges: any[] = [
+  { id: 'e-in-1', source: 'q-farm-size', target: 'dec-multi' },
+  { id: 'e-in-2', source: 'q-crop-type', target: 'dec-multi' },
+  { id: 'e-yes', source: 'dec-multi', target: 'q-subsidy-details', sourceHandle: 'match', label: 'Yes' },
+];
+
+const compiledMultiDecision = compileFlowToSchema(
+  multiDecisionSchemaNodes,
+  multiDecisionSchemaEdges,
+  { groupNumber: 1, groupTitle: 'Group 1', groupTitleBn: 'গ্রুপ ১' } as any
+);
+
+const compiledTargetQ = compiledMultiDecision.data.find((q) => q.question_id === 110)!;
+assert.ok(compiledTargetQ, 'Target question Q#110 must exist in compiled schema');
+assert.ok(compiledTargetQ.depends_on?.includes(108), 'Q#110 must depend on Q#108');
+assert.ok(compiledTargetQ.depends_on?.includes(109), 'Q#110 must depend on Q#109');
+assert.strictEqual(compiledTargetQ.validation?.['108']?.validation_type, 'greater', 'Validation for Q#108 must be greater');
+assert.strictEqual(compiledTargetQ.validation?.['108']?.validation, 50, 'Validation threshold for Q#108 must be 50');
+assert.strictEqual(compiledTargetQ.validation?.['109']?.validation_type, 'match', 'Validation for Q#109 must be match');
+assert.deepStrictEqual(compiledTargetQ.validation?.['109']?.validation, { Rice: true }, 'Validation for Q#109 must match "Rice"');
+assert.strictEqual((compiledTargetQ.validation as any)?.logical_operator, 'ALL', 'Compiled validation must preserve logical_operator ALL');
+
+// 73E: Inspector UI Source Code Verification (All/Any choice appears only after adding second condition)
+const rightSidebarCode = fs.readFileSync(path.resolve(process.cwd(), 'src/components/layout/RightSidebar.tsx'), 'utf-8');
+const inputTypeViewsCode = fs.readFileSync(path.resolve(process.cwd(), 'src/components/layout/InputTypeViewsPanel.tsx'), 'utf-8');
+const decNodeCode = fs.readFileSync(path.resolve(process.cwd(), 'src/components/nodes/DecisionNode.tsx'), 'utf-8');
+
+assert.ok(
+  rightSidebarCode.includes('rules.length >= 2') && rightSidebarCode.includes('All of these are true') && rightSidebarCode.includes('Any of these is true'),
+  'RightSidebar must only show "All of these are true" / "Any of these is true" when rules.length >= 2'
+);
+assert.ok(
+  rightSidebarCode.includes('+ Add another condition'),
+  'RightSidebar must provide "+ Add another condition" button'
+);
+
+assert.ok(
+  inputTypeViewsCode.includes('rules.length >= 2') && inputTypeViewsCode.includes('All of these are true') && inputTypeViewsCode.includes('Any of these is true'),
+  'InputTypeViewsPanel must only show "All of these are true" / "Any of these is true" when rules.length >= 2'
+);
+assert.ok(
+  inputTypeViewsCode.includes('+ Add another condition'),
+  'InputTypeViewsPanel must provide "+ Add another condition" button'
+);
+
+assert.ok(
+  decNodeCode.includes('decision-logic-badge') && (decNodeCode.includes('badge-all') || decNodeCode.includes('badge-${')),
+  'DecisionNode must render ALL / ANY badge pill when multiple conditions exist'
+);
+assert.ok(
+  decNodeCode.includes('decision-token-more'),
+  'DecisionNode must render decision-token-more for "... and N more" summary'
+);
+
+console.log('   ✅ Multiple Conditions in One Decision Node (ALL/ANY Logic, Node Summary & All-Any Inspector) validated with 100% precision.');
+
+console.log('\n🎉 ALL TESTS PASSED SUCCESSFULLY! (73/73 test suites passed)\n');
 

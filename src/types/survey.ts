@@ -21,6 +21,7 @@ export type ValidationType =
   | 'less'
   | 'greater_or_equal'
   | 'less_or_equal'
+  | 'contains'
   | 'else';
 
 export interface ValidationConfig {
@@ -107,11 +108,42 @@ export interface QuestionNodeData {
   validation?: any;
 }
 
+export interface DecisionRule {
+  id?: string;
+  parentQuestionId?: number;
+  field?: string;
+  conditionType: ValidationType;
+  comparisonValue: string | number;
+}
+
 export interface DecisionNodeData {
   label: string;
   parentQuestionId?: number;
   conditionType: ValidationType;
   comparisonValue: string | number;
+  logicalOperator?: 'ALL' | 'ANY';
+  rules?: DecisionRule[];
+}
+
+/**
+ * Normalizes decision node data to always return an array of DecisionRule objects.
+ * Falls back to legacy single-condition fields if rules array is missing.
+ */
+export function normalizeDecisionRules(data?: Partial<DecisionNodeData>): DecisionRule[] {
+  if (!data) {
+    return [{ id: 'rule-1', conditionType: 'match', comparisonValue: '' }];
+  }
+  if (data.rules && Array.isArray(data.rules) && data.rules.length > 0) {
+    return data.rules;
+  }
+  return [
+    {
+      id: 'rule-1',
+      parentQuestionId: data.parentQuestionId,
+      conditionType: data.conditionType || 'match',
+      comparisonValue: data.comparisonValue !== undefined ? data.comparisonValue : '',
+    },
+  ];
 }
 
 export interface GroupJumpNodeData {

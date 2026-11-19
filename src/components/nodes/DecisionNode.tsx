@@ -2,7 +2,8 @@ import { memo, useMemo } from 'react';
 import type { NodeProps } from '@xyflow/react';
 import { Handle, Position, useEdges, useNodes } from '@xyflow/react';
 import { Split, Check, X } from 'lucide-react';
-import type { DecisionNodeData } from '../../types/survey';
+import type { DecisionNodeData, DecisionRule } from '../../types/survey';
+import { normalizeDecisionRules } from '../../types/survey';
 
 /**
  * Maps condition type to natural, plain-language English phrases.
@@ -32,45 +33,118 @@ export function getOperatorLabel(conditionType?: string, comparisonValue?: any):
   }
 }
 
+/**
+ * Shorthand operator symbol for compact node cards with multiple conditions.
+ */
+export function getShortOperator(conditionType?: string): string {
+  switch (conditionType) {
+    case 'greater':
+      return '>';
+    case 'less':
+      return '<';
+    case 'greater_or_equal':
+      return '>=';
+    case 'less_or_equal':
+      return '<=';
+    case 'not_match':
+      return '!=';
+    case 'contains':
+      return 'contains';
+    case 'match':
+    default:
+      return '=';
+  }
+}
+
+/**
+ * Resolves the subject label of a decision rule (field name, question title, or Q#ID).
+ */
+export function getRuleSubject(
+  rule: DecisionRule,
+  nodes?: any[],
+  edges?: any[],
+  nodeId?: string,
+  defaultLabel?: string
+): string {
+  if (rule.field && rule.field.trim()) {
+    return rule.field.trim();
+  }
+  if (rule.parentQuestionId) {
+    if (nodes) {
+      const qNode = nodes.find((n: any) => (n.data as any)?.question_id === rule.parentQuestionId);
+      const qTitle = (qNode?.data as any)?.question;
+      if (qTitle && typeof qTitle === 'string' && qTitle.trim() && qTitle.length <= 25) {
+        return qTitle.trim();
+      }
+    }
+    return `Q#${rule.parentQuestionId}`;
+  }
+  if (nodeId && edges && nodes) {
+    const incomingEdge = edges.find((e: any) => e.target === nodeId);
+    if (incomingEdge) {
+      const srcNode = nodes.find((n: any) => n.id === incomingEdge.source);
+      if (srcNode) {
+        const qTitle = (srcNode.data as any)?.question;
+        if (qTitle && typeof qTitle === 'string' && qTitle.trim() && qTitle.length <= 25) {
+          return qTitle.trim();
+        }
+        const qId = (srcNode.data as any)?.question_id;
+        if (qId) return `Q#${qId}`;
+        const label = (srcNode.data as any)?.label;
+        if (label) return String(label).slice(0, 16);
+      }
+    }
+  }
+  return defaultLabel && defaultLabel !== 'Condition Rule' && defaultLabel !== 'Decision Diamond' && defaultLabel !== 'Condition Check'
+    ? defaultLabel
+    : 'Question';
+}
+
 export const DecisionNode = memo(({ id, data, selected }: NodeProps) => {
   const nodeData = data as unknown as DecisionNodeData;
   const edges = useEdges();
   const nodes = useNodes();
 
-  // Find incoming connection to dynamically resolve compared question ID
-  const subjectText = useMemo(() => {
-    if (nodeData.parentQuestionId) {
-      return `Q#${nodeData.parentQuestionId}`;
-    }
-    const incomingEdge = edges?.find((e) => e.target === id);
-    if (incomingEdge && nodes) {
-      const srcNode = nodes.find((n) => n.id === incomingEdge.source);
-      if (srcNode) {
-        const qId = (srcNode.data as any)?.question_id;
-        if (qId) return `Q#${qId}`;
-        const label = (srcNode.data as any)?.question || (srcNode.data as any)?.label;
-        if (label) return String(label).slice(0, 16);
-      }
-    }
-    return nodeData.label && nodeData.label !== 'Condition Rule' && nodeData.label !== 'Decision Diamond'
-      ? nodeData.label
-      : 'Question';
-  }, [id, nodeData.parentQuestionId, nodeData.label, edges, nodes]);
+  const rules = useMemo(() => normalizeDecisionRules(nodeData), [nodeData]);
+  const isMulti = rules.length >= 2;
+  const logicalOp = nodeData.logicalOperator || 'ALL';
 
-  const operatorText = useMemo(() => {
-    return getOperatorLabel(nodeData.conditionType, nodeData.comparisonValue);
-  }, [nodeData.conditionType, nodeData.comparisonValue]);
+  const firstRule = rules[0] || { conditionType: 'match', comparisonValue: '' };
 
-  const valueDisplay = useMemo(() => {
+  const firstSubject = useMemo(
+    () => getRuleSubject(firstRule, nodes, edges, id, nodeData.label),
+    [firstRule, nodes, edges, id, nodeData.label]
+  );
+
+  const firstOperator = useMemo(
+    () => (isMulti ? getShortOperator(firstRule.conditionType) : getOperatorLabel(firstRule.conditionType, firstRule.comparisonValue)),
+    [isMulti, firstRule.conditionType, firstRule.comparisonValue]
+  );
+
+  const firstValue = useMemo(() => {
     if (
-      nodeData.comparisonValue !== undefined &&
-      nodeData.comparisonValue !== null &&
-      String(nodeData.comparisonValue).trim() !== ''
+      firstRule.comparisonValue !== undefined &&
+      firstRule.comparisonValue !== null &&
+      String(firstRule.comparisonValue).trim() !== ''
     ) {
-      return String(nodeData.comparisonValue);
+      return String(firstRule.comparisonValue);
     }
     return '...';
-  }, [nodeData.comparisonValue]);
+  }, [firstRule.comparisonValue]);
+
+  // Full tooltip for all rules
+  const tooltipText = useMemo(() => {
+    if (!isMulti) {
+      return `IF ${firstSubject} ${getOperatorLabel(firstRule.conditionType, firstRule.comparisonValue)} ${firstValue}`;
+    }
+    const lines = rules.map((r, idx) => {
+      const subj = getRuleSubject(r, nodes, edges, id, nodeData.label);
+      const op = getOperatorLabel(r.conditionType, r.comparisonValue);
+      const val = r.comparisonValue !== undefined ? String(r.comparisonValue) : '...';
+      return `${idx + 1}. ${subj} ${op} ${val}`;
+    });
+    return `${logicalOp === 'ANY' ? 'ANY of these is true' : 'ALL of these are true'}:\n` + lines.join('\n');
+  }, [isMulti, rules, nodes, edges, id, nodeData.label, logicalOp, firstSubject, firstRule, firstValue]);
 
   return (
     <div className={`survey-node decision-node ${selected ? 'is-selected' : ''}`}>
@@ -92,21 +166,33 @@ export const DecisionNode = memo(({ id, data, selected }: NodeProps) => {
       />
 
       <div className="decision-diamond-card">
-        {/* Header with Split Icon */}
+        {/* Header with Split Icon and ALL/ANY Badge */}
         <div className="decision-diamond">
-          <Split size={16} className="decision-icon" />
-          <span className="decision-title">Condition Check</span>
+          <div className="decision-diamond-header-left" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Split size={16} className="decision-icon" />
+            <span className="decision-title">Condition Check</span>
+          </div>
+          {isMulti && (
+            <span className={`decision-logic-badge badge-${logicalOp.toLowerCase()}`}>
+              {logicalOp}
+            </span>
+          )}
         </div>
 
-        {/* Full Plain-Language Rule Sentence: IF Q#108 is greater than 50 */}
+        {/* Plain-Language Rule Sentence / Summary */}
         <div
           className="decision-sentence"
-          title={`IF ${subjectText} ${operatorText} ${valueDisplay}`}
+          title={tooltipText}
         >
           <span className="decision-token-if">IF</span>
-          <span className="decision-token-subject">{subjectText}</span>
-          <span className="decision-token-operator">{operatorText}</span>
-          <span className="decision-token-value">{valueDisplay}</span>
+          <span className="decision-token-subject">{firstSubject}</span>
+          <span className="decision-token-operator">{firstOperator}</span>
+          <span className="decision-token-value">{firstValue}</span>
+          {isMulti && (
+            <span className="decision-token-more">
+              {logicalOp === 'ANY' ? 'or' : 'and'} {rules.length - 1} more
+            </span>
+          )}
         </div>
 
         {/* Dedicated Branches: ✓ Yes and ✗ No */}

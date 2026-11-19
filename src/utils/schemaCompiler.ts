@@ -8,6 +8,7 @@ import type {
   GroupJumpNodeData,
   ValidationConfig,
 } from '../types/survey';
+import { normalizeDecisionRules } from '../types/survey';
 import { resolveNodeGroupId } from './flowValidator';
 
 export interface GroupMeta {
@@ -240,8 +241,24 @@ export function compileFlowToSchema(
           (typeof inEdge.label === 'string' &&
             (inEdge.label.toUpperCase().includes('ELSE') || inEdge.label.trim().toUpperCase() === 'NO'));
 
-        for (const decInEdge of decisionIncoming) {
-          const parentQuestionNode = nodes.find((n) => n.id === decInEdge.source && n.type === 'question');
+        const rules = normalizeDecisionRules(decData);
+        const incomingQuestionNodes = decisionIncoming
+          .map((de) => nodes.find((n) => n.id === de.source && n.type === 'question'))
+          .filter(Boolean) as Node[];
+
+        // For each rule, resolve its question node
+        for (let i = 0; i < rules.length; i++) {
+          const rule = rules[i];
+          let parentQuestionNode: Node | undefined;
+          if (rule.parentQuestionId) {
+            parentQuestionNode = nodes.find(
+              (n) => n.type === 'question' && (n.data as any)?.question_id === rule.parentQuestionId
+            );
+          }
+          if (!parentQuestionNode && incomingQuestionNodes.length > 0) {
+            parentQuestionNode = incomingQuestionNodes[Math.min(i, incomingQuestionNodes.length - 1)];
+          }
+
           if (parentQuestionNode) {
             const parentData = parentQuestionNode.data as unknown as QuestionNodeData;
             const parentId = parentData.question_id;
@@ -251,7 +268,7 @@ export function compileFlowToSchema(
 
             const parentGroup = getNodeGroup(parentQuestionNode, parentData);
             const currentGroup = getNodeGroup(qNode, data);
-            const condType = decData.conditionType || 'match';
+            const condType = rule.conditionType || 'match';
 
             if (condType === 'match') {
               if (isElse) {
@@ -259,11 +276,11 @@ export function compileFlowToSchema(
                   group: parentGroup,
                   is_same_group: parentGroup === currentGroup,
                   validation_type: 'not_match',
-                  validation: String(decData.comparisonValue || ''),
+                  validation: String(rule.comparisonValue || ''),
                 };
               } else {
                 const matches: Record<string, boolean> = {};
-                matches[String(decData.comparisonValue || '')] = true;
+                matches[String(rule.comparisonValue || '')] = true;
                 validationMap[String(parentId)] = {
                   group: parentGroup,
                   is_same_group: parentGroup === currentGroup,
@@ -271,22 +288,54 @@ export function compileFlowToSchema(
                   validation: matches,
                 };
               }
+            } else if (condType === 'not_match') {
+              validationMap[String(parentId)] = {
+                group: parentGroup,
+                is_same_group: parentGroup === currentGroup,
+                validation_type: isElse ? 'match' : 'not_match',
+                validation: isElse ? { [String(rule.comparisonValue || '')]: true } : String(rule.comparisonValue || ''),
+              };
             } else if (condType === 'greater') {
               validationMap[String(parentId)] = {
                 group: parentGroup,
                 is_same_group: parentGroup === currentGroup,
                 validation_type: isElse ? 'less_or_equal' : 'greater',
-                validation: Number(decData.comparisonValue) || 0,
+                validation: Number(rule.comparisonValue) || 0,
               };
             } else if (condType === 'less') {
               validationMap[String(parentId)] = {
                 group: parentGroup,
                 is_same_group: parentGroup === currentGroup,
                 validation_type: isElse ? 'greater_or_equal' : 'less',
-                validation: Number(decData.comparisonValue) || 0,
+                validation: Number(rule.comparisonValue) || 0,
+              };
+            } else if (condType === 'greater_or_equal') {
+              validationMap[String(parentId)] = {
+                group: parentGroup,
+                is_same_group: parentGroup === currentGroup,
+                validation_type: isElse ? 'less' : 'greater_or_equal',
+                validation: Number(rule.comparisonValue) || 0,
+              };
+            } else if (condType === 'less_or_equal') {
+              validationMap[String(parentId)] = {
+                group: parentGroup,
+                is_same_group: parentGroup === currentGroup,
+                validation_type: isElse ? 'greater' : 'less_or_equal',
+                validation: Number(rule.comparisonValue) || 0,
+              };
+            } else if (condType === 'contains') {
+              validationMap[String(parentId)] = {
+                group: parentGroup,
+                is_same_group: parentGroup === currentGroup,
+                validation_type: isElse ? 'not_match' : 'contains',
+                validation: String(rule.comparisonValue || ''),
               };
             }
           }
+        }
+
+        if (rules.length > 1 && decData.logicalOperator) {
+          (validationMap as any).logical_operator = decData.logicalOperator;
         }
       }
     }

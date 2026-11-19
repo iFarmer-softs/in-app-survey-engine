@@ -30,12 +30,16 @@ import {
   ChevronUp,
   Layers,
   BookmarkPlus,
+  Plus,
 } from 'lucide-react';
 import type {
   AnswerType,
   ValidationType,
   GroupJumpNodeData,
+  DecisionNodeData,
+  DecisionRule,
 } from '../../types/survey';
+import { normalizeDecisionRules } from '../../types/survey';
 import type { ReusableQuestionGroup } from '../../types/group';
 import type { GroupMeta } from '../../utils/schemaCompiler';
 import { isNodeInContainer } from '../../utils/flowValidator';
@@ -755,111 +759,313 @@ export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
         )}
 
         {/* If Decision Node Selected */}
-        {selectedNode && selectedNode.type === 'decision' && (
-          <div className="node-inspector-block">
-            <div className="flex-between">
-              <span className="text-secondary font-mono text-xs">
-                Decision Diamond
-              </span>
+        {selectedNode && selectedNode.type === 'decision' && (() => {
+          const decData = selectedNode.data as unknown as DecisionNodeData;
+          const rules = normalizeDecisionRules(decData);
+          const logicalOperator = decData.logicalOperator || 'ALL';
+          const questionNodes = nodes.filter((n) => n.type === 'question');
+
+          const updateRules = (
+            newRules: DecisionRule[],
+            newOp: 'ALL' | 'ANY' = logicalOperator
+          ) => {
+            const first = newRules[0] || { conditionType: 'match', comparisonValue: '' };
+            onUpdateNodeData(selectedNode.id, {
+              ...decData,
+              rules: newRules,
+              logicalOperator: newOp,
+              parentQuestionId: first.parentQuestionId,
+              conditionType: first.conditionType,
+              comparisonValue: first.comparisonValue,
+            });
+          };
+
+          const handleAddRule = () => {
+            const newRule: DecisionRule = {
+              id: `rule-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+              conditionType: 'match',
+              comparisonValue: '',
+            };
+            updateRules([...rules, newRule]);
+          };
+
+          const handleRemoveRule = (index: number) => {
+            if (rules.length <= 1) return;
+            const nextRules = rules.filter((_, idx) => idx !== index);
+            updateRules(nextRules);
+          };
+
+          const handleRuleChange = (index: number, patch: Partial<DecisionRule>) => {
+            const nextRules = rules.map((r, idx) => (idx === index ? { ...r, ...patch } : r));
+            updateRules(nextRules);
+          };
+
+          return (
+            <div className="node-inspector-block">
+              <div className="flex-between">
+                <span className="text-secondary font-mono text-xs">
+                  Decision Diamond
+                </span>
+                <button
+                  className="icon-action-btn text-danger"
+                  onClick={() => onDeleteNode(selectedNode.id)}
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+
+              {/* Parent Group Membership Indicator */}
+              {(() => {
+                const containerId = (selectedNode.data as any)?.containerId;
+                const parentFrame = containerId ? nodes.find((n) => n.id === containerId) : null;
+                const groupNum = (selectedNode.data as any)?.group || (parentFrame?.data as any)?.numericGroupId;
+                if (!parentFrame && !groupNum) return null;
+                const frameColor = (parentFrame?.data as any)?.color || '#f59e0b';
+                return (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '8px 0 12px 0', padding: '6px 10px', borderRadius: 6, background: `${frameColor}15`, border: `1px solid ${frameColor}35` }}>
+                    <Layers size={13} style={{ color: frameColor }} />
+                    <span style={{ fontSize: 11, fontWeight: 600, color: frameColor }}>
+                      Group #{groupNum || 1}
+                    </span>
+                    {parentFrame && (
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                        • {(parentFrame.data as any)?.titleBn || (parentFrame.data as any)?.title || 'Group Area'}
+                      </span>
+                    )}
+                  </div>
+                );
+              })()}
+
+              <div className="form-group">
+                <label className="form-label">Condition Label</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={decData.label || ''}
+                  onChange={(e) =>
+                    onUpdateNodeData(selectedNode.id, {
+                      ...decData,
+                      label: e.target.value,
+                    })
+                  }
+                />
+              </div>
+
+              {/* Condition Matching: All of these are true vs Any of these is true (only shown when >= 2 conditions) */}
+              {rules.length >= 2 && (
+                <div className="form-group decision-operator-choice">
+                  <label className="form-label" style={{ marginBottom: 6, fontWeight: 600 }}>
+                    Condition Matching
+                  </label>
+                  <div
+                    className="segmented-control"
+                    style={{
+                      display: 'flex',
+                      gap: 4,
+                      background: 'rgba(0, 0, 0, 0.25)',
+                      padding: 3,
+                      borderRadius: 6,
+                      border: '1px solid rgba(255, 255, 255, 0.08)',
+                    }}
+                  >
+                    <button
+                      type="button"
+                      className={`btn-toggle-operator ${logicalOperator === 'ALL' ? 'active' : ''}`}
+                      onClick={() => updateRules(rules, 'ALL')}
+                      style={{
+                        flex: 1,
+                        padding: '6px 8px',
+                        fontSize: 11,
+                        fontWeight: logicalOperator === 'ALL' ? 700 : 500,
+                        borderRadius: 4,
+                        border: 'none',
+                        background: logicalOperator === 'ALL' ? '#3b82f6' : 'transparent',
+                        color: logicalOperator === 'ALL' ? '#ffffff' : 'var(--text-muted, #94a3b8)',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
+                      All of these are true
+                    </button>
+                    <button
+                      type="button"
+                      className={`btn-toggle-operator ${logicalOperator === 'ANY' ? 'active' : ''}`}
+                      onClick={() => updateRules(rules, 'ANY')}
+                      style={{
+                        flex: 1,
+                        padding: '6px 8px',
+                        fontSize: 11,
+                        fontWeight: logicalOperator === 'ANY' ? 700 : 500,
+                        borderRadius: 4,
+                        border: 'none',
+                        background: logicalOperator === 'ANY' ? '#3b82f6' : 'transparent',
+                        color: logicalOperator === 'ANY' ? '#ffffff' : 'var(--text-muted, #94a3b8)',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
+                      Any of these is true
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Rules list */}
+              <div className="decision-rules-list" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {rules.map((rule, idx) => (
+                  <div
+                    key={rule.id || `rule-${idx}`}
+                    className="condition-card-item"
+                    style={{
+                      padding: 10,
+                      borderRadius: 6,
+                      background: 'rgba(0, 0, 0, 0.18)',
+                      border: '1px solid rgba(255, 255, 255, 0.07)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 8,
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: '#f59e0b', textTransform: 'uppercase' }}>
+                        Condition {idx + 1}
+                      </span>
+                      {rules.length > 1 && (
+                        <button
+                          type="button"
+                          className="icon-action-btn text-danger"
+                          title="Remove condition"
+                          onClick={() => handleRemoveRule(idx)}
+                          style={{ padding: 2, background: 'none', border: 'none', cursor: 'pointer' }}
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      )}
+                    </div>
+
+                    {questionNodes.length > 0 && (
+                      <div className="form-group" style={{ marginBottom: 4 }}>
+                        <label className="form-label" style={{ fontSize: 11 }}>Select Question (Canvas)</label>
+                        <select
+                          className="form-select"
+                          value={rule.parentQuestionId ?? ''}
+                          onChange={(e) => {
+                            const val = e.target.value ? parseInt(e.target.value, 10) : undefined;
+                            const targetQ = questionNodes.find((qn) => (qn.data as any)?.question_id === val);
+                            const qText = (targetQ?.data as any)?.question;
+                            handleRuleChange(idx, {
+                              parentQuestionId: val,
+                              field: qText ? String(qText).slice(0, 24) : rule.field,
+                            });
+                          }}
+                        >
+                          <option value="">-- Choose Question or Type Below --</option>
+                          {questionNodes.map((qn) => (
+                            <option key={qn.id} value={(qn.data as any)?.question_id}>
+                              Q#{(qn.data as any)?.question_id}: {(qn.data as any)?.question || 'Untitled Question'}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    <div className="form-group" style={{ marginBottom: 4 }}>
+                      <label className="form-label" style={{ fontSize: 11 }}>Comparing Question ID</label>
+                      <input
+                        type="number"
+                        className="form-input"
+                        placeholder="e.g. 108 for Q#108 (or auto from incoming line)"
+                        value={rule.parentQuestionId ?? ''}
+                        onChange={(e) =>
+                          handleRuleChange(idx, {
+                            parentQuestionId: e.target.value ? parseInt(e.target.value, 10) : undefined,
+                          })
+                        }
+                      />
+                    </div>
+
+                    <div className="form-group" style={{ marginBottom: 4 }}>
+                      <label className="form-label" style={{ fontSize: 11 }}>Field / Subject Label (Optional)</label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        placeholder="e.g. Farm size, Crop"
+                        value={rule.field || ''}
+                        onChange={(e) =>
+                          handleRuleChange(idx, {
+                            field: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+
+                    <div className="form-group" style={{ marginBottom: 4 }}>
+                      <label className="form-label" style={{ fontSize: 11 }}>Plain-Language Operator</label>
+                      <select
+                        className="form-select"
+                        value={rule.conditionType}
+                        onChange={(e) =>
+                          handleRuleChange(idx, {
+                            conditionType: e.target.value as ValidationType,
+                          })
+                        }
+                      >
+                        <option value="match">equals (is)</option>
+                        <option value="not_match">does not equal (is not)</option>
+                        <option value="greater">is greater than (&gt;)</option>
+                        <option value="less">is less than (&lt;)</option>
+                        <option value="greater_or_equal">is at least (&ge;)</option>
+                        <option value="less_or_equal">is at most (&le;)</option>
+                        <option value="contains">contains</option>
+                      </select>
+                    </div>
+
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontSize: 11 }}>Comparison Value</label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        value={rule.comparisonValue ?? ''}
+                        onChange={(e) =>
+                          handleRuleChange(idx, {
+                            comparisonValue: e.target.value,
+                          })
+                        }
+                        placeholder="e.g. 50 or Rice"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Add Condition Button */}
               <button
-                className="icon-action-btn text-danger"
-                onClick={() => onDeleteNode(selectedNode.id)}
+                type="button"
+                className="btn-add-condition"
+                onClick={handleAddRule}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 6,
+                  width: '100%',
+                  padding: '8px 12px',
+                  marginTop: 10,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  borderRadius: 6,
+                  border: '1px dashed rgba(245, 158, 11, 0.45)',
+                  background: 'rgba(245, 158, 11, 0.08)',
+                  color: '#f59e0b',
+                  cursor: 'pointer',
+                }}
               >
-                <Trash2 size={14} />
+                <Plus size={14} />
+                <span>+ Add another condition</span>
               </button>
             </div>
-
-            {/* Parent Group Membership Indicator */}
-            {(() => {
-              const containerId = (selectedNode.data as any)?.containerId;
-              const parentFrame = containerId ? nodes.find((n) => n.id === containerId) : null;
-              const groupNum = (selectedNode.data as any)?.group || (parentFrame?.data as any)?.numericGroupId;
-              if (!parentFrame && !groupNum) return null;
-              const frameColor = (parentFrame?.data as any)?.color || '#f59e0b';
-              return (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '8px 0 12px 0', padding: '6px 10px', borderRadius: 6, background: `${frameColor}15`, border: `1px solid ${frameColor}35` }}>
-                  <Layers size={13} style={{ color: frameColor }} />
-                  <span style={{ fontSize: 11, fontWeight: 600, color: frameColor }}>
-                    Group #{groupNum || 1}
-                  </span>
-                  {parentFrame && (
-                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                      • {(parentFrame.data as any)?.titleBn || (parentFrame.data as any)?.title || 'Group Area'}
-                    </span>
-                  )}
-                </div>
-              );
-            })()}
-
-            <div className="form-group">
-              <label className="form-label">Condition Label</label>
-              <input
-                type="text"
-                className="form-input"
-                value={(selectedNode.data as any).label || ''}
-                onChange={(e) =>
-                  onUpdateNodeData(selectedNode.id, {
-                    ...selectedNode.data,
-                    label: e.target.value,
-                  })
-                }
-              />
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Comparing Question ID</label>
-              <input
-                type="number"
-                className="form-input"
-                placeholder="e.g. 108 for Q#108 (or auto from incoming line)"
-                value={(selectedNode.data as any).parentQuestionId ?? ''}
-                onChange={(e) =>
-                  onUpdateNodeData(selectedNode.id, {
-                    ...selectedNode.data,
-                    parentQuestionId: e.target.value ? parseInt(e.target.value, 10) : undefined,
-                  })
-                }
-              />
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Plain-Language Operator</label>
-              <select
-                className="form-select"
-                value={(selectedNode.data as any).conditionType}
-                onChange={(e) =>
-                  onUpdateNodeData(selectedNode.id, {
-                    ...selectedNode.data,
-                    conditionType: e.target.value as ValidationType,
-                  })
-                }
-              >
-                <option value="match">equals (is)</option>
-                <option value="not_match">does not equal (is not)</option>
-                <option value="greater">is greater than (&gt;)</option>
-                <option value="less">is less than (&lt;)</option>
-                <option value="greater_or_equal">is at least (&ge;)</option>
-                <option value="less_or_equal">is at most (&le;)</option>
-                <option value="contains">contains</option>
-              </select>
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Comparison Value</label>
-              <input
-                type="text"
-                className="form-input"
-                value={(selectedNode.data as any).comparisonValue || ''}
-                onChange={(e) =>
-                  onUpdateNodeData(selectedNode.id, {
-                    ...selectedNode.data,
-                    comparisonValue: e.target.value,
-                  })
-                }
-              />
-            </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* If Group Jump Selected */}
         {selectedNode && selectedNode.type === 'groupJump' && (() => {
