@@ -7299,5 +7299,88 @@ assert.ok(!groupMembersFound.some((n) => n.id === 'out-1'));
 
 console.log('   ✅ Canvas Noise Reduction (Handle Hover Reveal, Snap to Grid, Full Path Tracing & Fit to Group) validated with 100% precision.');
 
-console.log('\n🎉 ALL TESTS PASSED SUCCESSFULLY! (70/70 test suites passed)\n');
+// ---------------------------------------------------------------------------
+// SUITE 71: Edge Label Positioning from Current (Edited) Path (Yes, No, Cross-Group & Custom Bends)
+// ---------------------------------------------------------------------------
+console.log('\n7️⃣1️⃣ Testing Edge Label Positioning from Current (Edited) Path (Yes, No, Cross-Group & Custom Bends)...');
+
+const {
+  getPathMidpoint,
+  getOrthogonalPathWithDetour: getOrthogonalPath71,
+  getCrossGroupOrthogonalPath: getCrossGroupOrthogonalPath71,
+} = await import('../components/edges/CustomFlowchartEdge');
+const customEdgeSource71 = fs.readFileSync(path.resolve(process.cwd(), 'src/components/edges/CustomFlowchartEdge.tsx'), 'utf-8');
+const connectionHookSource71 = fs.readFileSync(path.resolve(process.cwd(), 'src/hooks/useFlowCanvasConnections.ts'), 'utf-8');
+
+// 71A: getPathMidpoint calculates 50% arc length coordinates along polyline / orthogonal segments
+const straightSegments = [
+  { x: 100, y: 100 },
+  { x: 300, y: 100 },
+];
+const straightMid = getPathMidpoint(straightSegments);
+assert.strictEqual(straightMid.x, 200, 'Midpoint of 200px horizontal segment must be at x=200');
+assert.strictEqual(straightMid.y, 100, 'Midpoint of horizontal segment must remain at y=100');
+
+// 4-segment orthogonal detour (e.g. Yes decision branch exiting right, going down corridor, then into top of target)
+const detourSegments = [
+  { x: 300, y: 100 }, // Decision Yes exit (Right)
+  { x: 400, y: 100 }, // length = 100
+  { x: 400, y: 300 }, // length = 200 (accumulated = 300)
+  { x: 250, y: 300 }, // length = 150 (accumulated = 450)
+  { x: 250, y: 350 }, // Target entry (Top), length = 50 (total length = 500)
+];
+// Half length is 250. It falls within segment 2 (from (400, 100) to (400, 300)), at y = 100 + 150 = 250
+const detourMid = getPathMidpoint(detourSegments);
+assert.strictEqual(detourMid.x, 400, 'Path midpoint must sit directly on the vertical corridor spine (x=400)');
+assert.strictEqual(detourMid.y, 250, 'Path midpoint must sit at y=250 along the path');
+
+// 71B: getOrthogonalPathWithDetour positions labelX & labelY directly from the edited path
+const [baseYesPath, baseYesLx, baseYesLy] = getOrthogonalPath71({
+  sourceX: 300,
+  sourceY: 100,
+  sourcePosition: Position.Right,
+  targetX: 200,
+  targetY: 300,
+  targetPosition: Position.Top,
+});
+// When corridor is manually adjusted to the right by corridorOffsetX = +100:
+const [movedYesPath, movedYesLx, movedYesLy] = getOrthogonalPath71({
+  sourceX: 300,
+  sourceY: 100,
+  sourcePosition: Position.Right,
+  targetX: 200,
+  targetY: 300,
+  targetPosition: Position.Top,
+  corridorOffsetX: 100,
+});
+assert.ok(movedYesLx > baseYesLx, `Manually adjusted Yes branch labelX (${movedYesLx}) must track shifted corridor beyond base (${baseYesLx})`);
+assert.notStrictEqual(movedYesLx, (300 + 200) / 2, 'Label X must not stay stuck at default raw midpoint (250)');
+
+// 71C: CustomFlowchartEdge anchors ALL edge labels (Yes, No, Cross-Group, Option) to currentPathMid
+assert.ok(
+  customEdgeSource71.includes('currentPathMidX = labelX !== undefined && !isNaN(labelX) ? labelX : derivedMidX'),
+  'CustomFlowchartEdge must derive pillX from currentPathMidX (labelX)'
+);
+assert.ok(
+  customEdgeSource71.includes('pillX = currentPathMidX + (edgeData.labelOffsetX ?? 0)'),
+  'CustomFlowchartEdge must position pill from currentPathMidX + labelOffsetX'
+);
+assert.ok(
+  customEdgeSource71.includes('const isCrossGroup =') &&
+  customEdgeSource71.includes('Boolean(edgeData.isCrossGroup) ||'),
+  'isCrossGroup must respect edgeData.isCrossGroup even when dynamic group resolution matches fallback'
+);
+
+// 71D: onReconnect resets old bend and label offsets so reconnected / rerouted edges start fresh
+assert.ok(
+  connectionHookSource71.includes('corridorOffsetX: undefined') &&
+  connectionHookSource71.includes('corridorOffsetY: undefined') &&
+  connectionHookSource71.includes('labelOffsetX: undefined') &&
+  connectionHookSource71.includes('labelOffsetY: undefined'),
+  'useFlowCanvasConnections onReconnect must clear stale corridor and label offsets'
+);
+
+console.log('   ✅ Edge Label Positioning from Current (Edited) Path (Yes, No, Cross-Group & Custom Bends) validated with 100% precision.');
+
+console.log('\n🎉 ALL TESTS PASSED SUCCESSFULLY! (71/71 test suites passed)\n');
 

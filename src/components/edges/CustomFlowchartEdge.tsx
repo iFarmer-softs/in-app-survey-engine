@@ -66,6 +66,50 @@ function buildSvgPath(rawPts: Array<{ x: number; y: number }>, borderRadius: num
   return d;
 }
 
+/**
+ * Calculates the exact geometric midpoint along a multi-segment orthogonal or polyline path.
+ * Traverses path segments and returns the coordinates at 50% of the total path distance,
+ * ensuring edge labels stay anchored to the edge's current (edited) path.
+ */
+export function getPathMidpoint(pts: Array<{ x: number; y: number }>): { x: number; y: number } {
+  if (!pts || pts.length === 0) return { x: 0, y: 0 };
+  if (pts.length === 1) return { x: pts[0].x, y: pts[0].y };
+  if (pts.length === 2) {
+    return {
+      x: (pts[0].x + pts[1].x) / 2,
+      y: (pts[0].y + pts[1].y) / 2,
+    };
+  }
+
+  let totalLength = 0;
+  const segLengths: number[] = [];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const d = Math.hypot(pts[i + 1].x - pts[i].x, pts[i + 1].y - pts[i].y);
+    segLengths.push(d);
+    totalLength += d;
+  }
+
+  if (totalLength === 0) return { x: pts[0].x, y: pts[0].y };
+
+  const halfLength = totalLength / 2;
+  let accumulated = 0;
+
+  for (let i = 0; i < segLengths.length; i++) {
+    const len = segLengths[i];
+    if (accumulated + len >= halfLength) {
+      const remaining = halfLength - accumulated;
+      const ratio = len > 0 ? remaining / len : 0;
+      return {
+        x: pts[i].x + (pts[i + 1].x - pts[i].x) * ratio,
+        y: pts[i].y + (pts[i + 1].y - pts[i].y) * ratio,
+      };
+    }
+    accumulated += len;
+  }
+
+  return { x: pts[pts.length - 1].x, y: pts[pts.length - 1].y };
+}
+
 export function getOrthogonalPathWithDetour({
   sourceX,
   sourceY,
@@ -320,6 +364,14 @@ export function getOrthogonalPathWithDetour({
       x: Math.max(bounds.minX, Math.min(pt.x, bounds.maxX)),
       y: Math.max(bounds.minY, Math.min(pt.y, bounds.maxY)),
     }));
+  }
+
+  // Position label directly from the exact midpoint along the current (edited) path
+  const pathMid = getPathMidpoint(pts);
+  labelX = pathMid.x;
+  labelY = pathMid.y;
+
+  if (bounds) {
     labelX = Math.max(bounds.minX, Math.min(labelX, bounds.maxX));
     labelY = Math.max(bounds.minY, Math.min(labelY, bounds.maxY));
   }
@@ -1211,7 +1263,7 @@ export const CustomFlowchartEdge: React.FC<EdgeProps> = ({
   );
 
   const isCrossGroup =
-    Boolean(edgeData.isCrossGroup && isDifferentGroup) ||
+    Boolean(edgeData.isCrossGroup) ||
     isDifferentGroup;
 
   const effectiveSourceGroup = dynamicSourceGroup ?? edgeData.sourceGroup;
@@ -1494,26 +1546,20 @@ export const CustomFlowchartEdge: React.FC<EdgeProps> = ({
   }
 
   // Derive pill's position in world coordinates on every frame:
-  // For cross-group connectors: must sit in the clear corridor between containers,
-  // strictly outside source and target group bodies so it NEVER overlaps containers or nodes!
-  // For intra-group edges: derived midpoint between source and target ports clamped within group bounds.
+  // Every edge label is positioned from the edge's current (edited) path, regardless of edge type
+  // (Yes, No, Cross-Group, Option choice, or standard connection).
   const derivedMidX = (sourceX + effectiveTargetX) / 2;
   const derivedMidY = (sourceY + effectiveTargetY) / 2;
 
-  let pillX = derivedMidX;
-  let pillY = derivedMidY;
+  const currentPathMidX = labelX !== undefined && !isNaN(labelX) ? labelX : derivedMidX;
+  const currentPathMidY = labelY !== undefined && !isNaN(labelY) ? labelY : derivedMidY;
 
-  if (isCrossGroupConnection) {
-    // For cross-group connectors: label stays attached directly to the middle of the line (labelX, labelY)
-    pillX = (labelX !== undefined && !isNaN(labelX) ? labelX : derivedMidX) + (edgeData.labelOffsetX ?? 0);
-    pillY = (labelY !== undefined && !isNaN(labelY) ? labelY : derivedMidY) + (edgeData.labelOffsetY ?? 0);
-  } else {
-    pillX = edgeData.labelOffsetX !== undefined ? derivedMidX + edgeData.labelOffsetX : derivedMidX;
-    pillY = edgeData.labelOffsetY !== undefined ? derivedMidY + edgeData.labelOffsetY : derivedMidY;
-    if (intraGroupBounds) {
-      pillX = Math.max(intraGroupBounds.minX, Math.min(pillX, intraGroupBounds.maxX));
-      pillY = Math.max(intraGroupBounds.minY, Math.min(pillY, intraGroupBounds.maxY));
-    }
+  let pillX = currentPathMidX + (edgeData.labelOffsetX ?? 0);
+  let pillY = currentPathMidY + (edgeData.labelOffsetY ?? 0);
+
+  if (!isCrossGroupConnection && intraGroupBounds) {
+    pillX = Math.max(intraGroupBounds.minX, Math.min(pillX, intraGroupBounds.maxX));
+    pillY = Math.max(intraGroupBounds.minY, Math.min(pillY, intraGroupBounds.maxY));
   }
 
   // Anti-collision staggering for peer cross-group pills
@@ -1684,12 +1730,10 @@ export const CustomFlowchartEdge: React.FC<EdgeProps> = ({
 
     const startWorld = toWorld(e.clientX, e.clientY);
 
-    const basePill = isCrossGroupConnection
-      ? {
-        x: labelX !== undefined && !isNaN(labelX) ? labelX : derivedMidX,
-        y: labelY !== undefined && !isNaN(labelY) ? labelY : derivedMidY,
-      }
-      : { x: derivedMidX, y: derivedMidY };
+    const basePill = {
+      x: labelX !== undefined && !isNaN(labelX) ? labelX : derivedMidX,
+      y: labelY !== undefined && !isNaN(labelY) ? labelY : derivedMidY,
+    };
 
     // Initial offsets relative to derived midpoints / dynamic corridors
     const initialLabelOffsetX = edgeData.labelOffsetX ?? (edgeData.centerX !== undefined ? edgeData.centerX - basePill.x : 0);

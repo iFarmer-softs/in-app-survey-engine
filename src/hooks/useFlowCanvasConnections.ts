@@ -507,9 +507,13 @@ export function useFlowCanvasConnections({
                 isCrossGroup,
                 sourceGroup: isCrossGroup ? sourceGroup : undefined,
                 targetGroup: isCrossGroup ? targetGroup : undefined,
-                // Reset custom bend coordinates when reconnected so the new path starts clean
+                // Reset custom bend coordinates and offsets when reconnected so the new path starts clean
                 centerX: undefined,
                 centerY: undefined,
+                corridorOffsetX: undefined,
+                corridorOffsetY: undefined,
+                labelOffsetX: undefined,
+                labelOffsetY: undefined,
               },
             };
           }
