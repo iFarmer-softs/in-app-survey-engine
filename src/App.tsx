@@ -5,6 +5,7 @@ import {
   useNodesState,
   useEdgesState,
   Controls,
+  ControlButton,
   Background,
   MiniMap,
   BackgroundVariant,
@@ -18,6 +19,7 @@ import {
   Crop,
   Plus,
   AlertTriangle,
+  Layers,
 } from 'lucide-react';
 
 import { Header } from './components/layout/Header';
@@ -75,6 +77,7 @@ import {
 import {
   validateSurveyFlow,
   isNodeInContainer,
+  resolveNodeGroupId,
   getNodeDimensions,
   getContainerBounds,
   GROUP_BORDER_INSET,
@@ -140,6 +143,7 @@ const FlowEditor: React.FC = () => {
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+  const [isConnecting, setIsConnecting] = useState(false);
 
   // Visual Inspection: Dependency Path Tracing state (disabled for now)
   const [isPathTracingEnabled, setIsPathTracingEnabled] = useState(false);
@@ -1024,11 +1028,17 @@ const FlowEditor: React.FC = () => {
   const activeNodes = nodes;
   const activeEdges = edges;
 
-  // Dependency Path Tracing calculation for canvas highlighting
+  // Dependency Path Tracing calculation for canvas highlighting:
+  // Automatically highlights the full upstream and downstream dependency path on node selection
+  // and dims un-connected nodes to reduce canvas noise, without requiring a manual header toggle.
   const activeTrace = useMemo(() => {
-    if (!isPathTracingEnabled || !selectedNodeId) return null;
+    if (!selectedNodeId) return null;
+    const selected = nodes.find((n) => n.id === selectedNodeId);
+    if (!selected || selected.type === 'groupContainer' || selected.type === 'groupFrame') {
+      return null;
+    }
     return calculateDependencyTrace(nodes, edges, selectedNodeId);
-  }, [isPathTracingEnabled, selectedNodeId, nodes, edges]);
+  }, [selectedNodeId, nodes, edges]);
 
   // Derived display nodes with highlight/dim classes without mutating base nodes state
   const displayNodes = useMemo(() => {
@@ -3075,6 +3085,47 @@ const FlowEditor: React.FC = () => {
     [nodes, edges, groupMeta, recordSnapshot, setNodes, setEdges, fitView, activeProject, setProjects, setActiveView]
   );
 
+  /**
+   * Fits the viewport smoothly to the currently selected group, or the group containing
+   * the currently selected node, or the first group found on the canvas.
+   */
+  const handleFitToGroup = useCallback((targetGroupId?: string) => {
+    let groupNode: Node | undefined;
+    if (targetGroupId) {
+      groupNode = nodes.find((n) => n.id === targetGroupId);
+    } else if (selectedNodeId) {
+      const selected = nodes.find((n) => n.id === selectedNodeId);
+      if (selected?.type === 'groupContainer' || selected?.type === 'groupFrame') {
+        groupNode = selected;
+      } else if (selected) {
+        const cId = (selected.data as any)?.containerId || resolveNodeGroupId(selected, nodes);
+        if (cId) {
+          groupNode = nodes.find((n) => n.id === cId);
+        }
+      }
+    }
+
+    if (!groupNode) {
+      groupNode = nodes.find((n) => n.type === 'groupContainer' || n.type === 'groupFrame');
+    }
+
+    if (!groupNode) {
+      fitView({ padding: 0.2, duration: 400 });
+      return;
+    }
+
+    const gId = groupNode.id;
+    const members = nodes.filter(
+      (n) => n.id === gId || isNodeInContainer(n, groupNode!, nodes)
+    );
+
+    fitView({
+      nodes: members.length > 0 ? members : [groupNode],
+      padding: 0.25,
+      duration: 400,
+    });
+  }, [nodes, selectedNodeId, fitView]);
+
   return (
     <div className="app-container">
       {/* MAIN APPLICATION CONTENT AREA (Edge-to-edge full width layout) */}
@@ -3343,6 +3394,10 @@ const FlowEditor: React.FC = () => {
                         height: 16,
                       },
                     }}
+                    snapToGrid={true}
+                    snapGrid={[16, 16]}
+                    onConnectStart={() => setIsConnecting(true)}
+                    onConnectEnd={() => setIsConnecting(false)}
                     fitView
                     minZoom={0.05}
                     maxZoom={5.0}
@@ -3353,9 +3408,18 @@ const FlowEditor: React.FC = () => {
                     deleteKeyCode={['Backspace', 'Delete']}
                     elevateNodesOnSelect={false}
                     className={`survey-flow-canvas ${isHandMode ? 'is-tool-hand' : isDrawAreaMode ? 'is-tool-draw' : ''
-                      }`}
+                      } ${isConnecting ? 'is-connecting' : ''}`}
                   >
-                    <Controls className="flow-controls" />
+                    <Controls className="flow-controls">
+                      <ControlButton
+                        onClick={() => handleFitToGroup()}
+                        title="Fit to group"
+                        aria-label="Fit to group"
+                        className="react-flow__controls-fittogroup"
+                      >
+                        <Layers size={14} />
+                      </ControlButton>
+                    </Controls>
                     <MiniMap
                       className="flow-minimap"
                       nodeColor={(n) => {

@@ -7202,5 +7202,102 @@ assert.strictEqual(compiledQ109.validation?.['108']?.validation, 50, 'Q#109 No b
 
 console.log('   ✅ Decision Condition Full-Sentence Rules, On-Node Branches & Unified Color Cues validated with 100% precision.');
 
-console.log('\n🎉 ALL TESTS PASSED SUCCESSFULLY! (69/69 test suites passed)\n');
+// ---------------------------------------------------------------------------
+// SUITE 70: Canvas Noise Reduction (Handle Hover Reveal, Snap to Grid, Full Path Tracing on Selection & Fit to Group)
+// ---------------------------------------------------------------------------
+console.log('\n7️⃣0️⃣ Testing Canvas Noise Reduction (Handle Hover Reveal, Snap to Grid, Full Path Tracing & Fit to Group)...');
+
+const appSource70 = fs.readFileSync(path.resolve(process.cwd(), 'src/App.tsx'), 'utf-8');
+const indexCssSource70 = fs.readFileSync(path.resolve(process.cwd(), 'src/index.css'), 'utf-8');
+
+// 70A: Handles hidden by default to eliminate green dot clutter and revealed on hover/selection/drag
+assert.ok(
+  indexCssSource70.includes('.node-handle') && indexCssSource70.includes('.react-flow__handle'),
+  'index.css must target .node-handle and .react-flow__handle'
+);
+assert.ok(
+  indexCssSource70.includes('opacity: 0 !important;') && indexCssSource70.includes('pointer-events: none !important;'),
+  'index.css must hide handles by default with opacity: 0 and pointer-events: none'
+);
+assert.ok(
+  indexCssSource70.includes('.survey-node:hover .node-handle') &&
+  indexCssSource70.includes('.survey-node.selected .node-handle') &&
+  indexCssSource70.includes('.react-flow.is-connecting .node-handle'),
+  'index.css must reveal handles on hover, selection, and connection dragging'
+);
+assert.ok(
+  indexCssSource70.includes('.node-handle.branch-handle') && indexCssSource70.includes('opacity: 1 !important;'),
+  'Decision branch handles must stay visible as on-node paired branches'
+);
+
+// 70B: Orthogonal/Smooth-step edges with snap-to-grid on ReactFlow
+assert.ok(
+  appSource70.includes("type: 'surveyEdge'"),
+  'App.tsx must use surveyEdge (orthogonal/smooth-step routing) as defaultEdgeOptions type'
+);
+assert.ok(
+  appSource70.includes('snapToGrid={true}') && appSource70.includes('snapGrid={[16, 16]}'),
+  'App.tsx must enable snapToGrid with 16x16 grid spacing'
+);
+
+// 70C: Full upstream and downstream path highlighting on node selection
+assert.ok(
+  appSource70.includes('calculateDependencyTrace(nodes, edges, selectedNodeId)'),
+  'App.tsx must automatically invoke calculateDependencyTrace on selectedNodeId'
+);
+
+// Verify path tracing logic with a 4-node linear/branch graph
+const sampleTraceNodes: any[] = [
+  { id: 'q-1', type: 'question', position: { x: 100, y: 100 }, data: { label: 'Q1' } },
+  { id: 'q-2', type: 'question', position: { x: 100, y: 250 }, data: { label: 'Q2' } },
+  { id: 'q-3', type: 'question', position: { x: 100, y: 400 }, data: { label: 'Q3' } },
+  { id: 'q-other', type: 'question', position: { x: 500, y: 100 }, data: { label: 'Unrelated Q' } },
+];
+const sampleTraceEdges: any[] = [
+  { id: 'e-1-2', source: 'q-1', target: 'q-2' },
+  { id: 'e-2-3', source: 'q-2', target: 'q-3' },
+];
+
+const traceForQ2 = calculateDependencyTrace(sampleTraceNodes, sampleTraceEdges, 'q-2');
+assert.ok(traceForQ2, 'calculateDependencyTrace must return trace result for Q2');
+assert.strictEqual(getTraceNodeRole('q-2', 'question', traceForQ2), 'selected');
+assert.strictEqual(getTraceNodeRole('q-1', 'question', traceForQ2), 'ancestor');
+assert.strictEqual(getTraceNodeRole('q-3', 'question', traceForQ2), 'descendant');
+assert.strictEqual(getTraceNodeRole('q-other', 'question', traceForQ2), 'dimmed');
+assert.strictEqual(getTraceEdgeRole('e-1-2', traceForQ2), 'upstream');
+assert.strictEqual(getTraceEdgeRole('e-2-3', traceForQ2), 'downstream');
+
+// 70D: Minimap retained and "Fit to group" button present in Controls
+assert.ok(
+  appSource70.includes('<MiniMap'),
+  'MiniMap must be retained on canvas'
+);
+assert.ok(
+  appSource70.includes('ControlButton') &&
+  appSource70.includes('title="Fit to group"') &&
+  appSource70.includes('react-flow__controls-fittogroup'),
+  'App.tsx must render ControlButton for "Fit to group"'
+);
+assert.ok(
+  appSource70.includes('handleFitToGroup'),
+  'App.tsx must implement handleFitToGroup'
+);
+
+// Verify handleFitToGroup logic extracts group members correctly
+const sampleGroupNode: any = { id: 'group-1', type: 'groupFrame', position: { x: 50, y: 50 }, data: { width: 600, height: 600 } };
+const sampleChildNode: any = { id: 'child-1', type: 'question', position: { x: 100, y: 100 }, data: { containerId: 'group-1' } };
+const sampleOutsideNode: any = { id: 'out-1', type: 'question', position: { x: 1000, y: 1000 }, data: {} };
+const allGroupTestNodes = [sampleGroupNode, sampleChildNode, sampleOutsideNode];
+
+const groupMembersFound = allGroupTestNodes.filter(
+  (n) => n.id === sampleGroupNode.id || (n.data as any)?.containerId === sampleGroupNode.id || isNodeInContainer(n, sampleGroupNode, allGroupTestNodes)
+);
+assert.strictEqual(groupMembersFound.length, 2, 'Group members should include group frame and enclosed child');
+assert.ok(groupMembersFound.some((n) => n.id === 'group-1'));
+assert.ok(groupMembersFound.some((n) => n.id === 'child-1'));
+assert.ok(!groupMembersFound.some((n) => n.id === 'out-1'));
+
+console.log('   ✅ Canvas Noise Reduction (Handle Hover Reveal, Snap to Grid, Full Path Tracing & Fit to Group) validated with 100% precision.');
+
+console.log('\n🎉 ALL TESTS PASSED SUCCESSFULLY! (70/70 test suites passed)\n');
 

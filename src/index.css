@@ -1122,6 +1122,17 @@ body.is-resizing-sidebar * {
   background: var(--bg-surface-hover) !important;
 }
 
+.react-flow__controls-fittogroup {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.react-flow__controls-fittogroup:hover svg {
+  color: var(--emerald) !important;
+  stroke: var(--emerald) !important;
+}
+
 .flow-minimap {
   border-radius: var(--radius-md) !important;
   background-color: var(--bg-surface) !important;
@@ -1582,16 +1593,36 @@ body.is-resizing-sidebar * {
   color: #e9d5ff;
 }
 
-/* Node Handles */
-.node-handle {
+/* Node Handles - Hidden by default to reduce canvas noise, revealed on card hover, selection or connection drag */
+.node-handle,
+.react-flow__handle {
   width: 10px !important;
   height: 10px !important;
   background-color: var(--bg-surface-elevated) !important;
   border: 2px solid var(--emerald) !important;
-  transition: transform var(--transition-fast), opacity var(--transition-fast), box-shadow var(--transition-fast);
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transition: transform var(--transition-fast), opacity var(--transition-fast), box-shadow var(--transition-fast) !important;
 }
 
-.node-handle:hover {
+/* Reveal connection handles smoothly on node hover, node selection, or when dragging connections */
+.survey-node:hover .node-handle,
+.survey-node.is-selected .node-handle,
+.survey-node.selected .node-handle,
+.react-flow__node:hover .react-flow__handle,
+.react-flow__node.selected .react-flow__handle,
+.react-flow__node:hover .node-handle,
+.react-flow__node.selected .node-handle,
+.react-flow.is-connecting .node-handle,
+.react-flow.is-connecting .react-flow__handle,
+.react-flow--connecting .node-handle,
+.react-flow--connecting .react-flow__handle {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+.node-handle:hover,
+.react-flow__handle:hover {
   transform: scale(1.35) !important;
   background-color: var(--emerald) !important;
   box-shadow: 0 0 8px var(--emerald-glow) !important;
@@ -1600,14 +1631,16 @@ body.is-resizing-sidebar * {
 
 /* Auxiliary 8-way multi-port connection handles */
 .aux-handle {
-  opacity: 0.35;
+  opacity: 0;
   border-color: rgba(16, 185, 129, 0.6) !important;
 }
 
 .survey-node:hover .aux-handle,
 .survey-node.is-selected .aux-handle,
-.react-flow.is-connecting .aux-handle {
-  opacity: 0.95;
+.survey-node.selected .aux-handle,
+.react-flow.is-connecting .aux-handle,
+.react-flow--connecting .aux-handle {
+  opacity: 1 !important;
   border-color: var(--emerald) !important;
 }
 
@@ -1808,6 +1841,8 @@ body.is-resizing-sidebar * {
   height: 10px;
   border-radius: 50%;
   border: 2px solid #0f172a;
+  opacity: 1 !important;
+  pointer-events: auto !important;
 }
 
 .node-handle.handle-yes {
