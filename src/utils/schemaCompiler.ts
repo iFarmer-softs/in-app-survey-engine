@@ -236,7 +236,9 @@ export function compileFlowToSchema(
         const decisionIncoming = edges.filter((e) => e.target === sourceNode.id);
         const isElse =
           inEdge.sourceHandle === 'else' ||
-          (typeof inEdge.label === 'string' && inEdge.label.toUpperCase().includes('ELSE'));
+          inEdge.sourceHandle === 'no' ||
+          (typeof inEdge.label === 'string' &&
+            (inEdge.label.toUpperCase().includes('ELSE') || inEdge.label.trim().toUpperCase() === 'NO'));
 
         for (const decInEdge of decisionIncoming) {
           const parentQuestionNode = nodes.find((n) => n.id === decInEdge.source && n.type === 'question');
@@ -357,7 +359,9 @@ export function compileFlowToSchema(
           let triggerType = 'match';
           const isElse =
             jEdge.sourceHandle === 'else' ||
-            (typeof jEdge.label === 'string' && jEdge.label.toUpperCase().includes('ELSE'));
+            jEdge.sourceHandle === 'no' ||
+            (typeof jEdge.label === 'string' &&
+              (jEdge.label.toUpperCase().includes('ELSE') || jEdge.label.trim().toUpperCase() === 'NO'));
 
           if (jEdge.sourceHandle && jEdge.sourceHandle.startsWith('opt-')) {
             triggerVal = decodeURIComponent(jEdge.sourceHandle.replace('opt-', '')).trim();

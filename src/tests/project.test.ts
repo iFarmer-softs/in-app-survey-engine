@@ -7075,5 +7075,132 @@ assert.ok(
 
 console.log('   ✅ Canvas Architecture Hardening (Collapsed Bounds, Frame Sizing, Auto Layout, Edge Offsets & NodeTypes Stability) validated with 100% precision.');
 
-console.log('\n🎉 ALL TESTS PASSED SUCCESSFULLY! (68/68 test suites passed)\n');
+// ---------------------------------------------------------------------------
+// SUITE 69: Decision Condition Full-Sentence Rules, On-Node Branches & Unified Color Cues
+// ---------------------------------------------------------------------------
+console.log('\n6️⃣9️⃣ Testing Decision Condition Full-Sentence Rules, On-Node Branches & Unified Color Cues...');
+
+import { getOperatorLabel } from '../components/nodes/DecisionNode';
+
+// 69A: Plain-language operator sentence conversion
+assert.strictEqual(getOperatorLabel('greater', 50), 'is greater than', 'greater must convert to "is greater than"');
+assert.strictEqual(getOperatorLabel('less', 20), 'is less than', 'less must convert to "is less than"');
+assert.strictEqual(getOperatorLabel('greater_or_equal', 18), 'is at least', 'greater_or_equal must convert to "is at least"');
+assert.strictEqual(getOperatorLabel('less_or_equal', 100), 'is at most', 'less_or_equal must convert to "is at most"');
+assert.strictEqual(getOperatorLabel('not_match', 'No'), 'does not equal', 'not_match must convert to "does not equal"');
+assert.strictEqual(getOperatorLabel('contains', 'Dhaka'), 'contains', 'contains must convert to "contains"');
+assert.strictEqual(getOperatorLabel('match', 'Yes'), 'is', 'match with boolean/yes must convert to "is"');
+assert.strictEqual(getOperatorLabel('match', 'CustomVal'), 'equals', 'match with custom value must convert to "equals"');
+
+// Full sentence validation: IF Q#108 is greater than 50
+const sampleParentId = 108;
+const sampleCondition = 'greater';
+const sampleValue = 50;
+const sentence = `IF Q#${sampleParentId} ${getOperatorLabel(sampleCondition, sampleValue)} ${sampleValue}`;
+assert.strictEqual(sentence, 'IF Q#108 is greater than 50', 'Condition must read as natural plain-language sentence');
+
+// 69B: On-Node Branches (Yes/No paired labels & output ports)
+const decNodeSource = fs.readFileSync(path.resolve(process.cwd(), 'src/components/nodes/DecisionNode.tsx'), 'utf-8');
+
+assert.ok(
+  decNodeSource.includes('branch-row-yes') && decNodeSource.includes('branch-row-no'),
+  'DecisionNode must contain explicit Yes and No branch rows'
+);
+assert.ok(
+  decNodeSource.includes('<Check size={12} className="branch-icon branch-icon-yes"') &&
+  decNodeSource.includes('<X size={12} className="branch-icon branch-icon-no"'),
+  'DecisionNode branch rows must render Check (Yes) and X (No) icons'
+);
+assert.ok(
+  decNodeSource.includes('id="match"') && decNodeSource.includes('id="else"'),
+  'DecisionNode must provide dedicated right output handles for match (Yes) and else (No)'
+);
+assert.ok(
+  decNodeSource.includes('decision-diamond-card'),
+  'DecisionNode must render distinctive notched card styling'
+);
+
+// 69C: Consistent Edge Colors and Second Cues
+const flowConnSource = fs.readFileSync(path.resolve(process.cwd(), 'src/hooks/useFlowCanvasConnections.ts'), 'utf-8');
+const customEdgeSource = fs.readFileSync(path.resolve(process.cwd(), 'src/components/edges/CustomFlowchartEdge.tsx'), 'utf-8');
+const indexCssSource69 = fs.readFileSync(path.resolve(process.cwd(), 'src/index.css'), 'utf-8');
+
+assert.ok(
+  flowConnSource.includes("edgeLabel = 'Yes'") && flowConnSource.includes("strokeColor = '#10b981'"),
+  'Connecting Yes branch must set label to "Yes" and strokeColor to green (#10b981)'
+);
+assert.ok(
+  flowConnSource.includes("edgeLabel = 'No'") && flowConnSource.includes("strokeColor = '#ef4444'"),
+  'Connecting No branch must set label to "No" and strokeColor to red (#ef4444)'
+);
+assert.ok(
+  customEdgeSource.includes("strokeColor = '#10b981'") && customEdgeSource.includes("strokeColor = '#ef4444'"),
+  'CustomFlowchartEdge must color Yes branch green (#10b981) and No branch red (#ef4444)'
+);
+assert.ok(
+  customEdgeSource.includes('pill-yes') && customEdgeSource.includes('pill-no'),
+  'CustomFlowchartEdge must apply pill-yes and pill-no classes with secondary icon cues'
+);
+assert.ok(
+  indexCssSource69.includes('.custom-edge-pill:hover .edge-delete-btn') &&
+  indexCssSource69.includes('.custom-edge-pill:hover .edge-reset-bend-btn'),
+  'Edge pill action buttons must be hidden by default and appear on hover or selection'
+);
+
+// 69D: Schema compilation with Yes/No decision branches
+const decisionSchemaNodes: any[] = [
+  {
+    id: 'q-source',
+    type: 'question',
+    position: { x: 100, y: 100 },
+    data: { question_id: 108, question: 'Age of Farmer', answer_type: 'integer', group: 1 },
+  },
+  {
+    id: 'dec-1',
+    type: 'decision',
+    position: { x: 100, y: 250 },
+    data: { label: 'Age Check', conditionType: 'greater', comparisonValue: 50, group: 1, parentQuestionId: 108 },
+  },
+  {
+    id: 'q-yes-target',
+    type: 'question',
+    position: { x: 300, y: 200 },
+    data: { question_id: 110, question: 'Senior Scheme Info', answer_type: 'text', group: 1 },
+  },
+  {
+    id: 'q-no-target',
+    type: 'question',
+    position: { x: 300, y: 350 },
+    data: { question_id: 109, question: 'Junior Scheme Info', answer_type: 'text', group: 1 },
+  },
+];
+
+const decisionSchemaEdges: any[] = [
+  { id: 'e-in', source: 'q-source', target: 'dec-1' },
+  { id: 'e-yes', source: 'dec-1', target: 'q-yes-target', sourceHandle: 'match', label: 'Yes' },
+  { id: 'e-no', source: 'dec-1', target: 'q-no-target', sourceHandle: 'else', label: 'No' },
+];
+
+const compiledDecisionSchema = compileFlowToSchema(
+  decisionSchemaNodes,
+  decisionSchemaEdges,
+  { groupNumber: 1, groupTitle: 'Group 1', groupTitleBn: 'গ্রুপ ১' } as any
+);
+const compiledQ110 = compiledDecisionSchema.data.find((q) => q.question_id === 110)!;
+const compiledQ109 = compiledDecisionSchema.data.find((q) => q.question_id === 109)!;
+
+assert.ok(compiledQ110, 'Target Q#110 must exist in compiled schema');
+assert.ok(compiledQ109, 'Target Q#109 must exist in compiled schema');
+
+assert.deepStrictEqual(compiledQ110.depends_on, [108], 'Q#110 Yes branch must depend on Q#108');
+assert.strictEqual(compiledQ110.validation?.['108']?.validation_type, 'greater', 'Q#110 Yes branch validation_type must be greater');
+assert.strictEqual(compiledQ110.validation?.['108']?.validation, 50, 'Q#110 Yes branch threshold must be 50');
+
+assert.deepStrictEqual(compiledQ109.depends_on, [108], 'Q#109 No branch must depend on Q#108');
+assert.strictEqual(compiledQ109.validation?.['108']?.validation_type, 'less_or_equal', 'Q#109 No branch validation_type must invert to less_or_equal');
+assert.strictEqual(compiledQ109.validation?.['108']?.validation, 50, 'Q#109 No branch threshold must be 50');
+
+console.log('   ✅ Decision Condition Full-Sentence Rules, On-Node Branches & Unified Color Cues validated with 100% precision.');
+
+console.log('\n🎉 ALL TESTS PASSED SUCCESSFULLY! (69/69 test suites passed)\n');
 

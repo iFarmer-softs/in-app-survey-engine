@@ -807,7 +807,23 @@ export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
             </div>
 
             <div className="form-group">
-              <label className="form-label">Comparison Rule</label>
+              <label className="form-label">Comparing Question ID</label>
+              <input
+                type="number"
+                className="form-input"
+                placeholder="e.g. 108 for Q#108 (or auto from incoming line)"
+                value={(selectedNode.data as any).parentQuestionId ?? ''}
+                onChange={(e) =>
+                  onUpdateNodeData(selectedNode.id, {
+                    ...selectedNode.data,
+                    parentQuestionId: e.target.value ? parseInt(e.target.value, 10) : undefined,
+                  })
+                }
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Plain-Language Operator</label>
               <select
                 className="form-select"
                 value={(selectedNode.data as any).conditionType}
@@ -818,9 +834,13 @@ export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
                   })
                 }
               >
-                <option value="match">Match (Equals Value)</option>
-                <option value="greater">Greater Than (&gt;)</option>
-                <option value="less">Less Than (&lt;)</option>
+                <option value="match">equals (is)</option>
+                <option value="not_match">does not equal (is not)</option>
+                <option value="greater">is greater than (&gt;)</option>
+                <option value="less">is less than (&lt;)</option>
+                <option value="greater_or_equal">is at least (&ge;)</option>
+                <option value="less_or_equal">is at most (&le;)</option>
+                <option value="contains">contains</option>
               </select>
             </div>
 

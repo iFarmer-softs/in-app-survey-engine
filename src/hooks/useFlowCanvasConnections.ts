@@ -172,19 +172,19 @@ export function useFlowCanvasConnections({
       }
 
       let edgeLabel: string | undefined = undefined;
-      let strokeColor = isCrossGroup ? '#8b5cf6' : '#10b981';
+      let strokeColor = isCrossGroup ? '#8b5cf6' : '#8b5cf6';
       let triggerVal = '';
 
       if (actualSourceHandle && actualSourceHandle.startsWith('opt-')) {
         triggerVal = decodeURIComponent(actualSourceHandle.replace('opt-', ''));
         edgeLabel = `IF "${triggerVal}"`;
         if (!isCrossGroup) strokeColor = '#f59e0b';
-      } else if (actualSourceHandle === 'match') {
-        edgeLabel = 'MATCH';
-        if (!isCrossGroup) strokeColor = '#f59e0b';
-      } else if (actualSourceHandle === 'else') {
-        edgeLabel = 'ELSE';
-        if (!isCrossGroup) strokeColor = '#ec4899';
+      } else if (actualSourceHandle === 'match' || actualSourceHandle === 'yes') {
+        edgeLabel = 'Yes';
+        if (!isCrossGroup) strokeColor = '#10b981';
+      } else if (actualSourceHandle === 'else' || actualSourceHandle === 'no') {
+        edgeLabel = 'No';
+        if (!isCrossGroup) strokeColor = '#ef4444';
       }
 
       if (isCrossGroup) {
@@ -394,19 +394,19 @@ export function useFlowCanvasConnections({
         return;
       }
 
-      let strokeColor = isCrossGroup ? '#8b5cf6' : '#10b981';
+      let strokeColor = isCrossGroup ? '#8b5cf6' : '#8b5cf6';
       let edgeLabel = oldEdge.label as string | undefined;
 
       if (actualSourceHandle && actualSourceHandle.startsWith('opt-')) {
         const triggerVal = decodeURIComponent(actualSourceHandle.replace('opt-', ''));
         edgeLabel = `IF "${triggerVal}"`;
         if (!isCrossGroup) strokeColor = '#f59e0b';
-      } else if (actualSourceHandle === 'match') {
-        edgeLabel = 'MATCH';
-        if (!isCrossGroup) strokeColor = '#f59e0b';
-      } else if (actualSourceHandle === 'else') {
-        edgeLabel = 'ELSE';
-        if (!isCrossGroup) strokeColor = '#ec4899';
+      } else if (actualSourceHandle === 'match' || actualSourceHandle === 'yes') {
+        edgeLabel = 'Yes';
+        if (!isCrossGroup) strokeColor = '#10b981';
+      } else if (actualSourceHandle === 'else' || actualSourceHandle === 'no') {
+        edgeLabel = 'No';
+        if (!isCrossGroup) strokeColor = '#ef4444';
       }
 
       if (isCrossGroup) {

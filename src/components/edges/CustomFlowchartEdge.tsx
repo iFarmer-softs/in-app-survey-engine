@@ -8,7 +8,7 @@ import {
   Position,
 } from '@xyflow/react';
 import type { EdgeProps } from '@xyflow/react';
-import { X, GitBranch, Network, RotateCcw } from 'lucide-react';
+import { X, Check, Split, Network, RotateCcw } from 'lucide-react';
 import { resolveNodeGroupId, isNodeInContainer, getContainerBounds } from '../../utils/flowValidator';
 
 function getBend(
@@ -1571,12 +1571,29 @@ export const CustomFlowchartEdge: React.FC<EdgeProps> = ({
     }
   }
 
-  const isConditional = Boolean(conditionText);
-  const isDecisionElse = sourceHandleId === 'else';
-  const isDecisionMatch = sourceHandleId === 'match';
+  const isDecisionElse =
+    sourceHandleId === 'else' ||
+    sourceHandleId === 'no' ||
+    (typeof conditionText === 'string' &&
+      (conditionText.toUpperCase() === 'NO' || conditionText.toUpperCase() === 'ELSE'));
+  const isDecisionMatch =
+    sourceHandleId === 'match' ||
+    sourceHandleId === 'yes' ||
+    (typeof conditionText === 'string' &&
+      (conditionText.toUpperCase() === 'YES' || conditionText.toUpperCase() === 'MATCH'));
 
-  // Compute theme color
-  let strokeColor = '#3b82f6'; // default blue
+  // Normalize display conditionText
+  if (isDecisionMatch && (!conditionText || conditionText.toUpperCase() === 'MATCH')) {
+    conditionText = 'Yes';
+  } else if (isDecisionElse && (!conditionText || conditionText.toUpperCase() === 'ELSE')) {
+    conditionText = 'No';
+  }
+
+  const isConditional = Boolean(conditionText) || isDecisionMatch || isDecisionElse;
+
+  // Compute theme color according to unified color rules:
+  // Green (#10b981) for Yes, Red (#ef4444) for No, Amber (#f59e0b) for Option Choice, Purple (#8b5cf6) for Default/Cross-Group
+  let strokeColor = '#8b5cf6'; // default purple flow
   const traceRole = edgeData.traceRole;
 
   if (traceRole === 'upstream') {
@@ -1587,12 +1604,14 @@ export const CustomFlowchartEdge: React.FC<EdgeProps> = ({
     strokeColor = 'rgba(100, 116, 139, 0.22)';
   } else if (edgeData.isError) {
     strokeColor = '#ef4444';
+  } else if (isDecisionMatch) {
+    strokeColor = '#10b981'; // Green for Yes branch
+  } else if (isDecisionElse) {
+    strokeColor = '#ef4444'; // Red for No branch
+  } else if (isOptionHandle || (isConditional && !isCrossGroup)) {
+    strokeColor = '#f59e0b'; // Amber for option branches
   } else if (isCrossGroup) {
     strokeColor = '#8b5cf6'; // vibrant purple for cross-group foreign dependency
-  } else if (isConditional || isDecisionMatch) {
-    strokeColor = '#f59e0b'; // amber
-  } else if (isDecisionElse) {
-    strokeColor = '#ec4899'; // pink
   } else if (style.stroke) {
     strokeColor = String(style.stroke);
   }
@@ -1979,14 +1998,33 @@ export const CustomFlowchartEdge: React.FC<EdgeProps> = ({
             </div>
           ) : isConditional ? (
             <div
-              className={`custom-edge-pill nodrag nopan ${edgeData.isError ? 'pill-error' : isDecisionElse ? 'pill-else' : 'pill-condition'
-                }`}
+              className={`custom-edge-pill nodrag nopan ${
+                edgeData.isError
+                  ? 'pill-error'
+                  : isDecisionMatch
+                  ? 'pill-yes'
+                  : isDecisionElse
+                  ? 'pill-no'
+                  : 'pill-condition'
+              }`}
               onPointerDown={handleLinePointerDown}
               onMouseDown={handleLinePointerDown}
-              title="Conditional Branch (Drag to reposition corridor)"
+              title={
+                isDecisionMatch
+                  ? 'Yes Branch (Condition Met)'
+                  : isDecisionElse
+                  ? 'No Branch (Condition Not Met)'
+                  : 'Conditional Branch (Drag to reposition corridor)'
+              }
               style={{ cursor: resizeCursor }}
             >
-              <GitBranch size={11} className="edge-pill-icon" />
+              {isDecisionMatch ? (
+                <Check size={11} className="edge-pill-icon branch-icon-yes" strokeWidth={2.5} />
+              ) : isDecisionElse ? (
+                <X size={11} className="edge-pill-icon branch-icon-no" strokeWidth={2.5} />
+              ) : (
+                <Split size={11} className="edge-pill-icon" />
+              )}
               <span className="edge-pill-text">{conditionText}</span>
               {hasCustomBend && (
                 <button
