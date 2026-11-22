@@ -1,12 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   ArrowLeft,
-  CheckCircle2,
-  AlertTriangle,
-  GitBranch,
-  GitCommit,
-  Rocket,
-  SlidersHorizontal,
   Undo2,
   Redo2,
   Crop,
@@ -97,8 +91,8 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({
   projectTitle,
-  currentVersion = '1.0.0',
-  versionStatus = 'draft',
+  currentVersion: _currentVersion = '1.0.0',
+  versionStatus: _versionStatus = 'draft',
   groupMeta: _groupMeta,
   onOpenJsonModal: _onOpenJsonModal,
   onOpenMobileModal: _onOpenMobileModal,
@@ -108,14 +102,14 @@ export const Header: React.FC<HeaderProps> = ({
   onBackToList,
   nodeCount: _nodeCount,
   edgeCount: _edgeCount,
-  diagnosticsCount,
-  diagnosticsErrors,
-  onOpenDiagnostics,
+  diagnosticsCount: _diagnosticsCount,
+  diagnosticsErrors: _diagnosticsErrors,
+  onOpenDiagnostics: _onOpenDiagnostics,
   onAlignHorizontal: _onAlignHorizontal,
   onAlignVertical: _onAlignVertical,
-  onOpenVersionHistory,
-  onOpenCreateSnapshot,
-  onPublishVersion,
+  onOpenVersionHistory: _onOpenVersionHistory,
+  onOpenCreateSnapshot: _onOpenCreateSnapshot,
+  onPublishVersion: _onPublishVersion,
   canUndo,
   canRedo,
   onUndo,
@@ -138,11 +132,9 @@ export const Header: React.FC<HeaderProps> = ({
   resolvedTheme: _resolvedTheme = 'dark',
   onCycleTheme: _onCycleTheme,
 }) => {
-  const [isVersionMenuOpen, setIsVersionMenuOpen] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const [isPinned, setIsPinned] = useState(false);
 
-  const versionDropdownRef = useRef<HTMLDivElement>(null);
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleMouseEnter = () => {
@@ -154,9 +146,6 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   const handleMouseLeave = () => {
-    if (isVersionMenuOpen) {
-      return;
-    }
     if (hoverTimeoutRef.current) {
       clearTimeout(hoverTimeoutRef.current);
     }
@@ -180,15 +169,9 @@ export const Header: React.FC<HeaderProps> = ({
     const handleClickOutside = (e: MouseEvent) => {
       const target = e.target as HTMLElement | null;
       if (
-        versionDropdownRef.current &&
-        !versionDropdownRef.current.contains(target as Node)
-      ) {
-        setIsVersionMenuOpen(false);
-      }
-      if (
         target &&
         target.closest(
-          '.header-center-dock .figma-hamburger-btn, .header-center-dock .figma-dock-action, .header-version-dropdown-container'
+          '.header-center-dock .figma-hamburger-btn, .header-center-dock .figma-dock-action'
         )
       ) {
         return;
@@ -206,7 +189,6 @@ export const Header: React.FC<HeaderProps> = ({
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        setIsVersionMenuOpen(false);
         setIsPinned(false);
         setIsHovered(false);
       }
@@ -425,157 +407,7 @@ export const Header: React.FC<HeaderProps> = ({
           {groups.length > 0 && <span className="header-dot-indicator" />}
         </button>
 
-        {/* 2. Version Releases & Snapshots Dropdown */}
-        <div
-          ref={versionDropdownRef}
-          className={`header-version-dropdown-container ${isExpanded || isVersionMenuOpen ? 'is-expanded' : 'is-collapsed'
-            }`}
-          onMouseEnter={handleMouseEnter}
-          onMouseLeave={handleMouseLeave}
-        >
-          <button
-            type="button"
-            className={`figma-action-btn figma-dock-action header-version-btn header-version-pill ${isVersionMenuOpen ? 'is-active' : ''
-              } ${isExpanded || isVersionMenuOpen ? 'is-expanded' : 'is-collapsed'}`}
-            onClick={() => {
-              setIsPinned(true);
-              setIsVersionMenuOpen((prev) => !prev);
-            }}
-            data-tooltip={`Version v${currentVersion} (${versionStatus === 'published' ? 'Live' : 'Draft'
-              }) — Releases & Snapshots`}
-            data-tooltip-pos="bottom"
-            aria-label="Flowchart Releases & History"
-            tabIndex={isExpanded || isVersionMenuOpen ? 0 : -1}
-            aria-hidden={!isExpanded && !isVersionMenuOpen}
-          >
-            <GitBranch size={15} />
-            <span
-              className={`header-dot-indicator version-status-dot ${versionStatus === 'published' ? 'is-published' : 'is-draft'
-                }`}
-            />
-          </button>
-
-          {isVersionMenuOpen && (
-            <div className="header-version-menu animate-in">
-              <div className="menu-header-info">
-                <span className="menu-current-ver">
-                  Current: v{currentVersion}
-                </span>
-                <span className="menu-current-status">
-                  {versionStatus === 'published'
-                    ? '🟢 Published production release'
-                    : '🟡 Working draft (unreleased)'}
-                </span>
-              </div>
-
-              <div className="menu-divider" />
-
-              {onOpenCreateSnapshot && (
-                <button
-                  type="button"
-                  className="version-menu-item"
-                  onClick={() => {
-                    setIsVersionMenuOpen(false);
-                    setIsPinned(false);
-                    setIsHovered(false);
-                    onOpenCreateSnapshot();
-                  }}
-                >
-                  <GitCommit size={15} className="menu-icon text-blue-400" />
-                  <div className="menu-text-wrap">
-                    <span className="menu-title">Save Draft Snapshot</span>
-                    <span className="menu-desc">
-                      Record an immutable working checkpoint
-                    </span>
-                  </div>
-                </button>
-              )}
-
-              {onPublishVersion && (
-                <button
-                  type="button"
-                  className="version-menu-item"
-                  onClick={() => {
-                    setIsVersionMenuOpen(false);
-                    setIsPinned(false);
-                    setIsHovered(false);
-                    onPublishVersion();
-                  }}
-                >
-                  <Rocket size={15} className="menu-icon text-emerald-400" />
-                  <div className="menu-text-wrap">
-                    <span className="menu-title">Publish Version (Release)</span>
-                    <span className="menu-desc">
-                      Bump SemVer & deploy live schema
-                    </span>
-                  </div>
-                </button>
-              )}
-
-              {onOpenVersionHistory && (
-                <button
-                  type="button"
-                  className="version-menu-item"
-                  onClick={() => {
-                    setIsVersionMenuOpen(false);
-                    setIsPinned(false);
-                    setIsHovered(false);
-                    onOpenVersionHistory();
-                  }}
-                >
-                  <SlidersHorizontal size={15} className="menu-icon text-violet-400" />
-                  <div className="menu-text-wrap">
-                    <span className="menu-title">Version History & Rollback</span>
-                    <span className="menu-desc">
-                      Compare & rollback across releases
-                    </span>
-                  </div>
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* 3. Real-time Flow Diagnostics Icon Button */}
-        <button
-          type="button"
-          className={`figma-action-btn figma-dock-action diagnostics-btn ${diagnosticsErrors > 0
-            ? 'has-error'
-            : diagnosticsCount > 0
-              ? 'has-warning'
-              : 'is-healthy'
-            } ${isExpanded ? 'is-expanded' : 'is-collapsed'}`}
-          onClick={onOpenDiagnostics}
-          onMouseEnter={handleMouseEnter}
-          onMouseLeave={handleMouseLeave}
-          data-tooltip={
-            diagnosticsErrors > 0
-              ? `${diagnosticsErrors} Errors Detected`
-              : diagnosticsCount > 0
-                ? `${diagnosticsCount} Warnings`
-                : 'Flow Valid — No Errors'
-          }
-          data-tooltip-pos="bottom"
-          aria-label="Flow Diagnostics"
-          tabIndex={isExpanded ? 0 : -1}
-          aria-hidden={!isExpanded}
-        >
-          {diagnosticsErrors > 0 ? (
-            <>
-              <AlertTriangle size={15} className="text-red-400" />
-              <span className="diagnostics-badge-number">{diagnosticsErrors}</span>
-            </>
-          ) : diagnosticsCount > 0 ? (
-            <>
-              <AlertTriangle size={15} className="text-amber-400" />
-              <span className="diagnostics-badge-number">{diagnosticsCount}</span>
-            </>
-          ) : (
-            <CheckCircle2 size={15} className="text-emerald-400" />
-          )}
-        </button>
-
-        {/* 4. Clear Canvas Icon */}
+        {/* 2. Clear Canvas Icon */}
         <button
           type="button"
           className={`figma-action-btn figma-dock-action tools-menu-item item-danger ${isExpanded ? 'is-expanded' : 'is-collapsed'}`}

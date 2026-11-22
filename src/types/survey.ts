@@ -108,6 +108,109 @@ export interface QuestionNodeData {
   validation?: any;
 }
 
+export const OPTION_BASED_TYPES: AnswerType[] = [
+  'dropdown',
+  'select_one',
+  'select_multiple',
+  'radio',
+  'single_radio',
+];
+
+export function isOptionBasedAnswerType(type?: AnswerType): boolean {
+  if (!type) return false;
+  return OPTION_BASED_TYPES.includes(type);
+}
+
+/**
+ * Sanitizes and adapts question node properties when transitioning between Answer Widget Types.
+ * - Cleanses obsolete `options` when moving to non-option widgets; sets sensible defaults when moving to choice widgets.
+ * - Cleanses widget-incompatible `placeholder` (e.g. numeric "যেমন: ৫০" or "নির্বাচন করুন") and provides correct defaults.
+ * - Resets pre-filled `value` to prevent type mismatches.
+ * - Preserves question text (Bengali & English), ID, and core validation flags.
+ */
+export function adaptQuestionDataForAnswerType(
+  currentData: Partial<QuestionNodeData>,
+  newAnswerType: AnswerType
+): Partial<QuestionNodeData> {
+  const oldAnswerType = currentData.answer_type;
+  if (oldAnswerType === newAnswerType) {
+    return currentData;
+  }
+
+  const updated: Partial<QuestionNodeData> = {
+    ...currentData,
+    answer_type: newAnswerType,
+  };
+
+  const wasOptionBased = isOptionBasedAnswerType(oldAnswerType);
+  const isNowOptionBased = isOptionBasedAnswerType(newAnswerType);
+
+  // 1. Sanitize Options
+  if (isNowOptionBased) {
+    if (!wasOptionBased || !currentData.options || currentData.options.trim().length === 0) {
+      if (newAnswerType === 'dropdown') {
+        updated.options = 'অপশন ১, অপশন ২, অপশন ৩';
+      } else if (newAnswerType === 'select_multiple') {
+        updated.options = 'ধান, গম, আলু, ভুট্টা, সবজি';
+      } else {
+        // select_one, radio, single_radio
+        updated.options = 'হ্যাঁ (Yes), না (No)';
+      }
+    } else {
+      updated.options = currentData.options;
+    }
+  } else {
+    // Non-option widget
+    updated.options = '';
+  }
+
+  // 2. Sanitize Placeholder
+  if (['image', 'calendar', 'read_only'].includes(newAnswerType)) {
+    updated.placeholder = '';
+  } else if (isNowOptionBased) {
+    if (newAnswerType === 'dropdown') {
+      updated.placeholder = 'নির্বাচন করুন';
+    } else {
+      updated.placeholder = '';
+    }
+  } else if (newAnswerType === 'phone') {
+    updated.placeholder = '01XXXXXXXXX';
+  } else if (['integer', 'float', 'number_input'].includes(newAnswerType)) {
+    const oldPlaceholder = (currentData.placeholder || '').trim();
+    if (
+      !oldPlaceholder ||
+      oldPlaceholder === 'নির্বাচন করুন' ||
+      oldPlaceholder === '01XXXXXXXXX' ||
+      oldPlaceholder === 'e.g. নির্বাচন করুন or ৫০' ||
+      wasOptionBased ||
+      oldAnswerType === 'phone' ||
+      oldAnswerType === 'image' ||
+      oldAnswerType === 'calendar'
+    ) {
+      updated.placeholder = 'যেমন: ৫০';
+    } else {
+      updated.placeholder = currentData.placeholder;
+    }
+  } else {
+    // string, text
+    const oldPlaceholder = (currentData.placeholder || '').trim();
+    if (
+      oldPlaceholder === 'নির্বাচন করুন' ||
+      oldPlaceholder === '01XXXXXXXXX' ||
+      oldPlaceholder === 'যেমন: ৫০'
+    ) {
+      updated.placeholder = '';
+    } else {
+      updated.placeholder = currentData.placeholder || '';
+    }
+  }
+
+  // 3. Reset pre-filled value
+  updated.value = '';
+
+  return updated;
+}
+
 export interface DecisionRule {
   id?: string;
   parentQuestionId?: number;

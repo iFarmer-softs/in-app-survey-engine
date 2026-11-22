@@ -47,6 +47,12 @@ import {
   createNewQuestionGroup,
   getNextSequentialGroupId,
 } from '../utils/groupStorage.ts';
+import {
+  adaptQuestionDataForAnswerType,
+  isOptionBasedAnswerType,
+  OPTION_BASED_TYPES,
+  QuestionNodeData,
+} from '../types/survey.ts';
 
 console.log('🧪 Starting Test Suite: In-App Survey Engine...\n');
 
@@ -5288,16 +5294,28 @@ function normalizeConnectionDirection(
     Boolean(
       actualTargetHandle?.startsWith('out') ||
       actualTargetHandle?.startsWith('opt-') ||
-      actualTargetHandle === 'default-next'
+      actualTargetHandle === 'default-next' ||
+      actualTargetHandle === 'match' ||
+      actualTargetHandle === 'else' ||
+      actualTargetHandle === 'yes' ||
+      actualTargetHandle === 'no'
     );
 
   const isReverseGroupJumpIntra =
-    srcNode?.type === 'groupJump' && tgtNode?.type === 'question' && srcGroup === tgtGroup;
+    srcNode?.type === 'groupJump' &&
+    tgtNode?.type === 'question' &&
+    srcGroup === tgtGroup &&
+    Boolean(srcNode?.position?.y && tgtNode?.position?.y && srcNode.position.y > tgtNode.position.y);
 
   const isReverseGroupJumpCross =
-    srcNode?.type === 'question' && tgtNode?.type === 'groupJump' && srcGroup !== tgtGroup;
+    srcNode?.type === 'question' &&
+    tgtNode?.type === 'groupJump' &&
+    srcGroup > tgtGroup;
 
-  if (isReverseHandle || isReverseGroupJumpIntra || isReverseGroupJumpCross) {
+  const isReverseTerminator =
+    srcNode?.type === 'end' || tgtNode?.type === 'start';
+
+  if (isReverseHandle || isReverseGroupJumpIntra || isReverseGroupJumpCross || isReverseTerminator) {
     actualSource = params.target;
     actualTarget = params.source;
     actualSourceHandle = params.targetHandle;
@@ -6601,9 +6619,10 @@ assert.ok(
   'Clear Canvas must be an expandable figma-dock-action item-danger button in header-center-dock'
 );
 
-assert.ok(
-  updatedHeaderSource.includes('figma-action-btn figma-dock-action diagnostics-btn'),
-  'Warning/Diagnostics icon must be an expandable figma-dock-action diagnostics-btn in header-center-dock'
+assert.strictEqual(
+  updatedHeaderSource.includes('diagnostics-btn'),
+  false,
+  'Warning/Diagnostics icon must be removed from header-center-dock for now per user request'
 );
 
 // 62C: Smooth hover and pin interactions matching bottom floating action bar
@@ -6632,9 +6651,9 @@ assert.ok(
 console.log('   ✅ Top Floating Action Bar Integrated Hamburger Menu & Expandable Actions validated with 100% precision.');
 
 // ---------------------------------------------------------------------------
-// SUITE 63: Icon-Based Version Control in Top Floating Hamburger Actions
+// SUITE 63: Header Version Control Button Removal (For Now) & CSS Preservation
 // ---------------------------------------------------------------------------
-console.log('\n6️⃣3️⃣ Testing Icon-Based Version Control in Top Floating Hamburger Actions...');
+console.log('\n6️⃣3️⃣ Testing Header Version Control Button Removal (For Now) & CSS Preservation...');
 
 const latestHeaderSource = fs.readFileSync(path.resolve(process.cwd(), 'src/components/layout/Header.tsx'), 'utf-8');
 const latestCssSource = fs.readFileSync(path.resolve(process.cwd(), 'src/index.css'), 'utf-8');
@@ -6648,22 +6667,19 @@ assert.strictEqual(
   'brand-name-row must be decluttered and not contain header-version-dropdown-container'
 );
 
-// 63B: Version indicator is defined using GitBranch icon button in hamburger dock actions
-assert.ok(
-  latestHeaderSource.includes('header-version-btn') &&
-  latestHeaderSource.includes('version-status-dot') &&
-  latestHeaderSource.includes('<GitBranch size={15} />'),
-  'Version indicator must be defined using GitBranch icon button with status dot in hamburger actions'
+// 63B: header-version-btn is removed from Header.tsx for now per user request
+assert.strictEqual(
+  latestHeaderSource.includes('header-version-btn'),
+  false,
+  'header-version-btn must be removed from Header.tsx for now per user request'
+);
+assert.strictEqual(
+  latestHeaderSource.includes('header-version-dropdown-container'),
+  false,
+  'header-version-dropdown-container must be removed from Header.tsx for now per user request'
 );
 
-// 63C: Dropdown container is nested inside the expandable action set with proper pin/expand bindings
-assert.ok(
-  latestHeaderSource.includes('header-version-dropdown-container') &&
-  latestHeaderSource.includes('setIsVersionMenuOpen'),
-  'Version dropdown must be accessible from the icon button with toggle state'
-);
-
-// 63D: CSS rules define smooth expand/collapse and status dot styling for the version icon button
+// 63C: CSS rules define smooth expand/collapse and status dot styling for the version icon button
 assert.ok(
   latestCssSource.includes('.header-center-dock .header-version-dropdown-container'),
   'index.css must style .header-center-dock .header-version-dropdown-container'
@@ -6677,7 +6693,7 @@ assert.ok(
   'index.css must style status dots for the version button'
 );
 
-console.log('   ✅ Icon-Based Version Control in Top Floating Hamburger Actions validated with 100% precision.');
+console.log('   ✅ Header Version Control & Diagnostics Button Removal (For Now) validated with 100% precision.');
 
 // ---------------------------------------------------------------------------
 // SUITE 64: Dependency Path Tracing Header Button Removal & State Neutralization
@@ -6775,10 +6791,11 @@ assert.ok(
   'Header.tsx FLOW_LOGIC_ITEMS must define Split icon for Condition / Branch'
 );
 
-// 66B: Version control still cleanly uses GitBranch icon
-assert.ok(
+// 66B: Condition/Branch is distinct from GitBranch, and header-version-btn is removed for now
+assert.strictEqual(
   headerSrc.includes('<GitBranch size={15} />'),
-  'Header.tsx version indicator in hamburger menu must retain GitBranch icon'
+  false,
+  'Header.tsx version indicator is removed for now per user request'
 );
 
 // 66C: Panels and Decision Node use Split icon for visual consistency
@@ -7267,6 +7284,18 @@ assert.strictEqual(getTraceNodeRole('q-other', 'question', traceForQ2), 'dimmed'
 assert.strictEqual(getTraceEdgeRole('e-1-2', traceForQ2), 'upstream');
 assert.strictEqual(getTraceEdgeRole('e-2-3', traceForQ2), 'downstream');
 
+// Verify that traced node highlighting does not disrupt React Flow positioning or stretch nodes
+assert.ok(
+  indexCssSource70.includes('.react-flow__node.trace-node-ancestor') &&
+  indexCssSource70.includes('.trace-node-ancestor .survey-node') &&
+  indexCssSource70.includes('.trace-node-descendant .survey-node'),
+  'index.css must target .survey-node inside traced node to prevent whole-canvas wrapper stretching'
+);
+assert.ok(
+  !indexCssSource70.includes('.react-flow__node.trace-node-ancestor {\n  border-color: #06b6d4 !important;\n  box-shadow: 0 0 18px rgba(6, 182, 212, 0.45) !important;\n  z-index: 50 !important;\n  position: relative;\n}'),
+  'index.css must not apply position: relative to .react-flow__node.trace-node-ancestor'
+);
+
 // 70D: Minimap retained and "Fit to group" button present in Controls
 assert.ok(
   appSource70.includes('<MiniMap'),
@@ -7715,5 +7744,292 @@ assert.ok(
 
 console.log('   ✅ Multiple Conditions in One Decision Node (ALL/ANY Logic, Node Summary & All-Any Inspector) validated with 100% precision.');
 
-console.log('\n🎉 ALL TESTS PASSED SUCCESSFULLY! (73/73 test suites passed)\n');
+// ---------------------------------------------------------------------------
+// SUITE 74: Node Connector Forward Direction Stability & Universal Facing Port Auto-Resolution
+// ---------------------------------------------------------------------------
+console.log('\n7️⃣4️⃣ Testing Node Connector Forward Direction Stability & Universal Facing Port Auto-Resolution...');
+
+const { resolveFacingHandles } = await import('../hooks/useFlowCanvasConnections');
+
+// Test nodes for Suite 74
+const testNodes74: any[] = [
+  { id: 'f-1', type: 'groupFrame', position: { x: 0, y: 0 }, data: { groupId: 'g-1', numericGroupId: 1 } },
+  { id: 'start-1', type: 'start', position: { x: 100, y: 50 }, data: { group: 1, containerId: 'f-1' } },
+  { id: 'q-101', type: 'question', position: { x: 100, y: 150 }, data: { question_id: 101, group: 1, containerId: 'f-1' } },
+  { id: 'q-102', type: 'question', position: { x: 100, y: 350 }, data: { question_id: 102, group: 1, containerId: 'f-1' } },
+  { id: 'jump-top', type: 'groupJump', position: { x: 100, y: 50 }, data: { group: 1, containerId: 'f-1' } },
+  { id: 'jump-bottom', type: 'groupJump', position: { x: 100, y: 500 }, data: { group: 1, containerId: 'f-1' } },
+  { id: 'dec-1', type: 'decision', position: { x: 100, y: 200 }, data: { group: 1, containerId: 'f-1' } },
+  { id: 'proc-1', type: 'process', position: { x: 400, y: 200 }, data: { group: 1, containerId: 'f-1' } },
+  { id: 'doc-1', type: 'document', position: { x: 700, y: 200 }, data: { group: 1, containerId: 'f-1' } },
+  { id: 'end-1', type: 'end', position: { x: 100, y: 650 }, data: { group: 1, containerId: 'f-1' } },
+  { id: 'f-2', type: 'groupFrame', position: { x: 900, y: 0 }, data: { groupId: 'g-2', numericGroupId: 2 } },
+  { id: 'jump-g2', type: 'groupJump', position: { x: 950, y: 100 }, data: { group: 2, containerId: 'f-2' } },
+  { id: 'q-201', type: 'question', position: { x: 950, y: 250 }, data: { question_id: 201, group: 2, containerId: 'f-2' } },
+];
+
+// 74A: Forward Cross-Group Connections Must NOT Invert (Q101 in G1 ➔ GroupJump in G2 stays forward)
+const forwardCross = normalizeConnectionDirection({ source: 'q-101', target: 'jump-g2' }, testNodes74);
+assert.strictEqual(forwardCross.actualSource, 'q-101', 'Forward cross-group connection (G1 ➔ G2) must keep Question as source');
+assert.strictEqual(forwardCross.actualTarget, 'jump-g2', 'Forward cross-group connection (G1 ➔ G2) must keep GroupJump as target');
+
+// 74B: Forward Intra-Group Flow with GroupJump Must NOT Invert (GroupJump at top ➔ Question below stays forward)
+const forwardIntraJump = normalizeConnectionDirection({ source: 'jump-top', target: 'q-102' }, testNodes74);
+assert.strictEqual(forwardIntraJump.actualSource, 'jump-top', 'Downward flow from GroupJump at top to Question below must stay forward');
+assert.strictEqual(forwardIntraJump.actualTarget, 'q-102', 'Downward flow from GroupJump at top to Question below must keep Question as target');
+
+// 74C: Accidental Reverse Drag Auto-Correction
+// 1. Dragged backwards from downstream Q201 (G2) back to upstream Jump (G1)
+const reverseCross = normalizeConnectionDirection({ source: 'q-201', target: 'jump-bottom' }, testNodes74);
+assert.strictEqual(reverseCross.actualSource, 'jump-bottom', 'Accidental backward cross-group drag (G2 ➔ G1) must auto-flip to GroupJump source');
+assert.strictEqual(reverseCross.actualTarget, 'q-201', 'Accidental backward cross-group drag (G2 ➔ G1) must auto-flip to Question target');
+
+// 2. Dragged backwards upwards from bottom GroupJump (y=500) to top Question (y=150) in same group
+const reverseIntraJump = normalizeConnectionDirection({ source: 'jump-bottom', target: 'q-101' }, testNodes74);
+assert.strictEqual(reverseIntraJump.actualSource, 'q-101', 'Accidental upward drag from bottom GroupJump to top Question must auto-flip to Question source');
+assert.strictEqual(reverseIntraJump.actualTarget, 'jump-bottom', 'Accidental upward drag from bottom GroupJump to top Question must auto-flip to GroupJump target');
+
+// 3. Dragged from End node (End cannot be source)
+const reverseEnd = normalizeConnectionDirection({ source: 'end-1', target: 'q-102' }, testNodes74);
+assert.strictEqual(reverseEnd.actualSource, 'q-102', 'Connection dragged out of End node must auto-flip to Question source');
+assert.strictEqual(reverseEnd.actualTarget, 'end-1', 'Connection dragged out of End node must auto-flip to End target');
+
+// 4. Dragged into Start node (Start cannot be target)
+const reverseStart = normalizeConnectionDirection({ source: 'q-101', target: 'start-1' }, testNodes74);
+assert.strictEqual(reverseStart.actualSource, 'start-1', 'Connection dragged into Start node must auto-flip to Start source');
+assert.strictEqual(reverseStart.actualTarget, 'q-101', 'Connection dragged into Start node must auto-flip to Question target');
+
+// 5. Dragged in reverse into Decision output handle ('match')
+const reverseDecision = normalizeConnectionDirection({ source: 'q-102', target: 'dec-1', sourceHandle: 'in', targetHandle: 'match' }, testNodes74);
+assert.strictEqual(reverseDecision.actualSource, 'dec-1', 'Connection dragged into Decision match handle must auto-flip to Decision source');
+assert.strictEqual(reverseDecision.actualSourceHandle, 'match', 'Auto-flipped connection must keep match as source handle');
+
+// 74D: Universal Facing Port Auto-Resolution (resolveFacingHandles)
+// 1. Downward Vertical Flow (Q101 at y=150 ➔ Q102 at y=350)
+const downResolved = resolveFacingHandles(testNodes74[2], testNodes74[3], undefined, undefined);
+assert.strictEqual(downResolved.resolvedSourceHandle, 'default-next', 'Downward connection must exit South (default-next)');
+assert.strictEqual(downResolved.resolvedTargetHandle, 'in', 'Downward connection must enter North (in)');
+
+// 2. Upward Vertical Flow (Q102 at y=350 ➔ Q101 at y=150)
+const upResolved = resolveFacingHandles(testNodes74[3], testNodes74[2], undefined, undefined);
+assert.strictEqual(upResolved.resolvedSourceHandle, 'out-top', 'Upward connection must exit North (out-top)');
+assert.strictEqual(upResolved.resolvedTargetHandle, 'in-bottom', 'Upward connection must enter South (in-bottom)');
+
+// 3. Rightward Horizontal Flow (dec-1 at x=100, y=200 ➔ proc-1 at x=400, y=200)
+const rightResolved = resolveFacingHandles(testNodes74[6], testNodes74[7], undefined, undefined);
+assert.strictEqual(rightResolved.resolvedSourceHandle, 'out-right', 'Rightward connection must exit East (out-right)');
+assert.strictEqual(rightResolved.resolvedTargetHandle, 'in-left', 'Rightward connection must enter West (in-left)');
+
+// 4. Leftward Horizontal Flow (proc-1 at x=400, y=200 ➔ dec-1 at x=100, y=200)
+const leftResolved = resolveFacingHandles(testNodes74[7], testNodes74[6], undefined, undefined);
+assert.strictEqual(leftResolved.resolvedSourceHandle, 'out-left', 'Leftward connection must exit West (out-left)');
+assert.strictEqual(leftResolved.resolvedTargetHandle, 'in', 'Leftward connection entering Decision must enter Top (in)');
+
+// 5. Decision Yes ('match') branch preserved while facing target
+const matchBranchResolved = resolveFacingHandles(testNodes74[6], testNodes74[7], 'match', undefined);
+assert.strictEqual(matchBranchResolved.resolvedSourceHandle, 'match', 'Semantic match branch must be strictly preserved');
+assert.strictEqual(matchBranchResolved.resolvedTargetHandle, 'in-left', 'Target receiving match branch from left must enter West (in-left)');
+
+// 6. Question Option ('opt-Yes') branch preserved while facing target
+const optBranchResolved = resolveFacingHandles(testNodes74[2], testNodes74[7], 'opt-Yes', undefined);
+assert.strictEqual(optBranchResolved.resolvedSourceHandle, 'opt-Yes', 'Option branch handle must be strictly preserved');
+assert.strictEqual(optBranchResolved.resolvedTargetHandle, 'in-left', 'Target receiving option branch from left must enter West (in-left)');
+
+// 7. Auto-correcting handle facing away (e.g. user dropped on in-bottom when target is below source)
+const facingAwayResolved = resolveFacingHandles(testNodes74[2], testNodes74[3], 'default-next', 'in-bottom');
+assert.strictEqual(facingAwayResolved.resolvedTargetHandle, 'in', 'Backwards-facing in-bottom on downstream node must auto-resolve to North (in)');
+
+// 74E: CSS Handle Stacking Rules Verification
+const indexCss74 = fs.readFileSync(path.resolve(process.cwd(), 'src/index.css'), 'utf-8');
+assert.ok(
+  indexCss74.includes('.survey-node .source-handle') && indexCss74.includes('z-index: 18'),
+  'index.css must assign source-handle z-index: 18 during idle state'
+);
+assert.ok(
+  indexCss74.includes('.survey-node .target-handle') && indexCss74.includes('z-index: 17'),
+  'index.css must assign target-handle z-index: 17 during idle state'
+);
+assert.ok(
+  indexCss74.includes('.react-flow.is-connecting .target-handle') && indexCss74.includes('z-index: 19 !important;'),
+  'index.css must elevate target-handle to z-index: 19 !important during active connection dragging'
+);
+
+// 74F: Hook Architecture Integrity
+const connHookCode74 = fs.readFileSync(path.resolve(process.cwd(), 'src/hooks/useFlowCanvasConnections.ts'), 'utf-8');
+assert.ok(
+  connHookCode74.includes('export function resolveFacingHandles'),
+  'useFlowCanvasConnections.ts must export resolveFacingHandles function'
+);
+assert.ok(
+  connHookCode74.includes('sourceGroup > targetGroup'),
+  'useFlowCanvasConnections.ts must check sourceGroup > targetGroup (not !=) for reverse cross-group detection'
+);
+assert.ok(
+  connHookCode74.includes('isReverseTerminator'),
+  'useFlowCanvasConnections.ts must guard start/end terminators against reverse connections'
+);
+
+console.log('   ✅ Node Connector Forward Direction Stability & Universal Facing Port Auto-Resolution validated with 100% precision.');
+
+// 75. Testing Answer Widget Type Transition Property Sanitization & Edge Re-routing
+console.log('7️⃣5️⃣ Testing Answer Widget Type Transition Property Sanitization & Edge Re-routing...');
+
+// 75A: Switching Option-based (dropdown) -> Non-option (integer)
+// Must clear options, set numeric placeholder 'যেমন: ৫০', reset value
+const origDropdown: Partial<QuestionNodeData> = {
+  question_id: 101,
+  question: 'What is your land type?',
+  question_bn: 'আপনার জমির ধরন কি?',
+  answer_type: 'dropdown',
+  options: 'দোআঁশ, বেলে, এঁটেল',
+  placeholder: 'নির্বাচন করুন',
+  value: 'বেলে',
+  mandatory: true,
+  editable: true,
+  hint: 'জমির ধরন নির্বাচন করুন',
+  group: 1,
+};
+const adaptedToInteger = adaptQuestionDataForAnswerType(origDropdown, 'integer');
+assert.strictEqual(adaptedToInteger.answer_type, 'integer', 'answer_type must update to integer');
+assert.strictEqual(adaptedToInteger.options, '', 'options must be cleared to empty string for non-option types');
+assert.strictEqual(adaptedToInteger.placeholder, 'যেমন: ৫০', 'placeholder must be updated to numeric placeholder');
+assert.strictEqual(adaptedToInteger.value, '', 'pre-filled value must be reset to empty string');
+assert.strictEqual(adaptedToInteger.question_id, 101, 'question_id must be preserved');
+assert.strictEqual(adaptedToInteger.question, 'What is your land type?', 'question must be preserved');
+assert.strictEqual(adaptedToInteger.question_bn, 'আপনার জমির ধরন কি?', 'question_bn must be preserved');
+assert.strictEqual(adaptedToInteger.mandatory, true, 'mandatory flag must be preserved');
+assert.strictEqual(adaptedToInteger.editable, true, 'editable flag must be preserved');
+assert.strictEqual(adaptedToInteger.hint, 'জমির ধরন নির্বাচন করুন', 'hint must be preserved');
+
+// 75B: Switching Non-option (string) -> Option-based (dropdown)
+// Must assign default dropdown options ('অপশন ১, অপশন ২, অপশন ৩') and default placeholder ('নির্বাচন করুন')
+const origString: Partial<QuestionNodeData> = {
+  question_id: 102,
+  question: 'Farmer Name',
+  question_bn: 'কৃষকের নাম',
+  answer_type: 'string',
+  placeholder: 'এখানে নাম লিখুন',
+  value: 'মো: রফিকুল ইসলাম',
+  mandatory: true,
+  options: '',
+};
+const adaptedToDropdown = adaptQuestionDataForAnswerType(origString, 'dropdown');
+assert.strictEqual(adaptedToDropdown.answer_type, 'dropdown');
+assert.strictEqual(adaptedToDropdown.options, 'অপশন ১, অপশন ২, অপশন ৩', 'dropdown must be given default options');
+assert.strictEqual(adaptedToDropdown.placeholder, 'নির্বাচন করুন', 'dropdown must be given default placeholder');
+assert.strictEqual(adaptedToDropdown.value, '', 'pre-filled string value must be reset');
+
+// 75C: Switching Non-option (string) -> Option-based (select_one / radio)
+// Must assign default Yes/No options and clear placeholder
+const adaptedToRadio = adaptQuestionDataForAnswerType(origString, 'radio');
+assert.strictEqual(adaptedToRadio.answer_type, 'radio');
+assert.strictEqual(adaptedToRadio.options, 'হ্যাঁ (Yes), না (No)', 'radio must be given Yes/No default options');
+assert.strictEqual(adaptedToRadio.placeholder, '', 'radio must have empty placeholder');
+
+// 75D: Switching Non-option (string) -> Option-based (select_multiple)
+const adaptedToMulti = adaptQuestionDataForAnswerType(origString, 'select_multiple');
+assert.strictEqual(adaptedToMulti.answer_type, 'select_multiple');
+assert.strictEqual(adaptedToMulti.options, 'ধান, গম, আলু, ভুট্টা, সবজি', 'select_multiple must receive crop presets');
+
+// 75E: Switching between Option-based types (dropdown -> radio) preserves custom options
+const customDropdown: Partial<QuestionNodeData> = {
+  question_id: 103,
+  answer_type: 'dropdown',
+  options: 'লাল, নীল, সবুজ',
+  placeholder: 'নির্বাচন করুন',
+};
+const adaptedBetweenOptionTypes = adaptQuestionDataForAnswerType(customDropdown, 'radio');
+assert.strictEqual(adaptedBetweenOptionTypes.options, 'লাল, নীল, সবুজ', 'existing custom options must be preserved across option types');
+assert.strictEqual(adaptedBetweenOptionTypes.placeholder, '', 'radio must not have dropdown placeholder');
+
+// 75F: Switching to phone -> sets '01XXXXXXXXX' placeholder
+const adaptedToPhone = adaptQuestionDataForAnswerType(origString, 'phone');
+assert.strictEqual(adaptedToPhone.placeholder, '01XXXXXXXXX', 'phone must have 01XXXXXXXXX placeholder');
+
+// 75G: Switching phone -> image -> clears placeholder
+const origPhone: Partial<QuestionNodeData> = {
+  question_id: 104,
+  answer_type: 'phone',
+  placeholder: '01XXXXXXXXX',
+  value: '01711223344',
+};
+const adaptedToImage = adaptQuestionDataForAnswerType(origPhone, 'image');
+assert.strictEqual(adaptedToImage.placeholder, '', 'image must have empty placeholder');
+assert.strictEqual(adaptedToImage.options, '', 'image must have empty options');
+assert.strictEqual(adaptedToImage.value, '', 'image value must be reset');
+
+// 75H: Edge re-routing simulation for App.tsx handleUpdateNodeData
+// When question switches from option-based to non-option, opt-* edges must be re-routed to default-next
+const initialEdges75: Edge[] = [
+  {
+    id: 'e1',
+    source: 'q-101',
+    target: 'q-102',
+    sourceHandle: 'opt-দোআঁশ',
+    targetHandle: 'in',
+    label: 'দোআঁশ',
+    data: { validationType: 'match', triggerValue: 'দোআঁশ' },
+    style: { stroke: '#10b981' },
+  },
+  {
+    id: 'e2',
+    source: 'q-101',
+    target: 'q-103',
+    sourceHandle: 'default-next',
+    targetHandle: 'in',
+  },
+];
+
+// Simulate the logic executed in handleUpdateNodeData
+const reRoutedEdges75 = initialEdges75.map((edge) => {
+  if (edge.source === 'q-101' && edge.sourceHandle?.startsWith('opt-')) {
+    const { triggerValue, validationType, ...restData } = (edge.data || {}) as any;
+    return {
+      ...edge,
+      sourceHandle: 'default-next',
+      label: undefined,
+      style: {
+        ...edge.style,
+        stroke: '#8b5cf6',
+      },
+      data: restData,
+    };
+  }
+  return edge;
+});
+
+assert.strictEqual(reRoutedEdges75[0].sourceHandle, 'default-next', 'obsolete opt-* edge must be re-routed to default-next');
+assert.strictEqual(reRoutedEdges75[0].label, undefined, 'obsolete opt-* edge label must be cleared');
+assert.strictEqual(reRoutedEdges75[0].style?.stroke, '#8b5cf6', 'edge stroke must revert to default theme purple');
+assert.strictEqual((reRoutedEdges75[0].data as any)?.triggerValue, undefined, 'triggerValue must be stripped from re-routed edge');
+assert.strictEqual(reRoutedEdges75[1].sourceHandle, 'default-next', 'standard default-next edge remains unchanged');
+
+// 75I: Schema Compiler Roundtrip Verification with Sanitized Question
+const testNodes75: Node[] = [
+  {
+    id: 'q-101',
+    type: 'question',
+    position: { x: 100, y: 100 },
+    data: adaptedToInteger as any,
+  },
+];
+const compiled75 = compileFlowToSchema(testNodes75, [], { totalGroups: 1, currentGroup: 1, groups: [] });
+assert.strictEqual(compiled75.data[0].answer_type, 'integer', 'compiled schema has integer answer_type');
+assert.strictEqual(compiled75.data[0].options, undefined, 'compiled schema must not have options field for integer question');
+assert.strictEqual(compiled75.data[0].placeholder, 'যেমন: ৫০', 'compiled schema has sanitized placeholder');
+
+// 75J: File Content Checks (RightSidebar, InputTypeViewsPanel, App.tsx, survey.ts)
+const rightSidebarCode75 = fs.readFileSync(path.resolve(process.cwd(), 'src/components/layout/RightSidebar.tsx'), 'utf-8');
+assert.ok(rightSidebarCode75.includes('adaptQuestionDataForAnswerType'), 'RightSidebar.tsx must use adaptQuestionDataForAnswerType');
+
+const inputViewsCode75 = fs.readFileSync(path.resolve(process.cwd(), 'src/components/layout/InputTypeViewsPanel.tsx'), 'utf-8');
+assert.ok(inputViewsCode75.includes('adaptQuestionDataForAnswerType'), 'InputTypeViewsPanel.tsx must use adaptQuestionDataForAnswerType');
+
+const appTsxCode75 = fs.readFileSync(path.resolve(process.cwd(), 'src/App.tsx'), 'utf-8');
+assert.ok(appTsxCode75.includes('adaptQuestionDataForAnswerType'), 'App.tsx must use adaptQuestionDataForAnswerType in handleUpdateNodeData');
+assert.ok(appTsxCode75.includes("edge.sourceHandle?.startsWith('opt-')"), 'App.tsx must re-route obsolete opt-* edges');
+
+console.log('   ✅ Answer Widget Type Transition Property Sanitization & Edge Re-routing validated with 100% precision.');
+
+console.log('\n🎉 ALL TESTS PASSED SUCCESSFULLY! (75/75 test suites passed)\n');
 

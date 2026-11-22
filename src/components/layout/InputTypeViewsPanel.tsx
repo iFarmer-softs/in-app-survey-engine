@@ -39,7 +39,10 @@ import type {
   DecisionNodeData,
   DecisionRule,
 } from '../../types/survey';
-import { normalizeDecisionRules } from '../../types/survey';
+import {
+  normalizeDecisionRules,
+  adaptQuestionDataForAnswerType,
+} from '../../types/survey';
 import type { ReusableQuestionGroup } from '../../types/group';
 import type { GroupMeta } from '../../utils/schemaCompiler';
 import { isNodeInContainer } from '../../utils/flowValidator';
@@ -635,12 +638,14 @@ export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
               <select
                 className="form-select"
                 value={(selectedNode.data as any).answer_type}
-                onChange={(e) =>
-                  onUpdateNodeData(selectedNode.id, {
-                    ...selectedNode.data,
-                    answer_type: e.target.value as AnswerType,
-                  })
-                }
+                onChange={(e) => {
+                  const newType = e.target.value as AnswerType;
+                  const adapted = adaptQuestionDataForAnswerType(
+                    selectedNode.data as any,
+                    newType
+                  );
+                  onUpdateNodeData(selectedNode.id, adapted);
+                }}
               >
                 {INPUT_TYPE_VIEWS.map((opt) => (
                   <option key={opt.type} value={opt.type}>

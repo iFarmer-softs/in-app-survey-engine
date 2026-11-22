@@ -25,7 +25,11 @@ import type {
   GroupJumpNodeData,
   ValidationType,
 } from '../../types/survey';
-import { normalizeDecisionRules } from '../../types/survey';
+import {
+  normalizeDecisionRules,
+  adaptQuestionDataForAnswerType,
+  isOptionBasedAnswerType,
+} from '../../types/survey';
 import { loadAllGroups } from '../../utils/groupStorage';
 import type { GroupMeta } from '../../utils/schemaCompiler';
 
@@ -154,18 +158,18 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
       const qData = selectedNode.data as unknown as QuestionNodeData;
 
       const handleChange = (key: keyof QuestionNodeData, value: any) => {
-        onUpdateNodeData(selectedNode.id, {
-          ...qData,
-          [key]: value,
-        });
+        if (key === 'answer_type') {
+          const adapted = adaptQuestionDataForAnswerType(qData, value as AnswerType);
+          onUpdateNodeData(selectedNode.id, adapted);
+        } else {
+          onUpdateNodeData(selectedNode.id, {
+            ...qData,
+            [key]: value,
+          });
+        }
       };
 
-      const hasOptions = [
-        'dropdown',
-        'select_one',
-        'select_multiple',
-        'radio',
-      ].includes(qData.answer_type);
+      const hasOptions = isOptionBasedAnswerType(qData.answer_type);
 
       return (
         <aside className="sidebar right-sidebar">

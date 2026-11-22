@@ -62,6 +62,7 @@ import {
 } from './utils/schemaCompiler';
 import type { GroupMeta } from './utils/schemaCompiler';
 import type { DynamicKycGroupResponse, FlowNodeType, AnswerType } from './types/survey';
+import { adaptQuestionDataForAnswerType, isOptionBasedAnswerType } from './types/survey';
 import type {
   ReusableQuestionGroup,
   GroupCategory,
@@ -2686,6 +2687,45 @@ const FlowEditor: React.FC = () => {
   const handleUpdateNodeData = useCallback(
     (nodeId: string, newData: any) => {
       recordSnapshot(nodes, edges, groupMeta);
+      const targetNode = nodes.find((n) => n.id === nodeId);
+      let sanitizedData = newData;
+
+      if (
+        targetNode &&
+        (targetNode.type === 'question' || !targetNode.type) &&
+        newData.answer_type &&
+        newData.answer_type !== (targetNode.data as any)?.answer_type
+      ) {
+        sanitizedData = adaptQuestionDataForAnswerType(
+          { ...(targetNode.data as any), ...newData },
+          newData.answer_type
+        );
+
+        const wasOptionBased = isOptionBasedAnswerType((targetNode.data as any)?.answer_type);
+        const isNowOptionBased = isOptionBasedAnswerType(newData.answer_type);
+
+        if (wasOptionBased && !isNowOptionBased) {
+          setEdges((eds) =>
+            eds.map((edge) => {
+              if (edge.source === nodeId && edge.sourceHandle?.startsWith('opt-')) {
+                const { triggerValue, validationType, ...restData } = (edge.data || {}) as any;
+                return {
+                  ...edge,
+                  sourceHandle: 'default-next',
+                  label: undefined,
+                  style: {
+                    ...edge.style,
+                    stroke: '#8b5cf6',
+                  },
+                  data: restData,
+                };
+              }
+              return edge;
+            })
+          );
+        }
+      }
+
       setNodes((nds) =>
         nds.map((node) => {
           if (node.id === nodeId) {
@@ -2693,7 +2733,7 @@ const FlowEditor: React.FC = () => {
               ...node,
               data: {
                 ...node.data,
-                ...newData,
+                ...sanitizedData,
               },
             };
           }
@@ -2701,7 +2741,7 @@ const FlowEditor: React.FC = () => {
         })
       );
     },
-    [nodes, edges, groupMeta, recordSnapshot, setNodes]
+    [nodes, edges, groupMeta, recordSnapshot, setNodes, setEdges]
   );
 
   // Update Edge Data

@@ -4,6 +4,100 @@ import type { Connection, Edge, Node } from '@xyflow/react';
 import type { WarningAlertData } from '../components/modals/WarningAlertModal';
 import { isBinaryRedundantBranch, resolveNodeGroupId } from '../utils/flowValidator';
 
+/**
+ * Resolves facing entry and exit handles between source and target nodes based on relative spatial layout (dx, dy).
+ * Preserves semantic source branch handles ('opt-*', 'match', 'else', 'yes', 'no') and terminator constraints.
+ */
+export function resolveFacingHandles(
+  sourceNode: Node | undefined,
+  targetNode: Node | undefined,
+  sourceHandle: string | null | undefined,
+  targetHandle: string | null | undefined
+): { resolvedSourceHandle: string | null; resolvedTargetHandle: string | null } {
+  let resolvedSourceHandle: string | null = sourceHandle ?? null;
+  let resolvedTargetHandle: string | null = targetHandle ?? null;
+
+  if (!sourceNode || !targetNode) {
+    return { resolvedSourceHandle, resolvedTargetHandle };
+  }
+
+  // Terminators have fixed ports
+  if (sourceNode.type === 'start') {
+    resolvedSourceHandle = 'default-next';
+  }
+  if (targetNode.type === 'end') {
+    resolvedTargetHandle = 'in';
+  }
+
+  // Preserve semantic source handles: Decision branches ('match', 'else', 'yes', 'no') and Question options ('opt-*')
+  const isSemanticSource = Boolean(
+    resolvedSourceHandle &&
+    (resolvedSourceHandle.startsWith('opt-') ||
+      resolvedSourceHandle === 'match' ||
+      resolvedSourceHandle === 'else' ||
+      resolvedSourceHandle === 'yes' ||
+      resolvedSourceHandle === 'no')
+  );
+
+  const sX = sourceNode.position.x;
+  const sY = sourceNode.position.y;
+  const tX = targetNode.position.x;
+  const tY = targetNode.position.y;
+  const dx = tX - sX;
+  const dy = tY - sY;
+
+  const isPredominantlyHorizontal = Math.abs(dx) > Math.abs(dy) * 1.2;
+
+  // 1. Resolve Exit Port (Source Handle) for multi-port symbols if not semantic
+  if (!isSemanticSource && sourceNode.type !== 'start') {
+    if (
+      !resolvedSourceHandle ||
+      resolvedSourceHandle === 'default-next' ||
+      resolvedSourceHandle === 'out-top' ||
+      resolvedSourceHandle === 'out-left' ||
+      resolvedSourceHandle === 'out-right'
+    ) {
+      if (isPredominantlyHorizontal) {
+        resolvedSourceHandle = dx > 0 ? 'out-right' : 'out-left';
+      } else {
+        resolvedSourceHandle = dy >= 0 ? 'default-next' : 'out-top';
+      }
+    }
+  }
+
+  // 2. Resolve Entry Port (Target Handle)
+  if (targetNode.type === 'decision') {
+    // DecisionNode has 'in' (top) and 'in-left' (lateral)
+    if (isPredominantlyHorizontal && dx > 0) {
+      resolvedTargetHandle = 'in-left';
+    } else {
+      resolvedTargetHandle = 'in';
+    }
+  } else if (targetNode.type !== 'end') {
+    // For 8-way multi-port symbols (question, groupJump, process, document)
+    // Auto-resolve if not explicitly chosen, default 'in', or if chosen handle faces away from source
+    const facesAway =
+      (dy > 40 && resolvedTargetHandle === 'in-bottom') ||
+      (dy < -40 && resolvedTargetHandle === 'in') ||
+      (dx > 40 && resolvedTargetHandle === 'in-right') ||
+      (dx < -40 && resolvedTargetHandle === 'in-left');
+
+    if (
+      !resolvedTargetHandle ||
+      resolvedTargetHandle === 'in' ||
+      facesAway
+    ) {
+      if (isPredominantlyHorizontal) {
+        resolvedTargetHandle = dx > 0 ? 'in-left' : 'in-right';
+      } else {
+        resolvedTargetHandle = dy >= 0 ? 'in' : 'in-bottom';
+      }
+    }
+  }
+
+  return { resolvedSourceHandle, resolvedTargetHandle };
+}
+
 interface UseFlowCanvasConnectionsProps {
   nodes: Node[];
   edges: Edge[];
@@ -40,28 +134,37 @@ export function useFlowCanvasConnections({
       }
 
       // Detect and auto-correct reverse connections:
-      // 1. Dragged from input port ('in*') to output port ('out*', 'opt-*', 'default-next')
-      // 2. Intra-group: dragged from groupJump to question (flow must always be Question ➔ GroupJump)
-      // 3. Cross-group: dragged from question to groupJump (GroupJump in source group ➔ Question in target group)
+      // 1. Dragged from input port ('in*') to output port ('out*', 'opt-*', 'default-next', 'match', 'else', etc.)
+      // 2. Intra-group: dragged backwards upwards from groupJump to question (when groupJump is below question)
+      // 3. Cross-group: dragged backwards from a downstream group question back into an upstream group jump (sourceGroup > targetGroup)
+      // 4. Terminators: dragged out of end node or into start node
       const isReverseHandle =
         Boolean(actualSourceHandle?.startsWith('in')) &&
         Boolean(
           actualTargetHandle?.startsWith('out') ||
           actualTargetHandle?.startsWith('opt-') ||
-          actualTargetHandle === 'default-next'
+          actualTargetHandle === 'default-next' ||
+          actualTargetHandle === 'match' ||
+          actualTargetHandle === 'else' ||
+          actualTargetHandle === 'yes' ||
+          actualTargetHandle === 'no'
         );
 
       const isReverseGroupJumpIntra =
         sourceNode?.type === 'groupJump' &&
         targetNode?.type === 'question' &&
-        sourceGroup === targetGroup;
+        sourceGroup === targetGroup &&
+        Boolean(sourceNode?.position?.y && targetNode?.position?.y && sourceNode.position.y > targetNode.position.y);
 
       const isReverseGroupJumpCross =
         sourceNode?.type === 'question' &&
         targetNode?.type === 'groupJump' &&
-        sourceGroup !== targetGroup;
+        sourceGroup > targetGroup;
 
-      if (isReverseHandle || isReverseGroupJumpIntra || isReverseGroupJumpCross) {
+      const isReverseTerminator =
+        sourceNode?.type === 'end' || targetNode?.type === 'start';
+
+      if (isReverseHandle || isReverseGroupJumpIntra || isReverseGroupJumpCross || isReverseTerminator) {
         actualSource = params.target;
         actualTarget = params.source;
         actualSourceHandle = params.targetHandle;
@@ -193,36 +296,11 @@ export function useFlowCanvasConnections({
           : `Cross-Group: G${sourceGroup} ➔ G${targetGroup}`;
       }
 
-      // Flexible port auto-resolution for cross-group connections
-      let resolvedSourceHandle = actualSourceHandle;
-      let resolvedTargetHandle = actualTargetHandle;
-
-      if (isCrossGroup && sourceNode && targetNode) {
-        const sX = sourceNode.position.x;
-        const sY = sourceNode.position.y;
-        const tX = targetNode.position.x;
-        const tY = targetNode.position.y;
-        const dx = tX - sX;
-        const dy = tY - sY;
-
-        // Auto-resolve GroupJump exit port if not explicitly chosen
-        if (sourceNode.type === 'groupJump' && (!resolvedSourceHandle || resolvedSourceHandle === 'default-next')) {
-          if (Math.abs(dx) >= Math.abs(dy)) {
-            resolvedSourceHandle = dx > 0 ? 'out-right' : 'out-left';
-          } else {
-            resolvedSourceHandle = dy > 0 ? 'default-next' : 'out-top';
-          }
-        }
-
-        // Auto-resolve target port if not explicitly chosen or is default 'in'
-        if (!resolvedTargetHandle || resolvedTargetHandle === 'in') {
-          if (Math.abs(dx) >= Math.abs(dy)) {
-            resolvedTargetHandle = dx > 0 ? 'in-left' : 'in-right';
-          } else {
-            resolvedTargetHandle = dy > 0 ? 'in' : 'in-bottom';
-          }
-        }
-      }
+      // Universal facing port auto-resolution for all connections (intra-group & cross-group)
+      const {
+        resolvedSourceHandle,
+        resolvedTargetHandle,
+      } = resolveFacingHandles(sourceNode, targetNode, actualSourceHandle, actualTargetHandle);
 
       // Auto-bind target group on GroupJumpNode when connecting outward
       if (sourceNode?.type === 'groupJump' && setNodes) {
@@ -333,20 +411,28 @@ export function useFlowCanvasConnections({
         Boolean(
           actualTargetHandle?.startsWith('out') ||
           actualTargetHandle?.startsWith('opt-') ||
-          actualTargetHandle === 'default-next'
+          actualTargetHandle === 'default-next' ||
+          actualTargetHandle === 'match' ||
+          actualTargetHandle === 'else' ||
+          actualTargetHandle === 'yes' ||
+          actualTargetHandle === 'no'
         );
 
       const isReverseGroupJumpIntra =
         sourceNode?.type === 'groupJump' &&
         targetNode?.type === 'question' &&
-        sourceGroup === targetGroup;
+        sourceGroup === targetGroup &&
+        Boolean(sourceNode?.position?.y && targetNode?.position?.y && sourceNode.position.y > targetNode.position.y);
 
       const isReverseGroupJumpCross =
         sourceNode?.type === 'question' &&
         targetNode?.type === 'groupJump' &&
-        sourceGroup !== targetGroup;
+        sourceGroup > targetGroup;
 
-      if (isReverseHandle || isReverseGroupJumpIntra || isReverseGroupJumpCross) {
+      const isReverseTerminator =
+        sourceNode?.type === 'end' || targetNode?.type === 'start';
+
+      if (isReverseHandle || isReverseGroupJumpIntra || isReverseGroupJumpCross || isReverseTerminator) {
         actualSource = newConnection.target;
         actualTarget = newConnection.source;
         actualSourceHandle = newConnection.targetHandle;
@@ -415,34 +501,11 @@ export function useFlowCanvasConnections({
           : `Cross-Group: G${sourceGroup} ➔ G${targetGroup}`;
       }
 
-      // Flexible target handle resolution for cross-group reconnected edge
-      let resolvedSourceHandle = actualSourceHandle;
-      let resolvedTargetHandle = actualTargetHandle;
-
-      if (isCrossGroup && sourceNode && targetNode) {
-        const sX = sourceNode.position.x;
-        const sY = sourceNode.position.y;
-        const tX = targetNode.position.x;
-        const tY = targetNode.position.y;
-        const dx = tX - sX;
-        const dy = tY - sY;
-
-        if (sourceNode.type === 'groupJump' && (!resolvedSourceHandle || resolvedSourceHandle === 'default-next')) {
-          if (Math.abs(dx) >= Math.abs(dy)) {
-            resolvedSourceHandle = dx > 0 ? 'out-right' : 'out-left';
-          } else {
-            resolvedSourceHandle = dy > 0 ? 'default-next' : 'out-top';
-          }
-        }
-
-        if (!resolvedTargetHandle || resolvedTargetHandle === 'in') {
-          if (Math.abs(dx) >= Math.abs(dy)) {
-            resolvedTargetHandle = dx > 0 ? 'in-left' : 'in-right';
-          } else {
-            resolvedTargetHandle = dy > 0 ? 'in' : 'in-bottom';
-          }
-        }
-      }
+      // Universal facing port auto-resolution for reconnected edges
+      const {
+        resolvedSourceHandle,
+        resolvedTargetHandle,
+      } = resolveFacingHandles(sourceNode, targetNode, actualSourceHandle, actualTargetHandle);
 
       // Auto-bind target group on GroupJumpNode when reconnected
       if (sourceNode?.type === 'groupJump' && setNodes) {
