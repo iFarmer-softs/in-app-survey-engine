@@ -83,6 +83,7 @@ public class SurveyController {
             @RequestPart(value = "data", required = false) String dataJson,
             @RequestPart(value = "location", required = false) String locationJson,
             @RequestPart(value = "images[]", required = false) List<MultipartFile> imagesArray,
+            @RequestPart(value = "images", required = false) List<MultipartFile> imagesDirect,
             @RequestPart(value = "files", required = false) List<MultipartFile> genericFiles,
             @RequestParam(value = "farmerId", required = false) String farmerId,
             @RequestParam(value = "respondentId", required = false) String respondentId,
@@ -114,6 +115,7 @@ public class SurveyController {
 
         List<MultipartFile> allFiles = new ArrayList<>();
         if (imagesArray != null) allFiles.addAll(imagesArray);
+        if (imagesDirect != null) allFiles.addAll(imagesDirect);
         if (genericFiles != null) allFiles.addAll(genericFiles);
 
         int resolvedGroup = groupNumberParam != null ? groupNumberParam : (groupParam != null ? groupParam : 1);
