@@ -31,15 +31,18 @@ import {
   isOptionBasedAnswerType,
 } from '../../types/survey';
 import { loadAllGroups } from '../../utils/groupStorage';
+import type { FlowchartProject } from '../../types/project';
 import type { GroupMeta } from '../../utils/schemaCompiler';
 
 interface RightSidebarProps {
   selectedNode: Node | null;
   selectedEdge: Edge | null;
   groupMeta: GroupMeta;
+  activeProject?: FlowchartProject | null;
   onUpdateNodeData: (nodeId: string, newData: any) => void;
   onUpdateEdgeData: (edgeId: string, newData: any) => void;
   onUpdateGroupMeta: (newMeta: Partial<GroupMeta>) => void;
+  onUpdateProject?: (updates: Partial<FlowchartProject>) => void;
   onDeleteNode: (nodeId: string) => void;
   onDuplicateNode: (nodeId: string) => void;
 }
@@ -64,6 +67,8 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
   selectedNode,
   selectedEdge,
   groupMeta,
+  activeProject,
+  onUpdateProject,
   onUpdateNodeData,
   onUpdateEdgeData,
   onUpdateGroupMeta,
@@ -811,18 +816,54 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
     }
   }
 
-  // Default: Group Metadata Settings
+  // Default: Main Survey & Group Metadata Settings
   return (
     <aside className="sidebar right-sidebar">
       <div className="sidebar-header">
         <div className="sidebar-title-wrapper">
           <Settings size={18} className="sidebar-title-icon text-emerald" />
-          <h2 className="sidebar-title">Group Settings</h2>
+          <h2 className="sidebar-title">Survey Settings</h2>
         </div>
-        <p className="sidebar-subtitle">Survey group parameters & metadata</p>
+        <p className="sidebar-subtitle">Main survey parameters & group metadata</p>
       </div>
 
       <div className="inspector-content">
+        {/* Survey Title (English) */}
+        <div className="form-group">
+          <label className="form-label">Survey Title (English)</label>
+          <input
+            type="text"
+            className="form-input"
+            value={activeProject?.title || ''}
+            onChange={(e) => onUpdateProject?.({ title: e.target.value })}
+            placeholder="e.g. Farmer KYC & Land Survey"
+          />
+        </div>
+
+        {/* Survey Title (Bengali) */}
+        <div className="form-group">
+          <label className="form-label">Survey Title (Bengali)</label>
+          <input
+            type="text"
+            className="form-input bn-font"
+            value={activeProject?.titleBn || ''}
+            onChange={(e) => onUpdateProject?.({ titleBn: e.target.value })}
+            placeholder="যেমন: কৃষক কেওয়াইসি ও জমি জরিপ"
+          />
+        </div>
+
+        {/* Survey Description */}
+        <div className="form-group">
+          <label className="form-label">Survey Description</label>
+          <textarea
+            className="form-textarea"
+            rows={2}
+            value={activeProject?.description || ''}
+            onChange={(e) => onUpdateProject?.({ description: e.target.value })}
+            placeholder="Brief objective of this survey..."
+          />
+        </div>
+
         <div className="form-row">
           <div className="form-group flex-1">
             <label className="form-label">Current Group #</label>

@@ -225,6 +225,7 @@ const FlowEditor: React.FC = () => {
     handleDuplicateProject,
     handleDeleteProject,
     syncActiveProject,
+    updateActiveProject,
     handleCreateVersionSnapshot,
     handleRestoreVersion,
     isServerConnected,
@@ -3560,6 +3561,8 @@ const FlowEditor: React.FC = () => {
                 edges={activeEdges}
                 groups={groups}
                 groupMeta={groupMeta}
+                activeProject={activeProject}
+                onUpdateProject={updateActiveProject}
                 onUpdateNodeData={activeUpdateNodeData}
                 onUpdateEdgeData={activeUpdateEdgeData}
                 onUpdateGroupMeta={handleUpdateGroupMeta}

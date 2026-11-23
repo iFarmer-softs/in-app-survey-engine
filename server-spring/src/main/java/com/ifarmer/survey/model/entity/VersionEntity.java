@@ -29,7 +29,7 @@ public class VersionEntity {
     @Column(name = "\"title\"", length = 255, nullable = false)
     private String title;
 
-    @Column(name = "\"description\"", columnDefinition = "TEXT")
+    @Column(name = "\"description\"", length = 4096)
     private String description;
 
     @Column(name = "\"status\"", length = 32, nullable = false)
@@ -55,15 +55,15 @@ public class VersionEntity {
     private int groupCount = 1;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "\"groupMeta\"", columnDefinition = "jsonb")
+    @Column(name = "\"groupMeta\"")
     private JsonNode groupMeta;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "\"nodes\"", columnDefinition = "jsonb")
+    @Column(name = "\"nodes\"")
     private JsonNode nodes;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "\"edges\"", columnDefinition = "jsonb")
+    @Column(name = "\"edges\"")
     private JsonNode edges;
 
     public VersionEntity() {}

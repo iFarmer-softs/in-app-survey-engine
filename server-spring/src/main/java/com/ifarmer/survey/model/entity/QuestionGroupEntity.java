@@ -26,7 +26,7 @@ public class QuestionGroupEntity {
     @Column(name = "\"nameBn\"", length = 255)
     private String nameBn;
 
-    @Column(name = "\"description\"", columnDefinition = "TEXT")
+    @Column(name = "\"description\"", length = 4096)
     private String description = "";
 
     @Column(name = "\"category\"", length = 64, nullable = false)
@@ -44,15 +44,15 @@ public class QuestionGroupEntity {
     private Instant updatedAt;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "\"questions\"", columnDefinition = "jsonb")
+    @Column(name = "\"questions\"")
     private JsonNode questions;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "\"flowNodes\"", columnDefinition = "jsonb")
+    @Column(name = "\"flowNodes\"")
     private JsonNode flowNodes;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "\"flowEdges\"", columnDefinition = "jsonb")
+    @Column(name = "\"flowEdges\"")
     private JsonNode flowEdges;
 
     public QuestionGroupEntity() {}

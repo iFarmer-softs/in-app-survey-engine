@@ -8,6 +8,8 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 import java.io.File;
 import java.net.URI;
+import java.sql.Connection;
+import java.sql.DriverManager;
 
 @SpringBootApplication
 public class SurveyEngineApplication {
@@ -57,6 +59,40 @@ public class SurveyEngineApplication {
             configureFromDatabaseUrl(databaseUrl);
         } else {
             configureFromDiscreteVariables();
+        }
+
+        // Verify connectivity to the configured datasource; fallback to embedded H2 if unreachable
+        String url = System.getProperty("SPRING_DATASOURCE_URL");
+        String user = System.getProperty("SPRING_DATASOURCE_USERNAME", "");
+        String pass = System.getProperty("SPRING_DATASOURCE_PASSWORD", "");
+
+        if (url != null && !isDatabaseReachable(url, user, pass)) {
+            log.warn("⚠️ Configured PostgreSQL datasource is not reachable. Falling back to embedded local H2 database for offline mode.");
+            File dataDir = new File("data");
+            if (!dataDir.exists()) {
+                dataDir.mkdirs();
+            }
+            System.setProperty("SPRING_DATASOURCE_URL", "jdbc:h2:file:./data/survey_engine;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1");
+            System.setProperty("SPRING_DATASOURCE_DRIVER_CLASS_NAME", "org.h2.Driver");
+            System.setProperty("SPRING_DATASOURCE_USERNAME", "sa");
+            System.setProperty("SPRING_DATASOURCE_PASSWORD", "");
+            System.setProperty("SPRING_JPA_DATABASE_PLATFORM", "org.hibernate.dialect.H2Dialect");
+            log.info("🚀 Embedded H2 database configured at ./data/survey_engine");
+        }
+    }
+
+    private static boolean isDatabaseReachable(String jdbcUrl, String username, String password) {
+        if (!jdbcUrl.startsWith("jdbc:postgresql:")) {
+            return true;
+        }
+        try {
+            DriverManager.setLoginTimeout(3);
+            try (Connection conn = DriverManager.getConnection(jdbcUrl, username, password)) {
+                return true;
+            }
+        } catch (Exception e) {
+            log.warn("Datasource connection probe failed: {}", e.getMessage());
+            return false;
         }
     }
 

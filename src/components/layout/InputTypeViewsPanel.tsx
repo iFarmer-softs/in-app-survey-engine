@@ -44,6 +44,7 @@ import {
   adaptQuestionDataForAnswerType,
 } from '../../types/survey';
 import type { ReusableQuestionGroup } from '../../types/group';
+import type { FlowchartProject } from '../../types/project';
 import type { GroupMeta } from '../../utils/schemaCompiler';
 import { isNodeInContainer } from '../../utils/flowValidator';
 
@@ -174,6 +175,8 @@ interface InputTypeViewsPanelProps {
   edges: Edge[];
   groups?: ReusableQuestionGroup[];
   groupMeta: GroupMeta;
+  activeProject?: FlowchartProject | null;
+  onUpdateProject?: (updates: Partial<FlowchartProject>) => void;
   onUpdateNodeData: (nodeId: string, newData: any) => void;
   onUpdateEdgeData: (edgeId: string, newData: any) => void;
   onUpdateGroupMeta: (newMeta: Partial<GroupMeta>) => void;
@@ -202,6 +205,8 @@ export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
   nodes = [],
   groups = [],
   groupMeta,
+  activeProject,
+  onUpdateProject,
   onUpdateNodeData,
   onUpdateEdgeData,
   onUpdateGroupMeta,
@@ -234,7 +239,7 @@ export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
                         : 'Node Inspector'
                 : selectedEdge
                   ? 'Rule Link Inspector'
-                  : 'Survey Group Settings'}
+                  : 'Survey Settings'}
             </span>
           </div>
 
@@ -1745,9 +1750,45 @@ export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
             </div>
           )}
 
-        {/* If Nothing Selected: Group Settings */}
+        {/* If Nothing Selected: Main Survey & Group Settings */}
         {!selectedNode && !selectedEdge && (
           <div className="group-settings-block">
+            {/* Survey Title (English) */}
+            <div className="form-group">
+              <label className="form-label">Survey Title (English)</label>
+              <input
+                type="text"
+                className="form-input"
+                value={activeProject?.title || ''}
+                onChange={(e) => onUpdateProject?.({ title: e.target.value })}
+                placeholder="e.g. Farmer KYC & Land Survey"
+              />
+            </div>
+
+            {/* Survey Title (Bengali) */}
+            <div className="form-group">
+              <label className="form-label">Survey Title (Bengali)</label>
+              <input
+                type="text"
+                className="form-input bn-font"
+                value={activeProject?.titleBn || ''}
+                onChange={(e) => onUpdateProject?.({ titleBn: e.target.value })}
+                placeholder="যেমন: কৃষক কেওয়াইসি ও জমি জরিপ"
+              />
+            </div>
+
+            {/* Survey Description */}
+            <div className="form-group">
+              <label className="form-label">Survey Description</label>
+              <textarea
+                className="form-textarea"
+                rows={2}
+                value={activeProject?.description || ''}
+                onChange={(e) => onUpdateProject?.({ description: e.target.value })}
+                placeholder="Brief objective of this survey..."
+              />
+            </div>
+
             <div className="form-row">
               <div className="form-group flex-1">
                 <label className="form-label">Current Group #</label>
@@ -1796,6 +1837,7 @@ export const InputTypeViewsPanel: React.FC<InputTypeViewsPanelProps> = ({
                 rows={3}
                 value={groupMeta.instruction}
                 onChange={(e) => onUpdateGroupMeta({ instruction: e.target.value })}
+                placeholder="গ্রুপের সারসংক্ষেপ বা সাধারণ নির্দেশাবলী..."
               />
             </div>
 

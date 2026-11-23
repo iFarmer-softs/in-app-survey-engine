@@ -32,11 +32,11 @@ public class SurveyResponseEntity {
     private int groupNumber = 1;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "\"answers\"", columnDefinition = "jsonb")
+    @Column(name = "\"answers\"")
     private JsonNode answers;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "\"mediaUrls\"", columnDefinition = "jsonb")
+    @Column(name = "\"mediaUrls\"")
     private JsonNode mediaUrls;
 
     @Column(name = "\"latitude\"")
@@ -49,7 +49,7 @@ public class SurveyResponseEntity {
     private Boolean isGroupJumped = false;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "\"metadata\"", columnDefinition = "jsonb")
+    @Column(name = "\"metadata\"")
     private JsonNode metadata;
 
     @CreationTimestamp

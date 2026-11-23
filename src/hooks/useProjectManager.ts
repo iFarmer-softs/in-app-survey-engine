@@ -238,6 +238,33 @@ export function useProjectManager() {
     [activeProject, isServerConnected]
   );
 
+  const updateActiveProject = useCallback(
+    async (updates: Partial<FlowchartProject>) => {
+      if (!activeProject) return;
+
+      const updatedProject: FlowchartProject = {
+        ...activeProject,
+        ...updates,
+        updatedAt: new Date().toISOString(),
+      };
+
+      setProjects((prev) => {
+        const next = prev.map((p) => (p.id === activeProject.id ? updatedProject : p));
+        saveAllProjects(next);
+        return next;
+      });
+
+      if (isServerConnected && activeProject.id) {
+        try {
+          await apiClient.updateProject(activeProject.id, updates);
+        } catch (err) {
+          console.warn('Background project update warning:', err);
+        }
+      }
+    },
+    [activeProject, isServerConnected, setProjects]
+  );
+
   const handleCreateVersionSnapshot = useCallback(
     (
       options: {
@@ -329,6 +356,7 @@ export function useProjectManager() {
     syncActiveProject,
     handleCreateVersionSnapshot,
     handleRestoreVersion,
+    updateActiveProject,
     isServerConnected,
     isSyncing,
   };

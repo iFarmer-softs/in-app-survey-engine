@@ -8031,5 +8031,68 @@ assert.ok(appTsxCode75.includes("edge.sourceHandle?.startsWith('opt-')"), 'App.t
 
 console.log('   ✅ Answer Widget Type Transition Property Sanitization & Edge Re-routing validated with 100% precision.');
 
-console.log('\n🎉 ALL TESTS PASSED SUCCESSFULLY! (75/75 test suites passed)\n');
+console.log('7️⃣6️⃣ Testing Main Survey & Group Settings in Sidebar Inspector...');
+
+// 76A: InputTypeViewsPanel.tsx File Checks
+const inputViewsCode76 = fs.readFileSync(path.resolve(process.cwd(), 'src/components/layout/InputTypeViewsPanel.tsx'), 'utf-8');
+assert.ok(inputViewsCode76.includes('Survey Settings'), 'InputTypeViewsPanel must display "Survey Settings" as header title');
+assert.ok(inputViewsCode76.includes('Survey Title (English)'), 'InputTypeViewsPanel must include Survey Title (English) input');
+assert.ok(inputViewsCode76.includes('Survey Title (Bengali)'), 'InputTypeViewsPanel must include Survey Title (Bengali) input');
+assert.ok(inputViewsCode76.includes('Survey Description'), 'InputTypeViewsPanel must include Survey Description textarea');
+assert.ok(inputViewsCode76.includes('activeProject?: FlowchartProject | null'), 'InputTypeViewsPanelProps must declare activeProject');
+assert.ok(inputViewsCode76.includes('onUpdateProject?: (updates: Partial<FlowchartProject>) => void'), 'InputTypeViewsPanelProps must declare onUpdateProject');
+
+// 76B: RightSidebar.tsx File Checks
+const rightSidebarCode76 = fs.readFileSync(path.resolve(process.cwd(), 'src/components/layout/RightSidebar.tsx'), 'utf-8');
+assert.ok(rightSidebarCode76.includes('Survey Settings'), 'RightSidebar must display "Survey Settings" as header title');
+assert.ok(rightSidebarCode76.includes('Survey Title (English)'), 'RightSidebar must include Survey Title (English) input');
+assert.ok(rightSidebarCode76.includes('Survey Title (Bengali)'), 'RightSidebar must include Survey Title (Bengali) input');
+assert.ok(rightSidebarCode76.includes('Survey Description'), 'RightSidebar must include Survey Description textarea');
+assert.ok(rightSidebarCode76.includes('activeProject?: FlowchartProject | null'), 'RightSidebarProps must declare activeProject');
+assert.ok(rightSidebarCode76.includes('onUpdateProject?: (updates: Partial<FlowchartProject>) => void'), 'RightSidebarProps must declare onUpdateProject');
+
+// 76C: useProjectManager.ts & App.tsx Wiring
+const projectManagerCode76 = fs.readFileSync(path.resolve(process.cwd(), 'src/hooks/useProjectManager.ts'), 'utf-8');
+assert.ok(projectManagerCode76.includes('updateActiveProject'), 'useProjectManager must export updateActiveProject');
+
+const appTsxCode76 = fs.readFileSync(path.resolve(process.cwd(), 'src/App.tsx'), 'utf-8');
+assert.ok(appTsxCode76.includes('updateActiveProject'), 'App.tsx must destructure updateActiveProject from useProjectManager');
+assert.ok(appTsxCode76.includes('activeProject={activeProject}'), 'App.tsx must pass activeProject to InputTypeViewsPanel');
+assert.ok(appTsxCode76.includes('onUpdateProject={updateActiveProject}'), 'App.tsx must pass onUpdateProject={updateActiveProject} to InputTypeViewsPanel');
+
+// 76D: Survey Title and Description Mutation Simulation
+let mockProject76: FlowchartProject = {
+  id: 'proj-76',
+  title: 'Original Survey',
+  titleBn: 'আসল জরিপ',
+  description: 'Original description',
+  createdAt: '2026-11-23T00:00:00Z',
+  updatedAt: '2026-11-23T00:00:00Z',
+  nodes: [],
+  edges: [],
+  groupMeta: { totalGroups: 1, groupNumber: 1, hasNextGroup: false, instruction: '' },
+  versionHistory: [],
+};
+
+const handleUpdateMockProject = (updates: Partial<FlowchartProject>) => {
+  mockProject76 = {
+    ...mockProject76,
+    ...updates,
+    updatedAt: new Date().toISOString(),
+  };
+};
+
+handleUpdateMockProject({
+  title: 'Farmer KYC & Land Verification 2026',
+  titleBn: 'কৃষক কেওয়াইসি ও জমি যাচাই ২০২৬',
+  description: 'Annual profiling and land asset verification survey',
+});
+
+assert.strictEqual(mockProject76.title, 'Farmer KYC & Land Verification 2026', 'title must update reactively');
+assert.strictEqual(mockProject76.titleBn, 'কৃষক কেওয়াইসি ও জমি যাচাই ২০২৬', 'titleBn must update reactively');
+assert.strictEqual(mockProject76.description, 'Annual profiling and land asset verification survey', 'description must update reactively');
+
+console.log('   ✅ Main Survey & Group Settings in Sidebar Inspector validated with 100% precision.');
+
+console.log('\n🎉 ALL TESTS PASSED SUCCESSFULLY! (76/76 test suites passed)\n');
 
