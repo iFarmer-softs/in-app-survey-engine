@@ -2171,7 +2171,7 @@ const FlowEditor: React.FC = () => {
           data: nodeData,
         } as any);
 
-        if (nodeType === 'question') {
+        if (nodeType === 'question' || nodeType === 'decision') {
           const existingChildren = nodes.filter((n) => isNodeInContainer(n, targetContainer, nodes));
           dropNeededWidth = Math.max(fW, itemW + 48);
           const posX = fX + Math.max(20, Math.round((dropNeededWidth - itemW) / 2));
@@ -2195,12 +2195,9 @@ const FlowEditor: React.FC = () => {
             fX + GROUP_BORDER_INSET + 8,
             Math.min(position.x, fX + dropNeededWidth - itemW - GROUP_BORDER_INSET - 8)
           );
-          const clampedY = Math.max(
-            fY + GROUP_HEADER_INSET + 12,
-            Math.min(position.y, fY + fH - itemH - GROUP_BORDER_INSET - 8)
-          );
-          dropNeededHeight = Math.max(fH, (clampedY + itemH + 36) - fY);
-          nodePos = { x: clampedX, y: clampedY };
+          const targetY = Math.max(fY + GROUP_HEADER_INSET + 12, position.y);
+          dropNeededHeight = Math.max(fH, (targetY + itemH + 36) - fY);
+          nodePos = { x: clampedX, y: targetY };
         }
       }
 

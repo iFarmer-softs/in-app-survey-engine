@@ -33,9 +33,11 @@ export function getNodeDimensions(node: Node): { width: number; height: number }
     (node.data as any)?.width ||
     (node.type === 'question'
       ? 270
+      : node.type === 'decision'
+      ? 250
       : node.type === 'groupJump'
       ? 210
-      : node.type === 'decision' || node.type === 'process' || node.type === 'document'
+      : node.type === 'process' || node.type === 'document'
       ? 220
       : node.type === 'start' || node.type === 'end'
       ? 150
@@ -48,9 +50,11 @@ export function getNodeDimensions(node: Node): { width: number; height: number }
     (node.data as any)?.height ||
     (node.type === 'question'
       ? 240
+      : node.type === 'decision'
+      ? 170
       : node.type === 'groupJump'
       ? 90
-      : node.type === 'decision' || node.type === 'process' || node.type === 'document'
+      : node.type === 'process' || node.type === 'document'
       ? 100
       : node.type === 'start' || node.type === 'end'
       ? 50

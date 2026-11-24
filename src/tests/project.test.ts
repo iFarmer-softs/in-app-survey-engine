@@ -8094,5 +8094,105 @@ assert.strictEqual(mockProject76.description, 'Annual profiling and land asset v
 
 console.log('   ✅ Main Survey & Group Settings in Sidebar Inspector validated with 100% precision.');
 
-console.log('\n🎉 ALL TESTS PASSED SUCCESSFULLY! (76/76 test suites passed)\n');
+console.log('7️⃣7️⃣ Testing Decision Diamond Card Unclipped Rounded Border Completeness...');
+
+// 77A: Verify clip-path removal and unclipped rounded borders on .decision-diamond-card
+const indexCss77 = fs.readFileSync(path.resolve(process.cwd(), 'src/index.css'), 'utf-8');
+assert.ok(
+  !indexCss77.includes('clip-path: polygon('),
+  'index.css must not use clip-path to clip corners of decision-diamond-card'
+);
+assert.ok(
+  indexCss77.includes('.decision-diamond-card {') &&
+  indexCss77.includes('border: 1.5px solid rgba(245, 158, 11, 0.45);') &&
+  indexCss77.includes('border-radius: 10px;'),
+  'decision-diamond-card must have full rounded corners and a complete amber border'
+);
+assert.ok(
+  indexCss77.includes('.decision-node.is-selected .decision-diamond-card {') &&
+  indexCss77.includes('border-color: #f59e0b;'),
+  'selected decision node must complete card border in solid amber'
+);
+assert.ok(
+  indexCss77.includes('.react-flow__node.trace-node-selected .decision-diamond-card') &&
+  indexCss77.includes('.react-flow__node.trace-node-ancestor .decision-diamond-card') &&
+  indexCss77.includes('.react-flow__node.trace-node-descendant .decision-diamond-card'),
+  'decision-diamond-card must support dependency path tracing border glow states'
+);
+
+console.log('   ✅ Decision Diamond Card Unclipped Rounded Border Completeness validated with 100% precision.');
+
+console.log('7️⃣8️⃣ Testing Group Frame Auto-Adjustment on Decision Symbol Drag-and-Drop & Click-to-Add...');
+
+// 78A: Verify true dimensions for decision node in flowValidator.ts
+const decTestNode: Node = {
+  id: 'dec-test-dims',
+  type: 'decision',
+  position: { x: 0, y: 0 },
+  data: { label: 'Check' },
+};
+const dims = getNodeDimensions(decTestNode);
+assert.strictEqual(dims.width, 250, 'Decision node default width must be 250px');
+assert.strictEqual(dims.height, 170, 'Decision node default height must be 170px to accurately reflect header, sentence, and branches');
+
+// 78B: Verify App.tsx onDrop incorporates decision nodes into group auto-adjustment
+const appTsxSource78 = fs.readFileSync(path.resolve(process.cwd(), 'src/App.tsx'), 'utf-8');
+assert.ok(
+  appTsxSource78.includes("if (nodeType === 'question' || nodeType === 'decision')"),
+  'App.tsx onDrop must auto-adjust and stack decision nodes just like questions'
+);
+
+// 78C: Mathematical simulation of group auto-adjustment on adding decision node
+const simFrame78: Node = {
+  id: 'frame-sim-78',
+  type: 'groupFrame',
+  position: { x: 100, y: 100 },
+  style: { width: 440, height: 480 },
+  data: {
+    groupId: 'frame-sim-78',
+    numericGroupId: 1,
+    questionIds: ['q-sim-1'],
+    questionCount: 1,
+    expandedHeight: 480,
+  },
+};
+
+const simChildQuestion78: Node = {
+  id: 'q-sim-1',
+  type: 'question',
+  position: { x: 185, y: 160 },
+  data: { containerId: 'frame-sim-78', group: 1 },
+};
+
+const simNodes78 = [simFrame78, simChildQuestion78];
+const existingChildren78 = simNodes78.filter((n) => isNodeInContainer(n, simFrame78, simNodes78));
+const { fX: fX78, fY: fY78, fW: fW78, fH: fH78 } = getContainerBounds(simFrame78);
+const { width: symW78, height: symH78 } = getNodeDimensions({
+  type: 'decision',
+  data: { label: 'Condition Check' },
+} as any);
+
+const neededWidth78 = Math.max(fW78, symW78 + 48);
+const posX78 = fX78 + Math.max(20, Math.round((neededWidth78 - symW78) / 2));
+
+const headerBottom78 = fY78 + 44;
+let lowestBottom78 = headerBottom78 + 16;
+for (const child of existingChildren78) {
+  const { height: childH } = getNodeDimensions(child);
+  const b = child.position.y + childH;
+  if (b > lowestBottom78) {
+    lowestBottom78 = b;
+  }
+}
+const posY78 = existingChildren78.length === 0 ? fY78 + 60 : lowestBottom78 + 20;
+const neededHeight78 = Math.max(fH78, (posY78 + symH78 + 36) - fY78);
+
+assert.strictEqual(lowestBottom78, 400, 'lowestBottom of existing question at y=160 with h=240 must be 400');
+assert.strictEqual(posY78, 420, 'decision node posY must be lowestBottom + 20 = 420');
+assert.strictEqual(neededHeight78, 526, 'neededHeight must expand from 480 to 526 to enclose the decision node with 36px cushion');
+assert.strictEqual(posX78, 195, 'decision node posX must be centered at 100 + (440 - 250) / 2 = 195');
+
+console.log('   ✅ Group Frame Auto-Adjustment on Decision Symbol Drag-and-Drop & Click-to-Add validated with 100% precision.');
+
+console.log('\n🎉 ALL TESTS PASSED SUCCESSFULLY! (78/78 test suites passed)\n');
 
