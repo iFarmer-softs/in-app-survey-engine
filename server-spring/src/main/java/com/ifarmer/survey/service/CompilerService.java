@@ -167,9 +167,26 @@ public class CompilerService {
                         valConfig.put("group", parentGroup);
                         validationMap.put(String.valueOf(parentId), valConfig);
                     } else if (inEdge.has("label") && !inEdge.path("label").asText().isBlank()) {
+                        String edgeLabel = inEdge.path("label").asText();
                         Map<String, Object> valConfig = new LinkedHashMap<>();
                         valConfig.put("validation_type", "match");
-                        valConfig.put("validation", inEdge.path("label").asText());
+                        String lowerLabel = edgeLabel.toLowerCase(Locale.ROOT);
+                        if (lowerLabel.contains("cross-group") || lowerLabel.contains("cross_group") || lowerLabel.equals("default-next")) {
+                            Map<String, Boolean> matches = new LinkedHashMap<>();
+                            matches.put("", true);
+                            valConfig.put("validation", matches);
+                        } else {
+                            valConfig.put("validation", edgeLabel);
+                        }
+                        valConfig.put("is_same_group", parentGroup == myGroup);
+                        valConfig.put("group", parentGroup);
+                        validationMap.put(String.valueOf(parentId), valConfig);
+                    } else {
+                        Map<String, Object> valConfig = new LinkedHashMap<>();
+                        valConfig.put("validation_type", "match");
+                        Map<String, Boolean> matches = new LinkedHashMap<>();
+                        matches.put("", true);
+                        valConfig.put("validation", matches);
                         valConfig.put("is_same_group", parentGroup == myGroup);
                         valConfig.put("group", parentGroup);
                         validationMap.put(String.valueOf(parentId), valConfig);

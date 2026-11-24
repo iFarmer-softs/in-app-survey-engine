@@ -149,6 +149,11 @@ export class CompilerService {
           const parentGroup = getNodeGroup(sourceNode, parentData);
           const myGroup = getNodeGroup(qNode, data);
 
+          const isCrossGroupEdge = (label: string) => {
+            const lower = label.toLowerCase();
+            return lower.includes('cross-group') || lower.includes('cross_group') || lower === 'default-next';
+          };
+
           if (optFromHandle) {
             validationMap[String(parentId)] = {
               validation_type: 'match',
@@ -157,9 +162,17 @@ export class CompilerService {
               group: parentGroup,
             };
           } else if (inEdge.label) {
+            const edgeLabel = String(inEdge.label);
             validationMap[String(parentId)] = {
               validation_type: 'match',
-              validation: inEdge.label,
+              validation: isCrossGroupEdge(edgeLabel) ? { '': true } : inEdge.label,
+              is_same_group: parentGroup === myGroup,
+              group: parentGroup,
+            };
+          } else {
+            validationMap[String(parentId)] = {
+              validation_type: 'match',
+              validation: { '': true },
               is_same_group: parentGroup === myGroup,
               group: parentGroup,
             };
@@ -467,7 +480,7 @@ export class CompilerService {
           tgtNode.type === 'question'
             ? getNodeGroup(tgtNode, tgtNode.data)
             : tgtNode.data?.numericGroupId ||
-              parseInt(String(tgtNode.data?.groupId).replace(/\D+/g, ''), 10);
+            parseInt(String(tgtNode.data?.groupId).replace(/\D+/g, ''), 10);
 
         if (sourceG !== tgtGroup && tgtGroup) {
           const gIdStr = String(tgtGroup);
